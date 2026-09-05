@@ -1,0 +1,222 @@
+TASK: Phase 4 / P3 — Google Gemini voiceover adapter
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra Medium`.
+
+VERSIONING
+- This prompt's assigned project version is `0.4.3`.
+
+CONTEXT
+
+Read BOOT.md first, then docs/architecture.md, docs/template-system.md, docs/roadmap/initial-roadmap.md, P1/P2, P1's provider-neutral SpeechGenerationClient contract, the existing Google Gemini structured-text adapter, and current official Google speech-generation documentation before editing.
+
+Official documentation to verify at implementation time:
+- https://ai.google.dev/gemini-api/docs/speech-generation
+
+Presenter/anchor audio remains owned by the Veo presenter-generation path. This task is only for the off-screen voiceover role declared by the selected AssemblyTemplate, such as default-news-40s content-voiceover <- narration.
+
+The validated ClipPlan already contains the narration words. Do not call another text model to rewrite, summarize, expand, or "improve" them.
+
+GOAL
+
+Implement the smallest Google Gemini text-to-speech adapter behind P1's provider-neutral SpeechGenerationClient boundary so a voiceover GeneratedMediaUnit can turn its exact spokenText into bounded local audio bytes with safe provenance.
+
+SCOPE
+
+Implement:
+- Google Gemini TTS runtime configuration;
+- one stateless REST speech request per voiceover generation request;
+- exact supplied-text recitation;
+- strict audio-response decoding/validation;
+- WAV wrapping if the current API still returns raw PCM in the documented form;
+- bounded timeout/response/audio handling;
+- safe fake-fetch tests;
+- version/test wiring.
+
+Do not implement:
+- presenter speech;
+- Veo;
+- media-workflow persistence/CLI;
+- audio duration fitting/time-stretching;
+- FFmpeg;
+- music/mixing/ducking;
+- live provider qualification.
+
+IMPLEMENTATION REQUIREMENTS
+
+1. Provider-neutral boundary.
+   - Implement P1's SpeechGenerationClient.
+   - Core/application code must receive only the provider-neutral result.
+   - Keep Gemini TTS request/response envelopes inside the adapter.
+   - Do not create a generalized audio-provider framework.
+
+2. Runtime configuration.
+   - Reuse `GEMINI_API_KEY`.
+   - Add explicit runtime model selection such as `VIDGEN_TTS_MODEL`.
+   - Add explicit runtime voice selection such as `VIDGEN_TTS_VOICE`.
+   - Do not freeze a model/voice in AssemblyTemplate or ClipPlan.
+   - Missing/blank key, model, or voice fails before network activity.
+   - Validate model/voice values sufficiently to avoid path/shape injection.
+   - Never print or persist the API key.
+
+3. Current official API.
+   - Prefer Node's built-in `fetch`; do not add the Google SDK solely for this adapter.
+   - Use the current documented Gemini speech-generation REST boundary.
+   - At planning time, Google's current examples use the Interactions API with an audio response format; verify the exact current request/response shape before implementation.
+   - Keep the request stateless.
+   - Do not enable tools, web search, agents, background execution, or unrelated model features.
+
+4. Exact narration ownership.
+   - Request speech for exactly the provided voiceover unit `spokenText`.
+   - Do not prepend/append spoken editorial content.
+   - Provider-facing control text may ask for delivery/style only if it is deterministic engine-owned wording and cannot change the literal narration.
+   - Do not send the display headline or unrelated StoryInput text as alternate narration.
+   - Do not call a text model to rewrite for duration.
+   - Add tests proving the submitted narration text equals the unit's validated spokenText.
+
+5. TTS versus presenter.
+   - Reject or fail clearly if this speech adapter is accidentally asked to generate a presenter or video unit.
+   - The default presenter path remains Veo + approved reference images.
+   - Do not build lip-sync or anchor audio here.
+
+6. Audio response parsing.
+   - Parse only the documented audio output field(s).
+   - Require a completed/successful synchronous result.
+   - Reject missing, blank, malformed, unexpected non-audio, incomplete, failed, or action-required responses.
+   - Bound JSON/body size before parsing/decoding.
+   - Bound decoded audio bytes.
+   - Validate base64 strictly enough that malformed provider output cannot silently become an artifact.
+
+7. WAV wrapping.
+   - If current official docs still return raw PCM in the documented mono/24 kHz/16-bit shape, wrap it deterministically into a standard PCM WAV container before returning it to application code.
+   - Keep the WAV writer tiny and testable; do not add an audio library.
+   - Validate sample alignment and header lengths.
+   - Return `audio/wav` through the provider-neutral result.
+   - If the current API now returns a self-describing encoded audio format instead, use that documented format and update focused tests; do not fabricate PCM assumptions.
+
+8. Timing boundary.
+   - The SpeechGenerationClient may report provider-known/generated audio duration if it can be derived deterministically from PCM byte length or provider metadata.
+   - Do not time-stretch, truncate, pad, or regenerate audio to fit template duration.
+   - Phase 5 owns audio fitting/muxing/normalization decisions.
+   - A duration longer/shorter than the segment is not permission to rewrite narration.
+
+9. Network bounds.
+   - Fixed Google endpoint/base only.
+   - AbortController timeout with injectable reasonable default.
+   - Redirect handling should fail unless the current documented endpoint requires a narrowly controlled redirect.
+   - Bound response size.
+   - Injectable fetch for tests.
+   - Do not accept arbitrary provider URLs from unit/control/story input.
+
+10. Safe result/provenance.
+   Return only safe provider-neutral data such as:
+   - provider;
+   - model;
+   - configured/returned voice when useful;
+   - provider request/interaction ID when returned;
+   - MIME type;
+   - audio bytes;
+   - deterministically derived duration when available.
+
+   Do not return/persist through the result:
+   - API key;
+   - raw provider body;
+   - base64 audio string;
+   - full provider request envelope;
+   - hidden system text.
+
+11. Safe errors.
+   - Reuse the media-provider error category introduced by P2 if present.
+   - Public errors must not include:
+     * API key;
+     * full narration text;
+     * base64/decoded audio;
+     * raw provider response.
+   - Missing config remains a configuration failure.
+   - Provider/network/shape failures should be distinct from local artifact failures.
+
+12. No automatic retries.
+   - One speech request is one provider attempt.
+   - Do not add hidden retry/backoff, critique, or alternate-voice fallback.
+   - A failed TTS request should be rerunnable later by the application workflow.
+
+13. Cost observability.
+   - Return safe request identity/model/voice facts needed for P4 metadata.
+   - Do not hard-code pricing or query billing APIs.
+
+14. Version/test wiring.
+   - Set package.json and src/version.ts to 0.4.3.
+   - Keep package-lock.json absent.
+   - Add focused adapter tests to the normal `npm test` / `npm run check` path.
+
+FOCUSED TESTS
+
+Use injected fake fetch to prove:
+- missing key/model/voice fails before fetch activity;
+- one valid voiceover request submits exactly the supplied narration text;
+- no display headline/other ClipPlan slot is silently appended as narration;
+- request uses the configured runtime model/voice and current documented audio response shape;
+- valid documented audio output becomes bounded provider-neutral audio bytes;
+- when raw PCM is documented, the WAV header/sample-rate/channel/bit-depth/data-length are correct;
+- malformed base64 or unaligned PCM fails;
+- missing/blank/non-audio/incomplete/failed/action-required output fails safely;
+- timeout, redirect, non-2xx, invalid JSON, oversized response, and oversized decoded audio fail;
+- public errors contain neither API key, narration, raw response, nor base64;
+- no SDK dependency/package-lock is introduced.
+
+REGRESSION COVERAGE
+
+Run:
+- Google Gemini TTS adapter tests;
+- P2 Veo adapter tests;
+- P1 generated-media contract/resolution tests;
+- existing Google Gemini structured-text tests;
+- ClipPlan/workflow/template/story-workspace/CLI tests;
+- inherited Phase 1/2 tests;
+- runner tests;
+- npm test;
+- npm run check;
+- git diff --check.
+
+PRODUCER / CONSUMER BOUNDARY
+
+Downstream-required capability:
+exact off-screen narration audio bytes from a validated voiceover unit without another creative/script-generation stage
+
+Owning implementation/export:
+Google Gemini SpeechGenerationClient adapter over P1's provider-neutral speech request/result contract
+
+Focused proof:
+fake-provider tests proving exact supplied narration ownership, bounded audio decoding/containerization, safe provider provenance, and failure handling
+
+PRESERVED BEHAVIOR
+
+- ClipPlan owns the narration words.
+- The voiceover role is template-declared.
+- Presenter/anchor generation remains Veo-based and separate.
+- No new text-model creative call is introduced.
+- No publisher retrieval or media reuse is introduced.
+- Phase 5 owns audio trim/mux/normalization/loudness behavior.
+- No Remotion.
+- No standardized intro/outro handling.
+
+NON-GOALS
+
+Do not implement:
+- Veo changes beyond compatibility fixes required by compilation;
+- presenter audio/lip sync;
+- text rewriting;
+- speech-to-speech;
+- media-run/generated-media persistence;
+- CLI `media`;
+- story-local reuse;
+- music/stingers;
+- FFmpeg/ffprobe;
+- captions;
+- live provider calls;
+- fallback providers;
+- global cache/database/queue.
+
+COMPLETION
+
+Leave version 0.4.3 with a bounded Google Gemini TTS adapter that turns a validated voiceover unit's exact spokenText into provider-neutral local audio bytes ready for story-local persistence in P4.
