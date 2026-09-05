@@ -11,6 +11,7 @@ export type VidGenErrorCode =
   | 'canonical_input'
   | 'story_selection'
   | 'assembly_template'
+  | 'clip_plan'
   | 'ngest_authentication'
   | 'ngest_http'
   | 'ngest_timeout'
