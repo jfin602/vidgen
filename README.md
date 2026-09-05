@@ -58,18 +58,20 @@ VidGen does not connect directly to ngest persistence.
 
 ## Current state
 
-Phase 1 is complete and closed at version 0.1.5. It already provides:
+Phases 1 and 2 are complete and closed at versions 0.1.5 and 0.2.5. The repository now provides:
 - the Node.js + TypeScript CLI foundation;
 - secure bearer-authenticated ngest manifest acquisition;
-- transport validation;
-- CanonicalFeed, CanonicalControl, and CanonicalInput;
-- deterministic SHA-256 input fingerprinting;
-- filesystem-backed run metadata and atomic CanonicalInput persistence;
+- local ngest-shaped fixture ingress through the same transport validator;
+- CanonicalFeed, CanonicalControl, CanonicalInput, and explicit StoryInput;
+- deterministic input and story fingerprinting;
+- a validated declarative default-news-40s assembly template;
+- a manual `vidgen story` workflow that creates an independent story workspace;
+- filesystem-backed run/story metadata with atomic JSON persistence;
 - deterministic tests.
 
 The project was simplified after Phase 1. FeedAnalysis, EditorialPlan, separate Script and ProductionPlan stages, Remotion composition, edition-level planning, and story-selection logic are no longer part of the current MVP.
 
-The repository remains on the 0.2.0 Phase 2 planning baseline.
+The repository is on the 0.3.0 Phase 3 planning baseline. Phase 3 adds bounded story context preparation and one validated ClipPlan; provider media generation and FFmpeg assembly remain later phases.
 
 ## Start here
 
