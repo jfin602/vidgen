@@ -1,38 +1,66 @@
 # VidGen Control Interface
 
-Status: CURRENT DIRECTION / FIELD SET PROVISIONAL
+Status: CURRENT COMPATIBILITY / FINAL FIELD SET DEFERRED
 
 ## Purpose
 
-The control interface lets an administrator influence what VidGen creates without moving VidGen's editorial or creative intelligence into ngest.
+VidGen controls let an administrator influence how supplied stories are presented without moving creative-generation behavior into ngest.
 
-Controls carry intent, preferences, and constraints.
+Controls carry preferences or constraints. They do not carry generated creative output and they do not decide which stories are production-worthy.
 
-They do not carry derived creative output.
+## Current implementation compatibility
 
-## Delivery model
+Phase 1 already normalizes a provisional control shell:
 
-Ngest persists Profile-associated VidGen controls and delivers them only through the dedicated authenticated VidGen integration endpoint.
+    control
+      |
+      +-- version
+      +-- editorial
+      +-- script
+      +-- production
 
-Generic Distribution/PHP integration responses remain unaware of VidGen controls.
+That shell is implemented and may remain temporarily for compatibility.
 
-Conceptually:
+It must not be interpreted as the current desired stage graph. The single-story pipeline no longer contains separate editorial, script, and production-planning stages.
 
-    ngest Admin
-        |
-        v
-    Profile-associated VidGen controls
-        |
-        v
-    ngest persistence
-        |
-        v
-    dedicated VidGen integration endpoint
-        |
-        v
-    VidGen CanonicalControl
+Do not perform a breaking control-schema redesign merely to rename branches before real clip behavior demonstrates which controls are actually needed.
 
-The exact ngest storage/table schema is not part of the VidGen contract.
+## Current product rule
+
+Every story supplied by ngest is already intended for production.
+
+Therefore VidGen controls should not include story-selection concepts such as:
+- targetStoryCount;
+- maximumStoryCount;
+- mustIncludeArticleIds;
+- excludeArticleIds;
+- story-ranking guidance.
+
+Those responsibilities are no longer part of VidGen's MVP.
+
+## Likely useful clip-level controls
+
+The final minimal control contract should be derived from real clips.
+
+Possible future controls may include:
+- template selection where more than one template exists;
+- tone/style guidance;
+- audience guidance;
+- high-level visual-style guidance;
+- caption preference;
+- later explicit content/presentation constraints.
+
+A fixed template should own its normal timing. Avoid adding arbitrary duration controls that force the model to redesign the selected template.
+
+The exact v1 field set is intentionally not locked yet.
+
+## Defaults
+
+The manual single-story MVP should be capable of running with engine defaults and little or no administrator customization.
+
+Defaults belong to VidGen.
+
+This keeps early video debugging focused on the production pipeline rather than building a broad configuration system first.
 
 ## Ownership
 
@@ -41,102 +69,39 @@ Ngest owns:
 - Profile association;
 - administrator editing;
 - authorization;
-- transport-level contract delivery.
+- transport delivery.
 
 VidGen owns:
+- supported-version handling;
 - semantic validation;
-- version support;
-- normalization;
-- defaults;
-- hard-constraint enforcement;
-- preference interpretation;
-- editorial consequences;
-- script consequences;
-- production consequences.
+- normalization/defaults;
+- safe interpretation;
+- template/ClipPlan/media consequences.
 
-Ngest should not need to understand how a setting such as tone or target duration changes internal model reasoning.
-
-## Stage-aware categories
-
-The planned control shape is grouped by the stage it influences:
-
-    control
-    |
-    +-- version
-    |
-    +-- editorial
-    |
-    +-- script
-    |
-    +-- production
-
-The exact v1 field set remains provisional.
-
-### Editorial candidates
-
-Possible controls include:
-- targetStoryCount;
-- maximumStoryCount;
-- mustIncludeArticleIds;
-- excludeArticleIds;
-- focusGuidance;
-- audience.
-
-Editorial controls influence what VidGen chooses to make from supplied governed Articles. They do not alter upstream feed truth.
-
-### Script candidates
-
-Possible controls include:
-- targetDurationSeconds;
-- styleGuidance;
-- tone;
-- pace.
-
-These influence how an EditorialPlan becomes spoken/presented content.
-
-### Production candidates
-
-Possible controls include:
-- format;
-- aspectRatio;
-- visualStyleGuidance;
-- captions.
-
-These influence presentation requirements and preferences, not generated scene decisions.
+Ngest should not need to understand provider prompts or how a style preference changes generated media.
 
 ## Valid control vs generated output
 
-Valid control examples:
-- target duration;
-- maximum story count;
+Reasonable control concepts:
+- desired tone;
 - audience;
-- focus guidance;
-- desired writing style;
-- aspect ratio;
-- caption preference;
-- high-level visual style guidance.
+- high-level style;
+- supported template choice;
+- caption preference.
 
 Invalid control concepts:
-- pre-generated theme;
-- pre-generated story ranking;
 - generated script;
+- generated ClipPlan;
 - scene prompts;
-- shot list;
-- final production decisions.
+- provider job instructions;
+- final media decisions;
+- pre-generated story ranking.
 
-Those are VidGen outputs.
+Those are VidGen outputs or runtime/provider concerns.
 
 ## Declarative controls
 
-Controls should describe desired outcomes or boundaries rather than expose internal model/provider tuning.
-
-Prefer:
-
-    target duration: 3 minutes
-
-over:
-
-    generate exactly 412 narration words
+Controls should describe desired outcomes rather than provider tuning.
 
 Prefer:
 
@@ -144,78 +109,38 @@ Prefer:
 
 over:
 
-    use provider X with temperature Y
+    use model X with temperature Y
 
-Provider/model tuning belongs to VidGen runtime/provider configuration, not ordinary editorial controls.
-
-## Hard constraints and preferences
-
-The contract should distinguish semantics clearly even if hard constraints and preferences are not encoded as separate JSON branches.
-
-Hard constraints must be satisfied or the affected stage fails cleanly.
-
-Likely examples:
-- excluded Article IDs;
-- maximum story count;
-- output aspect ratio;
-- captions disabled;
-- later explicit content prohibitions.
-
-Preferences should be attempted but may allow documented bounded deviation.
-
-Likely examples:
-- target story count;
-- target duration;
-- tone;
-- style;
-- pacing;
-- focus guidance.
+Provider/model parameters belong to VidGen runtime/provider configuration.
 
 ## Validation principles
 
-Before creative analysis begins, VidGen should:
+The input boundary should:
 1. validate the supported control version;
-2. reject unsupported/unknown fields once a schema is locked;
-3. verify referenced Article IDs exist in CanonicalFeed;
-4. reject contradictory include/exclude references;
-5. enforce string, array, and numeric bounds;
-6. normalize nullable/default values;
-7. create an immutable CanonicalControl;
-8. compute creative input identity only after normalization.
+2. reject obviously unsafe/secret-bearing content;
+3. validate field semantics once the minimal control contract is locked;
+4. normalize defaults;
+5. keep controls immutable downstream;
+6. include generation-relevant controls in appropriate fingerprints.
 
-Invalid control must never be silently ignored.
-
-## Defaults
-
-VidGen should be capable of sensible operation when supported control categories contain no administrator overrides.
-
-Defaults belong to VidGen.
-
-Ngest persists overrides and transports them; it does not define hidden creative defaults on VidGen's behalf.
+Until the long-term field set is contracted, the existing Phase 1 compatibility shell remains provisional.
 
 ## Topic independence
 
-Shared control semantics must not hard-code filmmaking, indie publishing, technology, or another publication topic.
+Shared control semantics must not hard-code a publication topic.
 
-Administrator-provided audience/focus/style text may of course be topic-specific.
+Administrator-provided style/audience guidance may naturally be topic-specific.
 
 ## Provenance and trust
 
-Controls may influence emphasis, omission, framing, style, and presentation, but cannot:
-- introduce fabricated Articles;
-- silently replace publisher provenance;
-- override grounding requirements;
-- turn untrusted control text into executable instructions.
-
 Control text is untrusted input.
 
-## Versioning
-
-The control object should have its own explicit version so its semantics can evolve without forcing unrelated creative-stage version branches.
-
-Only the VidGen input boundary should understand supported external control versions. Downstream stages consume CanonicalControl.
-
-A compatibility matrix may be introduced once more than one control version exists.
+Controls cannot:
+- fabricate Article provenance;
+- override grounding requirements;
+- authorize publisher-media reuse;
+- become executable instructions;
+- contain secrets.
 
 ## Secrets
 
@@ -223,7 +148,18 @@ Controls must never contain:
 - bearer tokens;
 - provider API keys;
 - database credentials;
+- passwords;
 - hidden system prompts;
 - internal authentication state.
 
-Secrets belong to runtime configuration and credential boundaries.
+Secrets belong to runtime credential boundaries.
+
+## Deferred
+
+- final v1 control schema;
+- migration away from the Phase 1 branch names;
+- exact template-selection semantics;
+- exact caption/style controls;
+- additional control versions.
+
+These should be resolved from working single-story clips rather than speculative stage design.
