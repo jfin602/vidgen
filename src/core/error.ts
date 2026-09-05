@@ -6,7 +6,13 @@ export type VidGenErrorCode =
   | 'invalid_argument'
   | 'configuration'
   | 'transport'
-  | 'artifact';
+  | 'artifact'
+  | 'ngest_authentication'
+  | 'ngest_http'
+  | 'ngest_timeout'
+  | 'ngest_invalid_json'
+  | 'ngest_manifest'
+  | 'ngest_unsupported_continuation';
 
 export interface VidGenErrorOptions {
   readonly cause?: unknown;
