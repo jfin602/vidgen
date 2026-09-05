@@ -1,7 +1,7 @@
 TASK: Phase 1 / P5 — Phase 1 closeout validation
 
 MODEL / REASONING / USAGE
-- Recommended configuration: `Sol High`.
+- Recommended configuration: `Sol Medium`.
 
 VERSIONING
 - This prompt's assigned project version is `0.1.5`.
