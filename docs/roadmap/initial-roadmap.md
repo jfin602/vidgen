@@ -3,7 +3,8 @@
 Status: CURRENT MVP DIRECTION / PROVISIONAL PHASE BOUNDARIES
 Phase 1 completion: 0.1.5
 Phase 2 completion: 0.2.5
-Current baseline: 0.3.0
+Phase 3 owner closeout: 0.3.4
+Current baseline: 0.4.0
 
 This roadmap was rebased on 2026-09-05 after Phase 1. The original edition/newscast phases were intentionally removed in favor of the smallest useful single-story clip pipeline.
 
@@ -112,7 +113,7 @@ Phase 2 should make it trivial for subsequent phases to run one story repeatedly
 
 ## Phase 3 — ClipPlan generation
 
-Status: CURRENT / PLANNING BASELINE 0.3.0
+Status: COMPLETE / OWNER-CLOSED AFTER P4 AT 0.3.4
 
 Goal:
 Turn one sufficiently described StoryInput plus the selected AssemblyTemplate into one validated ClipPlan by filling the template's declared content slots.
@@ -130,22 +131,27 @@ Conceptual contract:
           v
        ClipPlan
 
-Likely concerns:
-- require sufficient normalized story context for the initial manual path;
-- fail clearly on insufficient context rather than automatically researching;
-- add small declarative authoring semantics to template content slots so core ClipPlan generation stays template-generic;
-- one logical model-assisted operation per story;
-- generic ClipPlan identity plus slot-value contract;
-- template ID/version and storyFingerprint linkage;
-- provider-neutral text-model boundary with Google as the first implementation;
-- provider-native structured output where useful without making provider shapes canonical;
-- VidGen-owned JSON Schema/runtime/semantic validation;
+Implemented capabilities:
+- template-owned content-slot authoring semantics using generic id/usage/instruction data rather than core hard-coded slot meanings;
+- AssemblyTemplate schema/version update while preserving generic non-40-second extensibility;
+- strict provider-neutral ClipPlan type and JSON Schema;
+- deterministic StoryInput/template identity attachment owned by VidGen rather than the model;
 - exact required-slot completeness with no missing, duplicate, or undeclared slots;
-- bounded text/slot lengths;
-- controls treated as untrusted configuration that cannot alter template structure or grounding;
-- bounded malformed-output repair/retry;
-- clip-plan.json persistence in the story workspace;
-- manual CLI/application integration for repeated story debugging.
+- template-order canonicalization, trimmed non-empty slot text, and a generic bounded slot-text limit;
+- deterministic insufficient-context guard requiring a non-null StoryInput summary before provider activity;
+- template-derived provider structured-output schema;
+- provider-neutral structured-text model interface;
+- Google Gemini Interactions REST adapter using runtime GEMINI_API_KEY and VIDGEN_TEXT_MODEL configuration, fixed endpoint, bounded response handling, timeout, and safe errors;
+- pure template-generic ClipPlan prompt construction with StoryInput facts and controls treated as untrusted input;
+- one normal-path text-model call with no hidden creative retry/reflection loop;
+- manual `vidgen plan` CLI/application workflow;
+- atomic `clip-plan.json` persistence plus safe `clip-plan-run.json` provenance/failure metadata;
+- deterministic fake-provider and regression coverage.
+
+Owner closeout note:
+- Phase 3 P5 required a live Google qualification smoke before ordinary acceptance.
+- The owner explicitly waived that unrun live-provider gate on 2026-09-05 and manually closed the phase after the completed P4 implementation.
+- No live-provider qualification is claimed by this roadmap closeout.
 
 For default-news-40s, the ClipPlan fills hook, headline, narration, supporting-information, and closing content. It does not contain shot plans, media selection, timing decisions, provider instructions, or separate generated-video/voiceover prompts.
 
@@ -165,6 +171,8 @@ Explicit Phase 3 non-goals:
 There is no FeedAnalysis, EditorialPlan, separate Script, or ProductionPlan stage.
 
 ## Phase 4 — Generated story media
+
+Status: CURRENT / PLANNING BASELINE 0.4.0
 
 Goal:
 Realize the generated media required by the selected template without building a generalized media platform.
@@ -292,6 +300,6 @@ Use:
 
     /prompt-ass
     -> /prompt-plan
-    -> /prompt-write p3
+    -> /prompt-write p4
 
-Phase 3 planning should inspect the implemented StoryInput, story-workspace, AssemblyTemplate, and ngest boundaries and build the smallest direct StoryInput + AssemblyTemplate -> validated ClipPlan capability. It should add generic slot authoring semantics where needed, keep one logical model call, persist clip-plan.json, and leave publisher retrieval, media prompting, provider generation, and FFmpeg out of scope.
+Phase 4 planning should consume the already validated ClipPlan plus AssemblyTemplate, deterministically resolve only the generated asset-role inputs required by the selected template, and add the smallest provider-neutral media-generation boundary needed for presenter/video/voiceover realization. Keep publisher retrieval, FFmpeg final assembly, live fan-out, and generalized media-platform work out of scope unless current evidence requires them.
