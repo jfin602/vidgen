@@ -1,7 +1,7 @@
 TASK: Phase 1 / P3 — Canonical input contract and fingerprint
 
 MODEL / REASONING / USAGE
-- Recommended configuration: `Sol High`.
+- Recommended configuration: `Terra High`.
 
 VERSIONING
 - This prompt's assigned project version is `0.1.3`.
