@@ -88,7 +88,7 @@ The single-story pipeline should build on that boundary.
 
 A later live run may contain multiple feed Articles, but each Article becomes an independent production unit.
 
-The exact StoryInput schema and story-production identity are intentionally deferred to Phase 2 planning. They should preserve Article provenance and relevant controls without dragging the whole feed into every downstream artifact when it is unnecessary.
+Phase 2 implemented a strict StoryInput schema and deterministic storyFingerprint. StoryInput preserves the explicitly selected Article, profile/publication identity, CanonicalControl, and source CanonicalInput provenance without carrying unrelated feed Articles. The storyFingerprint excludes provenance-only and unrelated-feed changes.
 
 ## Story package boundary
 
@@ -202,7 +202,7 @@ Current simplification target:
 
 A supporting treatment must not become a separate generative subsystem unless evidence requires it. It may be part of presenter media, a fixed treatment, or simple deterministic FFmpeg-level presentation.
 
-The exact duration relationship between standardized intro/outro assets and the locked logical content beat timing should be qualified from the real assets in Phase 2 rather than guessed in documentation.
+Phase 2 established role-only standardized intro/outro requirements without fabricating media facts because the real owner-supplied assets were not present. Concrete binding plus duration/codec qualification remains deferred until those assets are available, before final assembly.
 
 ## Provider boundary
 
