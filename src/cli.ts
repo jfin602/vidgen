@@ -2,6 +2,10 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { DEFAULT_ARTIFACTS_ROOT, runPhase1Input } from './app/phase-1-input-run.ts';
+import {
+  DEFAULT_STORY_ARTIFACTS_ROOT,
+  createStoryWorkspace,
+} from './app/story-workspace.ts';
 import { isVidGenError, VidGenError } from './core/error.ts';
 
 export const helpText = `VidGen
@@ -9,13 +13,21 @@ export const helpText = `VidGen
 Usage:
   vidgen [--help]
   vidgen run [--artifacts-root <directory>]
+  vidgen story --input-file <manifest.json> --article-id <articleId> [--template <templateId>] [--artifacts-root <directory>]
 
 Available commands:
   help, --help, -h  Show this help message.
   run              Acquire one manifest and persist its CanonicalInput.
+  story            Create one selected story development workspace from a local manifest.
 
 Run options:
   --artifacts-root <directory>  Write runs here (default: ${DEFAULT_ARTIFACTS_ROOT}).
+
+Story options:
+  --input-file <manifest.json>  Required local ngest-shaped manifest file.
+  --article-id <articleId>      Required explicit Article ID to select.
+  --template <templateId>       Assembly template (default: default-news-40s).
+  --artifacts-root <directory>  Write story workspaces here (default: ${DEFAULT_STORY_ARTIFACTS_ROOT}).
 `;
 
 export interface HelpCommand {
@@ -27,7 +39,15 @@ export interface RunCommand {
   readonly artifactsRoot?: string;
 }
 
-export type CliCommand = HelpCommand | RunCommand;
+export interface StoryCommand {
+  readonly kind: 'story';
+  readonly inputFile: string;
+  readonly articleId: string;
+  readonly templateId?: string;
+  readonly artifactsRoot?: string;
+}
+
+export type CliCommand = HelpCommand | RunCommand | StoryCommand;
 
 export interface CliOutput {
   writeStdout(text: string): void;
@@ -59,11 +79,16 @@ export function parseCliArgs(args: readonly string[]): CliCommand {
     return parseRunCommand(rest);
   }
 
+  if (command === 'story') {
+    return parseStoryCommand(rest);
+  }
+
   throw invalidArgument(`Unknown command: ${JSON.stringify(command)}.`);
 }
 
 export interface CliDependencies {
   readonly runInput?: typeof runPhase1Input;
+  readonly createStory?: typeof createStoryWorkspace;
 }
 
 export async function runCli(
@@ -78,13 +103,29 @@ export async function runCli(
       return 0;
     }
 
-    const result = await (dependencies.runInput ?? runPhase1Input)({
+    if (command.kind === 'run') {
+      const result = await (dependencies.runInput ?? runPhase1Input)({
+        ...(command.artifactsRoot === undefined ? {} : { artifactsRoot: command.artifactsRoot }),
+      });
+      output.writeStdout(
+        `Run ${result.runId} is input_ready.\n`
+        + `inputFingerprint: ${result.inputFingerprint}\n`
+        + `artifacts: ${result.runDirectory}\n`,
+      );
+      return 0;
+    }
+
+    const result = await (dependencies.createStory ?? createStoryWorkspace)({
+      inputFile: command.inputFile,
+      articleId: command.articleId,
+      ...(command.templateId === undefined ? {} : { templateId: command.templateId }),
       ...(command.artifactsRoot === undefined ? {} : { artifactsRoot: command.artifactsRoot }),
     });
     output.writeStdout(
-      `Run ${result.runId} is input_ready.\n`
-      + `inputFingerprint: ${result.inputFingerprint}\n`
-      + `artifacts: ${result.runDirectory}\n`,
+      `Story ${result.storyRunId} is story_ready.\n`
+      + `storyFingerprint: ${result.storyInput.storyFingerprint}\n`
+      + `template: ${result.template.id}@${result.template.version}\n`
+      + `artifacts: ${result.storyDirectory}\n`,
     );
     return 0;
   } catch (error) {
@@ -115,6 +156,50 @@ function parseRunCommand(args: readonly string[]): RunCommand {
   }
 
   throw invalidArgument(`Run does not accept arguments: ${formatArgs(args)}.`);
+}
+
+function parseStoryCommand(args: readonly string[]): StoryCommand {
+  const values: Partial<Record<'inputFile' | 'articleId' | 'templateId' | 'artifactsRoot', string>> = {};
+  const optionNames: Record<string, keyof typeof values> = {
+    '--input-file': 'inputFile',
+    '--article-id': 'articleId',
+    '--template': 'templateId',
+    '--artifacts-root': 'artifactsRoot',
+  };
+
+  for (let index = 0; index < args.length; index += 2) {
+    const option = args[index];
+    const key = optionNames[option ?? ''];
+    if (key === undefined) {
+      throw invalidArgument(`Unknown story argument: ${JSON.stringify(option)}.`);
+    }
+    if (values[key] !== undefined) {
+      throw invalidArgument(`Story option ${option} must not be repeated.`);
+    }
+    const value = args[index + 1];
+    if (value === undefined) {
+      throw invalidArgument(`${option} requires exactly one value.`);
+    }
+    if (value.trim().length === 0) {
+      throw invalidArgument(`${option} requires a non-empty value.`);
+    }
+    values[key] = value;
+  }
+
+  if (values.inputFile === undefined) {
+    throw invalidArgument('Story requires --input-file <manifest.json>.');
+  }
+  if (values.articleId === undefined) {
+    throw invalidArgument('Story requires --article-id <articleId>.');
+  }
+
+  return {
+    kind: 'story',
+    inputFile: values.inputFile,
+    articleId: values.articleId,
+    ...(values.templateId === undefined ? {} : { templateId: values.templateId }),
+    ...(values.artifactsRoot === undefined ? {} : { artifactsRoot: values.artifactsRoot }),
+  };
 }
 
 function invalidArgument(detail: string): VidGenError {

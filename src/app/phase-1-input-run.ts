@@ -9,7 +9,14 @@ import {
   type NgestVidGenEnvironment,
   type NgestVidGenManifestPage,
 } from '../integrations/ngest/vidgen-manifest.ts';
+import {
+  prettyJson,
+  type AtomicJsonFilesystem as SharedAtomicJsonFilesystem,
+  writeJsonAtomically,
+} from '../shared/atomic-json.ts';
 import { VIDGEN_ENGINE_VERSION } from '../version.ts';
+
+export { writeJsonAtomically } from '../shared/atomic-json.ts';
 
 export const CANONICAL_INPUT_ARTIFACT_NAME = '01-canonical-input.json';
 export const RUN_METADATA_ARTIFACT_NAME = 'run.json';
@@ -153,11 +160,8 @@ export async function runPhase1Input(
   }
 }
 
-export interface AtomicJsonFilesystem {
+export interface AtomicJsonFilesystem extends SharedAtomicJsonFilesystem {
   mkdir(path: string, options: { readonly recursive?: boolean }): Promise<string | undefined>;
-  writeFile(path: string, data: string, encoding: 'utf8'): Promise<void>;
-  rename(oldPath: string, newPath: string): Promise<void>;
-  unlink(path: string): Promise<void>;
 }
 
 export interface FilesystemArtifactStoreDependencies {
@@ -203,42 +207,6 @@ export function createFilesystemArtifactStore(
       await filesystem.unlink(join(runDirectory, CANONICAL_INPUT_ARTIFACT_NAME));
     },
   };
-}
-
-/** Serializes before creating a temp file, then publishes with an atomic rename. */
-export async function writeJsonAtomically(
-  filesystem: Pick<AtomicJsonFilesystem, 'writeFile' | 'rename' | 'unlink'>,
-  finalPath: string,
-  value: unknown,
-  serializeJson: (value: unknown) => string = prettyJson,
-  createTemporarySuffix: () => string = randomUUID,
-): Promise<void> {
-  const contents = `${serializeJson(value)}\n`;
-  const temporaryPath = `${finalPath}.tmp-${createTemporarySuffix()}`;
-  let temporaryFileCreated = false;
-
-  try {
-    await filesystem.writeFile(temporaryPath, contents, 'utf8');
-    temporaryFileCreated = true;
-    await filesystem.rename(temporaryPath, finalPath);
-  } catch (error) {
-    if (temporaryFileCreated) {
-      try {
-        await filesystem.unlink(temporaryPath);
-      } catch {
-        // A failed cleanup must not replace the useful persistence failure.
-      }
-    }
-    throw error;
-  }
-}
-
-function prettyJson(value: unknown): string {
-  const serialized = JSON.stringify(value, null, 2);
-  if (serialized === undefined) {
-    throw new TypeError('Value is not JSON-serializable.');
-  }
-  return serialized;
 }
 
 async function persistArtifact<T>(operation: () => Promise<T>): Promise<T> {
