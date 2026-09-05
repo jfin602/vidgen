@@ -1,0 +1,150 @@
+TASK: Phase 2 / P1 — Manual ngest-shaped fixture ingress
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra Medium`.
+
+VERSIONING
+- This prompt's assigned project version is `0.2.1`.
+
+CONTEXT
+
+Phase 1 is complete and closed. Read BOOT.md first, then README.md, AGENTS.md, docs/README.md, docs/architecture.md, docs/template-system.md, docs/integrations/ngest.md, docs/roadmap/initial-roadmap.md, and the current Phase 1 ingress/canonical-input implementation and tests before editing.
+
+The project has been rebased around one independently produced story clip. Initial video development must be manually invokable from a local sample payload shaped exactly like the ngest VidGen integration response so the downstream video pipeline can be debugged without requiring a live ngest HTTP request on every run.
+
+The existing integration module already owns validateNgestVidGenManifestPage(). The local development path must reuse that producer-envelope contract rather than introduce a second fixture schema.
+
+GOAL
+
+Add the smallest safe local-file ingress boundary that reads an ngest-shaped JSON fixture and returns the same validated NgestVidGenManifestPage transport object used by live ingress.
+
+Conceptual contract:
+
+    local JSON file
+          |
+          v
+      JSON parse
+          |
+          v
+    existing ngest manifest validator
+          |
+          v
+    NgestVidGenManifestPage
+
+SCOPE
+
+Implement only:
+- a local ngest-manifest file loader;
+- one representative deterministic JSON fixture for tests;
+- focused file-ingress tests;
+- package/test wiring required for the new tests.
+
+IMPLEMENTATION REQUIREMENTS
+
+1. Reuse the existing transport contract.
+   - The file loader must call the existing validateNgestVidGenManifestPage() function.
+   - Do not duplicate the manifest-envelope validator.
+   - Do not create a separate manual-story transport type.
+   - A file with non-null nextCursor must continue to fail closed through the existing unsupported-continuation behavior.
+
+2. Local file loader.
+   - Add a narrow integration/helper boundary that:
+     * accepts an explicit filesystem path;
+     * reads UTF-8 text;
+     * parses JSON;
+     * validates the parsed value through validateNgestVidGenManifestPage();
+     * returns NgestVidGenManifestPage.
+   - Prefer Node built-ins only.
+   - Do not require NGEST_VIDGEN_URL or NGEST_VIDGEN_BEARER_TOKEN for local-file loading.
+   - Do not route local input through a fake local HTTP server in production code.
+
+3. Error behavior.
+   - File-not-found/read failures and JSON parse failures must surface as safe VidGen-owned errors.
+   - Add one narrow local-input error code only if callers genuinely need a distinct stable category; do not grow a speculative error taxonomy.
+   - Do not include raw file contents in public errors.
+   - Manifest-shape errors should retain the existing ngest manifest/continuation categories produced by the shared validator.
+   - Never include runtime secrets in local-input errors.
+
+4. Representative fixture.
+   - Add a deterministic test fixture using the real external ngest manifest shape:
+     * apiVersion;
+     * profile;
+     * publication;
+     * articles;
+     * control;
+     * nextCursor;
+     * optional snapshotRevision.
+   - Use fictional/example.test content only.
+   - Include at least two valid Articles so later tests can prove manual article selection is explicit rather than an implicit first-item ranking decision.
+   - The fixture is test/development evidence, not a new product schema.
+   - Do not invent a real production news story or commit publisher media.
+
+5. Preserve live ingress.
+   - Do not alter the live bearer-authenticated fetch semantics except for a minimal shared refactor that is necessary to expose/reuse existing validation.
+   - Existing auth, timeout, redirect, malformed JSON, and continuation behavior must remain unchanged.
+
+6. Version/test wiring.
+   - Set package.json and src/version.ts to 0.2.1.
+   - Keep package-lock.json absent.
+   - Include the new deterministic tests in the application test path without removing existing tests.
+
+FOCUSED TESTS
+
+Prove:
+- a valid local JSON fixture returns the same validated transport shape as direct validation of the parsed object;
+- the file path does not require live ngest runtime configuration;
+- invalid JSON fails safely without surfacing raw contents;
+- malformed envelope fails through the existing manifest error;
+- non-null nextCursor fails through ngest_unsupported_continuation;
+- missing/unreadable file fails with the intended safe local-input category;
+- no bearer sentinel appears in surfaced file-loader errors.
+
+REGRESSION COVERAGE
+
+Run:
+- new local-file ingress tests;
+- existing ngest HTTP ingress tests;
+- canonical-input tests;
+- Phase 1 CLI/run tests;
+- existing runner tests;
+- npm test;
+- npm run check;
+- git diff --check.
+
+PRODUCER / CONSUMER BOUNDARY
+
+Downstream-required capability:
+validated ngest-shaped local input that is semantically identical to the live transport boundary
+
+Owning implementation/export:
+local manifest file loader -> existing validateNgestVidGenManifestPage() -> NgestVidGenManifestPage
+
+Focused proof:
+fixture-driven tests proving local and live-shaped payloads converge on the same validator/type and unsupported continuation still fails closed
+
+PRESERVED BEHAVIOR
+
+- Ngest remains owner of Article eligibility/order/provenance.
+- The manual path does not rank or select stories.
+- CanonicalInput behavior remains unchanged.
+- Live bearer-authenticated ingress remains supported and secret-safe.
+- No raw fixture becomes a new canonical/domain model merely because it came from disk.
+
+NON-GOALS
+
+Do not implement:
+- StoryInput or story fingerprinting;
+- article selection;
+- story directories;
+- assembly templates;
+- publisher retrieval;
+- ClipPlan;
+- AI/Veo;
+- standardized intro/outro media;
+- FFmpeg;
+- Remotion;
+- live feed fan-out.
+
+COMPLETION
+
+Leave version 0.2.1 with a deterministic local ngest-shaped file-ingress capability that reuses the exact Phase 1 manifest validation boundary and is ready to feed story selection in P2.
