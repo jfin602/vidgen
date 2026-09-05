@@ -1,0 +1,167 @@
+TASK: Phase 2 / P2 — Story input contract and identity
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- This prompt's assigned project version is `0.2.2`.
+
+CONTEXT
+
+P1 adds a local ngest-shaped file path that converges on the same NgestVidGenManifestPage validation used by live ingress.
+
+Phase 1 CanonicalInput remains the upstream VidGen-owned normalized boundary. The product now treats every ngest Article as production-worthy, but the initial development flow manually chooses exactly one Article to produce. There must be no hidden "pick the best" or "use the first article" behavior.
+
+Read the current CanonicalInput implementation/schemas/tests and the rebased architecture/roadmap before editing.
+
+GOAL
+
+Create a strict VidGen-owned StoryInput contract that deterministically selects one explicitly requested CanonicalArticle from CanonicalInput, preserves source/provenance context, and gives that story an identity that is independent of unrelated feed Articles.
+
+Conceptual contract:
+
+    CanonicalInput
+          +
+    explicit articleId
+          |
+          v
+      StoryInput
+          |
+          v
+    storyFingerprint
+
+SCOPE
+
+Implement:
+- StoryInput TypeScript contract;
+- one matching JSON Schema;
+- explicit Article selection;
+- deterministic story fingerprinting;
+- focused schema/identity/provenance tests.
+
+IMPLEMENTATION REQUIREMENTS
+
+1. Explicit manual selection.
+   - Accept an explicit articleId from the caller.
+   - Match exactly one CanonicalArticle.
+   - Missing articleId must fail clearly.
+   - If duplicate matching articleIds somehow exist in CanonicalInput, fail as ambiguous rather than choosing the first.
+   - Do not rank, score, reorder, cluster, or otherwise judge production worthiness.
+   - Do not silently fall back to the first Article.
+
+2. StoryInput content.
+   - Define a small durable StoryInput with its own schema version.
+   - Carry only story-level generation context needed downstream:
+     * the selected CanonicalArticle;
+     * feed profile identity;
+     * publication identity;
+     * the current CanonicalControl compatibility object;
+     * storyFingerprint;
+     * provenance linking back to the source CanonicalInput.
+   - Provenance should include source inputFingerprint and ngest apiVersion, plus snapshotRevision when available.
+   - Do not include unrelated feed Articles.
+   - Preserve articleId and originalUrl exactly.
+   - Preserve imageUrl only as upstream metadata; it grants no media-reuse rights.
+
+3. storyFingerprint semantics.
+   - Use the existing deterministic canonical JSON machinery and lowercase SHA-256.
+   - The fingerprint must represent generation-relevant story semantics, not the containing feed snapshot.
+   - Include:
+     * selected Article;
+     * profile identity;
+     * publication identity;
+     * CanonicalControl.
+   - Exclude:
+     * source inputFingerprint itself;
+     * snapshotRevision;
+     * ngest apiVersion;
+     * unrelated Articles;
+     * feed order of unrelated Articles;
+     * runtime timestamps/run IDs/paths.
+   - Therefore changing or reordering an unrelated Article must not change storyFingerprint.
+   - Changing the selected Article, relevant profile/publication identity, or CanonicalControl must change storyFingerprint.
+
+4. Provenance versus identity.
+   - Retain source inputFingerprint and ngest provenance for audit/debug linkage even though they do not define the story fingerprint.
+   - Do not confuse the unique future production/run ID with storyFingerprint.
+   - Do not implement reuse/cache policy in this task.
+
+5. JSON Schema.
+   - Add a strict StoryInput schema under schemas/.
+   - Keep required fields/additionalProperties behavior aligned with runtime output.
+   - Do not add a generic JSON Schema runtime dependency solely for this phase.
+   - Add tests that parse the schema and protect the runtime/schema field contract.
+
+6. Error boundary.
+   - Use a narrow VidGen-owned error category/message for missing/ambiguous story selection.
+   - Do not expose raw manifests or unrelated Article contents in public errors.
+
+7. Version/test wiring.
+   - Set package.json and src/version.ts to 0.2.2.
+   - Keep package-lock.json absent.
+   - Add focused tests to the normal application test path.
+
+FOCUSED TESTS
+
+Prove:
+- explicit articleId selects the intended Article even when it is not first;
+- unknown articleId fails rather than falling back;
+- duplicate matching articleIds fail as ambiguous;
+- StoryInput does not contain unrelated Articles;
+- articleId/originalUrl/source identity survive unchanged;
+- storyFingerprint is lowercase 64-character SHA-256;
+- reordering/changing an unrelated Article does not change storyFingerprint;
+- selected-Article semantic changes do change storyFingerprint;
+- CanonicalControl changes do change storyFingerprint;
+- profile/publication identity changes do change storyFingerprint;
+- snapshotRevision/apiVersion/source inputFingerprint-only provenance changes do not change storyFingerprint;
+- schema and runtime required/additionalProperties intent stay aligned.
+
+REGRESSION COVERAGE
+
+Run:
+- new StoryInput tests;
+- canonical-input/fingerprint tests;
+- local-file ingress tests from P1;
+- Phase 1 HTTP/CLI/run tests;
+- runner tests;
+- npm test;
+- npm run check;
+- git diff --check.
+
+PRODUCER / CONSUMER BOUNDARY
+
+Downstream-required capability:
+one stable, explicitly selected, provenance-linked story object whose identity is unaffected by unrelated feed content
+
+Owning implementation/export:
+StoryInput type/schema + explicit selector/builder + storyFingerprint utility
+
+Focused proof:
+identity tests proving explicit article selection, no unrelated Articles in output, and fingerprint isolation from unrelated feed/provenance changes
+
+PRESERVED BEHAVIOR
+
+- CanonicalInput remains the upstream normalized feed/control artifact.
+- Current CanonicalControl branches remain provisional compatibility data; do not redesign them here.
+- No story is rejected for being unworthy.
+- Upstream Article identity/original publisher destination remain authoritative.
+- No raw transport state becomes StoryInput creative semantics.
+
+NON-GOALS
+
+Do not implement:
+- filesystem story packages;
+- CLI story command;
+- template registry;
+- standardized media binding;
+- publisher retrieval;
+- ClipPlan;
+- AI/media generation;
+- FFmpeg;
+- Remotion;
+- live multi-story orchestration.
+
+COMPLETION
+
+Leave version 0.2.2 with a strict StoryInput producer suitable for independent story-level production and downstream template selection.
