@@ -105,19 +105,19 @@ Shared engine code, provider credentials, and globally standardized intro/outro 
 
 A story failure must not make another story appear failed or successful.
 
-## Phase 3 grounding boundary
+## ClipPlan grounding boundary
 
-Phase 3 consumes the normalized StoryInput directly.
+The implemented ClipPlan workflow consumes the normalized StoryInput directly.
 
 The initial manual pipeline should use a story with a usable headline and summary so the creative path can be qualified without building a retrieval subsystem first. Article/source identity, original URL, dates/byline/categories, controls, and provenance remain available as supporting context.
 
-If StoryInput is insufficient to support a grounded ClipPlan, Phase 3 should fail with a clear insufficient-context outcome rather than automatically retrieving the publisher page or fabricating missing facts.
+If StoryInput lacks a non-null summary, ClipPlan planning fails with a clear insufficient-context outcome before provider activity rather than automatically retrieving the publisher page or fabricating missing facts.
 
 Publisher-page retrieval, HTML extraction, SSRF/network policy, and broader web research are deferred capabilities. If later added, they must be separately bounded and provenance-aware.
 
 ## ClipPlan boundary
 
-ClipPlan is the only planned model-assisted creative artifact in the initial pipeline.
+ClipPlan is the only model-assisted creative artifact in the implemented initial planning pipeline.
 
 It fills a selected template. It does not invent the template.
 
@@ -133,11 +133,11 @@ A ClipPlan should carry only identity plus the story-specific values required by
         - id
           text
 
-The exact wire shape remains a Phase 3 implementation decision, but the contract should stay generic across templates.
+The implemented wire shape is schemaVersion + storyFingerprint + template { id, version } + ordered slots { id, text }, and the contract remains generic across templates.
 
 The model does not write shot plans, media-type decisions, provider instructions, transition plans, timing changes, or separate generated-video/voiceover prompts.
 
-No downstream stage consumes raw model output. ClipPlan requires structured-output validation, runtime validation, deterministic semantic checks, and at most a bounded malformed-output repair/retry path where appropriate.
+No downstream stage consumes raw model output. The implemented workflow uses provider-structured JSON, VidGen runtime/semantic validation, deterministic slot completeness/order checks, and one normal-path model call; malformed or invalid output fails for human rerun rather than triggering a hidden creative repair loop.
 
 If media generation or assembly must infer missing story meaning, ClipPlan is incomplete.
 
@@ -156,9 +156,9 @@ A template defines deterministic assembly requirements:
 
 ClipPlan fills only declared story-content slots.
 
-Each content slot should be capable of declaring a small amount of generic authoring guidance, initially no more than:
+Each content slot now requires the generic authoring guidance implemented in Phase 3:
 - id;
-- usage, such as spoken or display;
+- usage: spoken or display;
 - instruction describing what content belongs in the slot.
 
 Core ClipPlan generation must not hard-code meanings for default-news-40s slot IDs.
@@ -221,11 +221,12 @@ The MVP is Google-first, not Google-coupled.
 
 Keep thin provider-neutral requests/results at the VidGen boundary so ClipPlan generation, media generation, and FFmpeg assembly do not depend directly on provider response shapes.
 
-Initial direction:
-- a thin text-model boundary for Phase 3, with Google as the first implementation and exact model ID kept in runtime configuration;
-- Veo for generated presenter/video work in Phase 4;
+Current direction:
+- Phase 3 implemented a thin provider-neutral structured-text boundary plus a Google Gemini Interactions REST adapter, with the exact model ID kept in runtime configuration;
+- the owner manually closed Phase 3 without claiming the unrun live Google qualification smoke;
+- Veo remains the initial presenter/video direction for Phase 4;
 - off-screen narration/voiceover mechanism remains unresolved;
-- provider jobs/assets retain story-local provenance and effective-input identity where useful.
+- provider jobs/assets should retain story-local provenance and effective-input identity where useful.
 
 Do not build a large generalized provider framework before a second provider or real complexity requires it.
 
