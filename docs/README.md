@@ -10,6 +10,7 @@ Current owner-approved architecture is recorded here, while provider choices, de
 - architecture.md — current conceptual pipeline and internal boundaries.
 - integrations/ngest.md — direct authenticated ngest integration boundary.
 - control-interface.md — VidGen control ownership and semantics.
+- planning/initial-engineering-question-worksheet.md — pre-implementation worksheet for unresolved stack, AI, production, rendering, and operational decisions.
 - workflow.md — repository planning, prompt, and runner workflow.
 - roadmap/initial-roadmap.md — draft implementation sequence.
 - codex-model-selection.md — supported runner configuration labels and selection guidance.
