@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vidgen.dev/schemas/story-input.schema.json",
+  "title": "StoryInput",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "article", "profile", "publication", "control", "storyFingerprint", "provenance"],
+  "properties": {
+    "schemaVersion": { "const": "1" },
+    "article": { "$ref": "canonical-feed.schema.json#/$defs/article" },
+    "profile": { "$ref": "canonical-feed.schema.json#/$defs/profile" },
+    "publication": { "$ref": "canonical-feed.schema.json#/$defs/publication" },
+    "control": { "$ref": "canonical-control.schema.json" },
+    "storyFingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceInputFingerprint", "ngestApiVersion"],
+      "properties": {
+        "sourceInputFingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "ngestApiVersion": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "snapshotRevision": { "$ref": "#/$defs/jsonValue" }
+      }
+    }
+  },
+  "$defs": {
+    "jsonValue": {
+      "anyOf": [
+        { "type": "string" },
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "null" },
+        { "type": "array", "items": { "$ref": "#/$defs/jsonValue" } },
+        { "type": "object", "additionalProperties": { "$ref": "#/$defs/jsonValue" } }
+      ]
+    }
+  }
+}

@@ -9,6 +9,7 @@ export type VidGenErrorCode =
   | 'transport'
   | 'artifact'
   | 'canonical_input'
+  | 'story_selection'
   | 'ngest_authentication'
   | 'ngest_http'
   | 'ngest_timeout'
