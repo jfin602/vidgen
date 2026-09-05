@@ -1,0 +1,38 @@
+/**
+ * Error codes emitted by VidGen-owned boundaries. New codes should be added
+ * only when a caller needs a distinct, stable recovery path.
+ */
+export type VidGenErrorCode =
+  | 'invalid_argument'
+  | 'configuration'
+  | 'transport'
+  | 'artifact';
+
+export interface VidGenErrorOptions {
+  readonly cause?: unknown;
+}
+
+/**
+ * An application error with a public message that is safe to present to users.
+ * The optional cause is retained for local diagnostics and is never rendered by
+ * this class or the CLI.
+ */
+export class VidGenError extends Error {
+  readonly code: VidGenErrorCode;
+  readonly publicMessage: string;
+
+  constructor(
+    code: VidGenErrorCode,
+    publicMessage: string,
+    options: VidGenErrorOptions = {},
+  ) {
+    super(publicMessage, options);
+    this.name = 'VidGenError';
+    this.code = code;
+    this.publicMessage = publicMessage;
+  }
+}
+
+export function isVidGenError(value: unknown): value is VidGenError {
+  return value instanceof VidGenError;
+}
