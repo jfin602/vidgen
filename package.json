@@ -1,0 +1,16 @@
+{
+  "name": "vidgen",
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24.10.0 <25"
+  },
+  "scripts": {
+    "test": "node --test test/unit/codex-phase-prompt-grammar.test.ts test/unit/codex-phase-runner.test.ts",
+    "test:runner": "node --test test/unit/codex-phase-prompt-grammar.test.ts test/unit/codex-phase-runner.test.ts",
+    "docs:snapshot": "node scripts/create-docs-snapshot.mjs",
+    "codex:phase": "node scripts/codex-phase.mjs",
+    "codex:phase:validate": "node scripts/validate-codex-phase.mjs",
+    "check": "npm test"
+  }
+}

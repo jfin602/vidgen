@@ -1,0 +1,11 @@
+node_modules/
+package-lock.json
+.codex-runs/
+*.log
+.env
+.env.*
+!.env.example
+vidgen-docs-context.zip
+artifacts/
+dist/
+coverage/
