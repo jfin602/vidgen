@@ -1,0 +1,60 @@
+{
+  "apiVersion": "2026-09-01",
+  "profile": {
+    "configKey": "example-daily-briefing",
+    "displayName": "Example Daily Briefing"
+  },
+  "publication": {
+    "name": "Example Test News"
+  },
+  "articles": [
+    {
+      "articleId": "example-article-1",
+      "headline": "Example city opens a fictional community laboratory",
+      "originalUrl": "https://publisher.example.test/stories/community-laboratory",
+      "effectiveFeedDate": "2026-09-05",
+      "feedDateSource": "published_at",
+      "publishedAt": "2026-09-05T12:00:00Z",
+      "author": "Avery Example",
+      "summary": "A fictional example story for local VidGen development.",
+      "imageUrl": null,
+      "source": {
+        "configKey": "example-publisher",
+        "displayName": "Example Publisher"
+      },
+      "categories": ["Example"]
+    },
+    {
+      "articleId": "example-article-2",
+      "headline": "Example transit route adds a fictional weekend service",
+      "originalUrl": "https://publisher.example.test/stories/weekend-transit",
+      "effectiveFeedDate": "2026-09-04",
+      "feedDateSource": "feed_date",
+      "publishedAt": null,
+      "author": null,
+      "summary": null,
+      "imageUrl": null,
+      "source": {
+        "configKey": "example-publisher",
+        "displayName": "Example Publisher"
+      },
+      "categories": []
+    }
+  ],
+  "control": {
+    "version": "1",
+    "editorial": {
+      "audience": "general"
+    },
+    "script": {
+      "tone": "measured"
+    },
+    "production": {
+      "captions": true
+    }
+  },
+  "nextCursor": null,
+  "snapshotRevision": {
+    "revision": 1
+  }
+}

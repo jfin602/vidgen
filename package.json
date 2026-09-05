@@ -1,6 +1,6 @@
 {
   "name": "vidgen",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "engines": {
     "node": ">=24.10.0 <25"
@@ -9,7 +9,7 @@
     "vidgen": "node src/cli.ts",
     "test": "npm run test:runner && npm run test:app",
     "test:runner": "node --test test/unit/codex-phase-prompt-grammar.test.ts test/unit/codex-phase-runner.test.ts",
-    "test:app": "node --test test/unit/app/cli.test.ts test/unit/app/phase-1-input-run.test.ts test/unit/app/json.test.ts test/unit/app/canonical-input.test.ts test/unit/app/error.test.ts test/unit/integrations/ngest-vidgen-manifest.test.ts",
+    "test:app": "node --test test/unit/app/cli.test.ts test/unit/app/phase-1-input-run.test.ts test/unit/app/json.test.ts test/unit/app/canonical-input.test.ts test/unit/app/error.test.ts test/unit/integrations/ngest-vidgen-manifest.test.ts test/unit/integrations/ngest-local-manifest-file.test.ts",
     "docs:snapshot": "node scripts/create-docs-snapshot.mjs",
     "codex:phase": "node scripts/codex-phase.mjs",
     "codex:phase:validate": "node scripts/validate-codex-phase.mjs",

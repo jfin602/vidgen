@@ -47,7 +47,7 @@ test('CLI persists one safe, validated CanonicalInput under its artifacts-root o
         status: 'input_ready',
         startedAt: metadata.startedAt,
         endedAt: metadata.endedAt,
-        engineVersion: '0.2.0',
+        engineVersion: '0.2.1',
         inputFingerprint: canonical.inputFingerprint,
         canonicalInputArtifact: CANONICAL_INPUT_ARTIFACT_NAME,
       });

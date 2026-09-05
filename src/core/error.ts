@@ -13,6 +13,7 @@ export type VidGenErrorCode =
   | 'ngest_http'
   | 'ngest_timeout'
   | 'ngest_invalid_json'
+  | 'ngest_local_input'
   | 'ngest_manifest'
   | 'ngest_unsupported_continuation';
 
