@@ -24,7 +24,7 @@ Implemented foundation:
 - filesystem-backed run/story metadata and shared atomic JSON persistence;
 - fail-closed handling for unsupported ngest continuation.
 
-Phase 3 is the first creative-planning phase: bounded factual context preparation plus one validated ClipPlan. Provider media generation, standardized asset binding/qualification, and FFmpeg assembly remain later work.
+Phase 3 is the first creative-planning phase: one validated ClipPlan generated directly from a sufficiently described StoryInput plus the selected AssemblyTemplate. Publisher retrieval, provider media generation, standardized asset binding/qualification, and FFmpeg assembly remain later work.
 
 ## Core architectural standards
 
@@ -79,7 +79,7 @@ See docs/template-system.md.
 
 The current MVP does not use separate FeedAnalysis, EditorialPlan, Script, and ProductionPlan stages.
 
-One validated ClipPlan contains the story-specific material needed to fill the selected template, such as presenter dialogue, narration, generated-video prompt/content, headline/supporting text, closing content, and source support.
+One validated ClipPlan is a filled template form. It contains the story-specific text required by the selected template, such as hook, headline, narration, supporting information, and closing content. It does not contain shot planning, provider instructions, timing decisions, media selection, transition decisions, or a second layer of generated-media prompts.
 
 No downstream step should need to reinterpret the story or redesign the template.
 
@@ -109,7 +109,6 @@ VidGen owns:
 - validation and normalization of received input;
 - story-level production identity;
 - story package lifecycle;
-- conditional bounded source-context preparation;
 - ClipPlan generation and validation;
 - generated presenter/content media;
 - narration/voiceover integration;
@@ -157,15 +156,15 @@ The story package should retain the story-specific source files and generated fi
 
 Shared engine code and shared standardized template assets do not need to be duplicated into every story directory; the story package should identify the template/version and shared asset identities used.
 
-## Context preparation
+## Phase 3 grounding input
 
-The ngest story headline, summary, metadata, provenance, and original publisher URL are the starting factual context.
+Phase 3 starts from StoryInput and does not automatically perform research.
 
-Publisher-page retrieval is conditional rather than mandatory. Retrieve and normalize the governed publisher page only when the available story context is insufficient for a grounded ClipPlan.
+For the initial manually debugged pipeline, choose an ngest story whose normalized headline and summary provide enough factual context to fill the selected template. Article/source identity, dates, byline, categories, controls, and provenance may also inform the plan.
 
-Broader web research is deferred.
+If the supplied story context is insufficient for a grounded ClipPlan, fail clearly rather than silently fetching the publisher page or inventing missing facts.
 
-Publisher retrieval does not grant media reuse rights.
+Publisher-page retrieval remains a later fallback capability for insufficient upstream context. Broader web research remains deferred. Any future retrieval capability must preserve the existing rule that retrieval permission does not grant media reuse rights.
 
 ## Generated media
 
@@ -203,6 +202,7 @@ The initial goal is debuggability and reproducibility of one story, not distribu
 ## Deferred
 
 - live multi-story feed fan-out until the video pipeline works;
+- publisher-page retrieval fallback for insufficient upstream story context;
 - general web research;
 - configurable approval workflows;
 - global asset caching;
