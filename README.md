@@ -1,23 +1,44 @@
 # VidGen
 
-VidGen is a new, standalone cinematic news-generation codebase.
+VidGen is a standalone cinematic news-generation engine.
 
-The current direction is to consume a governed news-feed manifest from an upstream system such as ngest and turn that bounded input into a produced video-news edition. The external engine is expected to own the creative pipeline: research, theme/story development, scripting, scene planning, media generation, composition, rendering, and output artifacts.
+Its primary production input is a dedicated authenticated ngest integration endpoint. Ngest supplies a governed Distribution Profile feed plus bounded VidGen-specific controls; VidGen independently performs feed interpretation, theme discovery, story selection, editorial planning, scripting, production planning, media generation, composition, rendering, and artifact output.
 
-This repository is intentionally separate from ngest. ngest remains responsible for canonical feed authority and controlled input; VidGen is responsible for downstream creative generation.
+VidGen does not consume the ngest Profile digest as pre-written editorial output.
+
+## System boundary
+
+Ngest remains responsible for:
+- approved-source trust;
+- collection and normalization;
+- canonical Article identity and provenance;
+- duplicate handling and moderation;
+- outward Article eligibility;
+- Distribution Profile selection and ordering;
+- original publisher destinations;
+- authentication and delivery of the VidGen integration response.
+
+VidGen remains responsible for:
+- validating and normalizing its received input;
+- deriving canonical feed/control models;
+- generation identity and reproducibility;
+- editorial and creative reasoning;
+- source traceability through generated artifacts;
+- downstream production and rendering.
+
+The systems communicate over HTTP using a VidGen-specific bearer credential. VidGen does not connect directly to ngest persistence.
 
 ## Current state
 
 This repository is in bootstrap state. It currently contains:
-
 - the project/session workflow;
 - a port of the ngest Codex phase runner;
 - phase-runner tests;
 - documentation snapshot tooling;
-- a small provisional documentation set;
-- a draft initial roadmap.
+- the initial integration/control architecture;
+- a draft implementation roadmap.
 
-No provider, video model, rendering stack, persistence design, queue topology, or public API is locked yet.
+No AI provider, video provider, rendering stack, VidGen persistence design, queue topology, or public API is locked yet.
 
 ## Start here
 
@@ -27,6 +48,8 @@ Documentation index:
 - docs/README.md
 - docs/project-overview.md
 - docs/architecture.md
+- docs/integrations/ngest.md
+- docs/control-interface.md
 - docs/workflow.md
 - docs/roadmap/initial-roadmap.md
 
