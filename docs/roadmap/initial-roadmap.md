@@ -3,101 +3,206 @@
 Status: DRAFT / PROVISIONAL
 Baseline: 0.1.0
 
-This roadmap is an initial planning scaffold, not an owner-locked commitment. Phase boundaries should be revised when implementation evidence shows a better decomposition.
+This roadmap is an initial planning scaffold. Phase boundaries may be revised when implementation evidence shows a safer or more coherent decomposition.
 
-## Phase 1 — Foundation and manifest ingestion
+The direct ngest integration and control boundary are current project direction. Provider choices and production contracts remain deliberately open.
+
+## Phase 1 — Foundation and ngest integration boundary
 
 Goal:
-Create the minimum executable project foundation and reliably ingest/validate one upstream VidGen manifest into an internal run context.
+Create the minimum executable VidGen foundation and reliably acquire, validate, normalize, and fingerprint one dedicated ngest VidGen integration response.
 
 Likely concerns:
 - runtime/tooling;
-- configuration;
-- manifest client boundary;
-- input validation/normalization;
-- run identity seed;
-- fixtures and deterministic tests;
+- runtime secret/configuration handling;
+- dedicated ngest bearer-token client;
+- authenticated HTTP acquisition;
+- response contract validation;
+- separation of authentication, transport, and validation failures;
+- CanonicalFeed;
+- CanonicalControl;
+- deterministic normalization;
+- deterministic canonical serialization and SHA-256 inputFingerprint;
+- provenance/debug metadata that does not redefine creative identity;
+- minimal/full/invalid fixtures;
+- deterministic tests;
 - first CLI or worker entrypoint.
 
-## Phase 2 — Edition/story planning
+Preserved boundaries:
+- no direct ngest database access;
+- no reimplementation of ngest feed eligibility/order/provenance logic;
+- no ngest digest as creative input;
+- no VidGen controls added to generic PHP/Distribution responses;
+- ngest transport details stop at the input boundary.
+
+Phase 1 should be refined against the real ngest outward feed contract during /prompt-ass and /prompt-plan. Exact ngest route and persistence details must not be invented from this repository.
+
+## Phase 2 — Feed intelligence
 
 Goal:
-Turn governed feed input into a reproducible proposed edition structure.
+Turn CanonicalFeed plus CanonicalControl into a reproducible, source-grounded FeedAnalysis artifact.
+
+Conceptual contract:
+
+    CanonicalFeed
+    + CanonicalControl
+        -> FeedAnalysis
 
 Likely concerns:
-- bounded research;
+- theme discovery;
+- repeated entities and related coverage;
+- candidate-story identification;
+- story clustering;
+- uncertainty/conflict recording;
+- Article-level support/provenance;
+- hard editorial controls;
+- editorial preferences;
+- bounded research/retrieval policy;
+- deterministic structural validation around model-assisted output;
+- provider/cost/failure behavior.
+
+The feed-analysis stage chooses among governed input Articles. It must not reconstruct ngest eligibility logic or invent unavailable source material.
+
+## Phase 3 — Editorial planning
+
+Goal:
+Turn FeedAnalysis into a coherent proposed program structure while preserving explicit Article support.
+
+Conceptual contract:
+
+    FeedAnalysis
+    + CanonicalControl
+        -> EditorialPlan
+
+Likely concerns:
+- central program theme;
 - story selection;
-- theme/angle development;
-- provenance;
-- deterministic constraints around model-assisted decisions;
-- cost/failure behavior.
+- grouping related Articles;
+- story ordering;
+- opening/closing intent;
+- transitions;
+- must-include/exclude behavior;
+- maximum story constraints;
+- preference deviation recording where useful;
+- Article support mapping;
+- reproducible structured output.
 
-## Phase 3 — Script and scene plan
+## Phase 4 — Script generation
 
 Goal:
-Produce a structured script and scene/shot plan that later rendering stages can consume without reinterpreting editorial intent.
+Turn the editorial plan into structured, source-grounded narration/presentation content suitable for later production planning.
+
+Conceptual contract:
+
+    EditorialPlan
+    + FeedAnalysis
+    + CanonicalControl
+        -> Script
 
 Likely concerns:
-- narration/script schema;
-- source support/citations;
-- scene timing;
-- on-screen text;
-- asset requirements;
-- validation.
+- structured segments;
+- factual grounding;
+- Article support for factual sections;
+- target-duration behavior;
+- style/tone/pace controls;
+- unsupported-expansion prevention;
+- exact publisher provenance;
+- output validation;
+- provider/cost/failure behavior.
 
-## Phase 4 — Media/provider adapters
+## Production design checkpoint
+
+After Phase 4, generate and inspect several materially different programs before locking ProductionPlan v1.
+
+Do not design the production contract entirely from assumptions.
+
+Use observed script requirements to decide what durable production concepts are actually necessary, including scenes, shots, anchor/presenter use, B-roll, graphics, lower thirds, transitions, narration timing, music, captions, and provider jobs.
+
+If downstream production work would need to invent script-owned semantics, return Planning needed and correct the producer boundary first.
+
+## Phase 5 — Production planning
 
 Goal:
-Introduce replaceable provider boundaries for media generation/acquisition and narration.
+Create a validated ProductionPlan contract based on observed script needs and translate structured Script output into provider-neutral visual/audio production work.
+
+Likely concerns:
+- scene/shot structure;
+- narration timing;
+- visual requirements;
+- graphics/lower thirds;
+- transitions;
+- caption timing;
+- provider-neutral asset requirements;
+- source/provenance linkage where presentation depends on factual claims;
+- restart/resume boundaries.
+
+Exact schema is intentionally deferred until the production design checkpoint.
+
+## Phase 6 — Media and narration providers
+
+Goal:
+Introduce replaceable provider boundaries for generated/acquired media and narration.
 
 Likely concerns:
 - provider-neutral requests;
 - job IDs/status;
 - retries/timeouts;
+- malformed/partial provider responses;
 - cost accounting;
+- asset identity and hashes;
 - artifact provenance;
-- mocked and limited live qualification.
+- mocked orchestration proof;
+- limited live-provider qualification.
 
 No provider is selected by this roadmap.
 
-## Phase 5 — Composition and render
+## Phase 7 — Composition and rendering
 
 Goal:
-Assemble approved/generated assets into one reproducible video edition.
+Assemble planned/generated assets into one reproducible video edition.
 
 Likely concerns:
 - timeline/compositor choice;
-- transitions/titles;
+- titles and transitions;
 - audio mixing;
 - captions;
-- render artifacts;
-- restart/resume behavior.
+- RenderManifest;
+- final artifact identity;
+- restart/resume behavior;
+- failed-render semantics;
+- deterministic assembly around nondeterministically generated assets.
 
-## Phase 6 — Integration and operational hardening
+## Phase 8 — Integration and operational hardening
 
 Goal:
-Prove the full external-engine boundary with real upstream input and realistic provider/render failure modes.
+Prove the full ngest-to-final-video boundary under realistic failure, retry, provider, and render conditions.
 
 Likely concerns:
-- server-to-server authentication;
+- live ngest authentication/integration qualification;
 - scheduling/orchestration;
 - observability;
 - cancellation;
 - retries/resume;
+- idempotency;
 - artifact retention;
 - cost controls;
 - deployment packaging;
+- end-to-end provenance;
+- failure recovery;
+- secret-leak review;
 - end-to-end qualification.
 
 ## Deferred until evidence requires them
 
 - multi-tenant product behavior;
-- public web UI;
-- customer-facing API;
+- public VidGen web UI;
+- customer-facing VidGen API;
 - complex distributed orchestration;
-- a permanent database choice;
+- a permanent VidGen database choice;
 - a specific cloud/provider stack;
 - automated publishing destinations;
-- v2 manifest behavior.
+- stable ProductionPlan schema before real scripts exist;
+- exact ngest control table/schema details;
+- additional control versions.
 
-The immediate implementation sequence should begin only after /prompt-ass and /prompt-plan refine Phase 1 against the latest ngest manifest boundary and current VidGen repository state.
+The immediate implementation sequence begins with /prompt-ass for Phase 1 against docs/integrations/ngest.md, docs/control-interface.md, current ngest integration evidence when explicitly available, and current VidGen repository state.
