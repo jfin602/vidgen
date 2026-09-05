@@ -1,0 +1,141 @@
+TASK: Phase 2 / P5 — Phase 2 closeout validation
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- This prompt's assigned project version is `0.2.5`.
+
+CONTEXT
+
+This is the final Phase 2 closeout prompt.
+
+P1-P4 should have produced:
+- local ngest-shaped file ingress through the existing transport validator;
+- explicit StoryInput selection and storyFingerprint;
+- a strict default-news-40s assembly-template contract;
+- a manual story CLI/application service;
+- an independent story workspace with template metadata and future source/media directories.
+
+Phase 2 intentionally stops before publisher retrieval, ClipPlan generation, AI/media providers, actual standardized intro/outro binding, and FFmpeg.
+
+Closeout changes require human review and must remain uncommitted. Do not broaden the phase.
+
+GOAL
+
+Rigorously validate the complete Phase 2 manual single-story foundation, repair only bounded Phase 2 defects found during validation, and leave a review-ready repository that can begin Phase 3 without downstream code inventing story-selection, identity, or template semantics.
+
+VALIDATION CHECKLIST
+
+1. Repository/runtime integrity.
+   - Re-read BOOT.md, current architecture, template-system doc, and Phase 2 roadmap section.
+   - Confirm package-lock.json is absent.
+   - Confirm Codex runner behavior was not unnecessarily changed.
+   - Run git diff --check.
+   - Run npm test and npm run check.
+   - Run the CLI help surface.
+
+2. Manual ingress convergence.
+   - Verify local-file loading uses the same validateNgestVidGenManifestPage() producer-envelope validator as live ingress.
+   - Verify manual mode requires no bearer or endpoint configuration.
+   - Verify invalid JSON/read failures are safe.
+   - Verify malformed manifests and non-null nextCursor still fail closed.
+   - Confirm live HTTP auth/timeout/redirect/continuation tests still pass.
+
+3. Story selection and identity.
+   - Verify one explicit articleId is required.
+   - Verify no "first Article", ranking, scoring, or content-worthiness selection logic exists.
+   - Verify unknown and ambiguous duplicate article IDs fail.
+   - Verify StoryInput contains no unrelated feed Articles.
+   - Verify articleId/originalUrl/source traceability survives.
+   - Verify storyFingerprint is deterministic over selected Article + profile + publication + CanonicalControl.
+   - Verify unrelated Article changes/order and provenance-only changes do not change storyFingerprint.
+   - Verify selected-story/control/profile/publication semantic changes do.
+
+4. StoryInput schema.
+   - Verify the StoryInput JSON Schema parses and matches runtime required/additionalProperties intent.
+   - Verify provenance retains source inputFingerprint and ngest provenance without redefining identity.
+   - Verify publisher imageUrl remains metadata only and no reuse permission is inferred.
+
+5. Default assembly template.
+   - Verify the built-in default-news-40s template is declarative and validated.
+   - Verify exact logical timing:
+       0-5 hook
+       5-15 content
+       15-28 support
+       28-40 closing
+   - Verify output is 1080x1920 at 30 fps.
+   - Verify the content segment deterministically requires generated video plus voiceover.
+   - Verify support + closing can reuse the same second-anchor generated asset role.
+   - Verify standardized intro and outro roles are required.
+   - Verify no provider-specific tuning, AI shot planning, Remotion component contract, or FFmpeg invocation leaked into the template layer.
+
+6. Standardized asset evidence boundary.
+   - Inspect whether real standardized intro/outro media files are present.
+   - If they are absent, verify the implementation does not fabricate or claim filenames, hashes, durations, codecs, availability, or qualification; report concrete media binding/duration qualification as deferred.
+   - If owner-supplied standardized assets are actually present by execution time, only verify facts that can be observed locally and do not change Phase 2 scope to media assembly.
+
+7. Manual story workspace.
+   - Verify `vidgen story --input-file ... --article-id ...` reaches the expected story application boundary.
+   - Verify repeated same-story invocations use distinct storyRunIds/directories while retaining storyFingerprint.
+   - Verify directory names do not derive unsafely from articleId.
+   - Verify story.json is the StoryInput artifact and no raw full manifest/unrelated Article is copied into the workspace.
+   - Verify sources/, assets/presenter/, assets/video/, assets/audio/, and final/ exist for later work without fake files.
+   - Verify story-run.json records article/story/source/template identities and required asset roles.
+   - Verify success state is only story_ready; it must not claim ClipPlan, provider, media, FFmpeg, or final-video completion.
+   - Verify failure metadata cannot appear successful.
+
+8. Shared persistence helper.
+   - If atomic JSON writing was extracted from the Phase 1 application module, verify Phase 1 behavior/tests remain unchanged and there is one neutral shared implementation rather than duplicated variants.
+
+9. Security and boundaries.
+   - Search persisted artifacts/error paths for bearer/Authorization leakage.
+   - Verify no direct ngest database access.
+   - Verify no publisher retrieval/general web research.
+   - Verify no AI/Veo/provider implementation.
+   - Verify no FFmpeg/Remotion implementation.
+   - Verify no database, queue, global cache, approval state machine, or live story fan-out.
+
+10. Focused evidence.
+   - Run the Phase 2 local-file, StoryInput, template, story-workspace, and CLI tests.
+   - Run all inherited Phase 1 application/integration tests.
+   - Run inherited runner tests.
+   - Do not claim live ngest, provider, intro/outro media, FFmpeg, render, browser, or deployment behavior unless actually observed.
+
+BOUNDED REPAIRS
+
+If validation exposes a defect clearly inside Phase 2 scope, fix it, add/adjust focused regression coverage, and rerun the relevant checks.
+
+Do not add:
+- publisher retrieval;
+- ClipPlan;
+- AI/media providers;
+- narration provider;
+- standardized binary media placeholders;
+- media probing/FFmpeg;
+- Remotion;
+- live fan-out/pagination guessing;
+- databases/queues;
+- unrelated refactors.
+
+VERSION / REVIEW STATE
+
+If Phase 2 validation succeeds, set package.json and src/version.ts to 0.2.5.
+
+Do not commit closeout changes. Leave all closeout edits, including version change and any bounded fixes, for human review as required by the phase runner.
+
+FINAL RESPONSE
+
+Summarize:
+- validation commands actually run and outcomes;
+- files/areas inspected;
+- any bounded defects fixed;
+- proof of local/live validation convergence;
+- StoryInput selection/fingerprint evidence;
+- template timing/role evidence;
+- story-workspace artifact evidence;
+- whether real standardized intro/outro media were present and, if absent, the explicit deferred qualification;
+- confirmation that no Phase 3+ behavior leaked in;
+- whether Phase 2 is ready for human review and subsequent /closeout.
+
+Do not claim evidence that was not actually observed.
