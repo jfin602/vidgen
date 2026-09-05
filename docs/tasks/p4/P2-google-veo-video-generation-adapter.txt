@@ -121,6 +121,7 @@ IMPLEMENTATION REQUIREMENTS
    - When a presenter target requires multiple provider chunks, partition the already validated exact spokenText deterministically across initial/extension generations.
    - Partition at word/punctuation boundaries using target/provider chunk duration proportions.
    - The concatenation of chunk dialogue text must equal the original spokenText modulo only existing whitespace normalization; no words may be added, dropped, duplicated, summarized, or rewritten.
+   - Current Veo documentation warns that voice extension is ineffective when voice is absent from the final second of the input video. Shape the deterministic initial presenter prompt/chunk so dialogue is intended to continue through the end of the initial generation when another extension chunk remains; do not intentionally insert a silent tail before an extension that must continue speech.
    - Extension prompts should preserve the same presenter and scene continuity and speak only their assigned remaining text.
    - Add focused tests for exact reconstruction.
    - Do not call a text model to rewrite dialogue for duration.
@@ -217,7 +218,7 @@ Use injected fake fetch/time boundaries to prove:
 - a target longer than initial coverage performs the required bounded extension lifecycle;
 - configured model without required reference-image capability fails clearly for presenter generation;
 - configured model without extension capability fails clearly when extension is necessary;
-- presenter dialogue partitioning reconstructs the original exact text without additions/drops/duplicates;
+- presenter dialogue partitioning reconstructs the original exact text without additions/drops/duplicates and keeps continuation-intended dialogue active through the initial tail when an extension remains;
 - content extension does not invent a second story prompt/claim;
 - result preserves operation IDs/nominal generated seconds without exposing raw response envelopes;
 - timeout, non-2xx, failed operation, malformed JSON, missing video, oversized response, oversized video, unsafe download URL, and unsafe redirects fail safely;
