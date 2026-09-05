@@ -61,6 +61,16 @@ function correctionPrompt(
   };
 }
 
+
+test('VidGen rejects model configurations below Luna Medium', () => {
+  assert.equal('Luna Low' in MODEL_CONFIGS, false);
+  const entry = prompt(1, { config: 'Luna Low' });
+  assert.throws(
+    () => parsePrompt(entry.filename, entry.text),
+    /Unknown recommended configuration/,
+  );
+});
+
 test('implementation prose may mention closeout without changing prompt kind', () => {
   const entry = prompt(1, {
     body: 'Prepare repeatable evidence before closeout so the final closeout can consume it.',
