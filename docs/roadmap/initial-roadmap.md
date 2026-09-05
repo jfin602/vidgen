@@ -1,7 +1,8 @@
 # Initial VidGen Roadmap
 
 Status: CURRENT MVP DIRECTION / PROVISIONAL PHASE BOUNDARIES
-Baseline: 0.1.0
+Phase 1 completion: 0.1.5
+Current baseline: 0.2.0
 
 This roadmap is the current implementation scaffold. Phase boundaries may be revised when implementation evidence shows a safer or more coherent decomposition.
 
@@ -25,6 +26,8 @@ The roadmap assumes:
 No downstream stage may consume unvalidated model output.
 
 ## Phase 1 — Foundation and ngest integration boundary
+
+Status: COMPLETE / CLOSED AT 0.1.5
 
 Goal:
 Create the minimum executable Node.js + TypeScript CLI foundation and reliably acquire, validate, normalize, persist, and fingerprint one dedicated ngest VidGen integration response.
@@ -54,9 +57,11 @@ Preserved boundaries:
 - no VidGen controls added to generic PHP/Distribution responses;
 - ngest transport details stop at the input boundary.
 
-Phase 1 should be refined against the real ngest outward feed contract during /prompt-ass and /prompt-plan. Exact ngest route and persistence details must not be invented from this repository.
+Phase 1 is implemented and closed. The resulting boundary includes secure manifest acquisition, canonical normalization, deterministic inputFingerprint generation, and durable CLI run artifacts. Exact ngest continuation request semantics remain unresolved; the implementation correctly fails closed on non-null nextCursor rather than inventing producer-owned behavior.
 
 ## Phase 2 — Feed intelligence and bounded enrichment
+
+Status: CURRENT / PLANNING BASELINE 0.2.0
 
 Goal:
 Turn CanonicalInput into a reproducible, source-grounded FeedAnalysis JSON artifact.
@@ -88,6 +93,8 @@ Likely concerns:
 - provider/cost/failure behavior.
 
 The feed-analysis stage chooses among governed input Articles. It must not reconstruct ngest eligibility logic or silently replace upstream truth with research output.
+
+Phase 2 may build against validated CanonicalInput and deterministic fixtures, but it must not treat multi-page production input as qualified until ngest nextCursor request semantics are explicitly resolved.
 
 ## Phase 3 — Editorial planning
 
@@ -308,4 +315,4 @@ The MVP remains one edition at a time. More complex concurrency/distributed exec
 - off-screen narration/audio strategy;
 - future non-Google provider implementations.
 
-The immediate implementation sequence begins with /prompt-ass for Phase 1 against docs/integrations/ngest.md, docs/control-interface.md, docs/architecture.md, current ngest integration evidence when explicitly available, and current VidGen repository state.
+The immediate implementation sequence is /prompt-ass -> /prompt-plan -> /prompt-write p2 for Phase 2 against the implemented CanonicalInput boundary, docs/architecture.md, current Phase 1 source/tests, and any explicitly available ngest continuation contract evidence.
