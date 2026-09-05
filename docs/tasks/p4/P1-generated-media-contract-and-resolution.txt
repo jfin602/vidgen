@@ -127,6 +127,12 @@ IMPLEMENTATION REQUIREMENTS
    - SpeechGenerationClient;
    - their provider-neutral requests/results.
 
+   Clients must expose stable provider-neutral configured identity BEFORE a call so P4 can build effective-generation-input fingerprints without reaching into adapter-private configuration:
+   - video client: readonly provider + configured model identity;
+   - speech client: readonly provider + configured model identity + configured voice identity.
+
+   Do not include credentials or endpoints in this identity.
+
    Requests should carry only inputs VidGen owns, for example:
    - media unit identity/kind;
    - target duration;
@@ -192,6 +198,7 @@ Prove:
 - unit IDs are stable and safe for filenames;
 - persisted ClipPlan validation-by-identity preserves the same strictness as the StoryInput-based validator;
 - wrong story fingerprint or template identity still fails;
+- provider-neutral clients expose stable provider/model/voice configuration identity without credentials/endpoints;
 - provider-neutral requests/results do not include Google-specific fields or provider URLs.
 
 REGRESSION COVERAGE
@@ -214,7 +221,7 @@ Downstream-required capability:
 deterministic per-segment generated-media requirements that do not require Phase 4 to invent shot-planning semantics
 
 Owning implementation/export:
-AssemblyTemplate + validated ClipPlan -> GeneratedMediaUnit resolver and provider-neutral media contracts
+AssemblyTemplate + validated ClipPlan -> GeneratedMediaUnit resolver and provider-neutral media contracts, including pre-call configured provider/model/voice identity required for safe story-local reuse
 
 Focused proof:
 default and synthetic-template tests proving one unit per segment-role reference, exact deterministic timing/content linkage, and no hard-coded default IDs
