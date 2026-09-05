@@ -90,7 +90,7 @@ VidGen owns:
 
 The initial video pipeline is intentionally debugged without requiring a live ngest call for every run.
 
-A manually selected sample story should be packaged in the same external shape that the ngest VidGen integration would return and should pass through the same validation/normalization boundary.
+Phase 2 implements a representative local manifest fixture in the same external shape that the ngest VidGen integration returns. Local loading passes through the same `validateNgestVidGenManifestPage()` validation boundary used by live ingress before CanonicalInput construction.
 
 Conceptually:
 
