@@ -1,0 +1,160 @@
+TASK: Phase 3 / P1 — Template slot authoring semantics
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra Medium`.
+
+VERSIONING
+- This prompt's assigned project version is `0.3.1`.
+
+CONTEXT
+
+Read BOOT.md first, then README.md, AGENTS.md, docs/README.md, docs/architecture.md, docs/template-system.md, docs/roadmap/initial-roadmap.md, the completed Phase 2 task stack, correction c2-fix, and the current AssemblyTemplate implementation/schema/tests before editing.
+
+Phase 3 is now a direct StoryInput + AssemblyTemplate -> ClipPlan phase. Core ClipPlan generation must remain template-generic. The model cannot fill arbitrary template slots safely if the template only exposes opaque slot IDs such as "hook" or "narration"; the template itself must carry the small amount of authoring guidance needed to explain each slot.
+
+PRECONDITION
+
+Correction c2-fix must already be applied before this task executes.
+
+Verify that the generic AssemblyTemplate validator no longer hard-codes exactly four segments or a 40-second terminal duration. If the correction is absent, do not absorb that correction into this Phase 3 task and do not re-plan around the stale implementation. Stop and report the repository precondition clearly.
+
+GOAL
+
+Extend the declarative AssemblyTemplate content-slot contract so every slot describes how it should be filled without teaching core ClipPlan logic the meanings of default-news-40s slot IDs.
+
+Conceptual slot:
+
+    {
+      id,
+      usage,
+      instruction
+    }
+
+Current initial usages:
+
+    spoken
+    display
+
+SCOPE
+
+Implement:
+- required content-slot authoring semantics in the AssemblyTemplate TypeScript/runtime contract;
+- matching AssemblyTemplate JSON Schema changes;
+- updated default-news-40s declarative slot data;
+- appropriate template/schema versioning;
+- focused regression/extensibility tests.
+
+IMPLEMENTATION REQUIREMENTS
+
+1. Content-slot semantics.
+   - Extend AssemblyTemplateContentSlot to require:
+     * id: existing stable slot identifier;
+     * usage: exactly "spoken" or "display" for the current MVP;
+     * instruction: non-empty human/model-facing authoring guidance.
+   - Keep the contract deliberately small.
+   - Do not add provider parameters, model IDs, temperature, prompt fragments, asset paths, media prompts, or generated content.
+
+2. Generic validation.
+   - Runtime validation must:
+     * reject unsupported usage values;
+     * reject blank instructions;
+     * reject unsupported extra fields;
+     * preserve unique content-slot IDs;
+     * keep all corrected generic segment timing/reference checks from c2-fix.
+   - Do not reintroduce a four-segment/40-second assumption.
+   - Do not hard-code default slot IDs in the generic validator.
+
+3. Schema/versioning.
+   - This is a real template-contract format change.
+   - Bump AssemblyTemplate schemaVersion coherently rather than silently changing the meaning of schema version 1.
+   - Update the JSON Schema const and runtime constant together.
+   - Bump the built-in default-news-40s template's own version because its declarative authoring contract changes and future ClipPlans record template ID/version.
+   - Update existing story-workspace/template tests and expected metadata coherently.
+   - Do not retain a fake compatibility parser for the old format unless an actual current consumer requires it; this is early-stage and there is only one built-in production template.
+
+4. default-news-40s guidance.
+   - Preserve exact segment timing and generated/standardized asset roles.
+   - Give every existing slot concise generic authoring semantics equivalent to:
+     * hook: spoken; short presenter opening hook grounded in the supplied story;
+     * headline: display; concise on-screen headline treatment;
+     * narration: spoken; voiceover explaining the core story during the content beat;
+     * supporting-information: spoken; strongest useful supporting detail for the presenter;
+     * closing: spoken; brief concluding statement that adds no unsupported new facts.
+   - The exact wording is implementation-owned, but keep it concise and factual.
+   - Do not encode provider prompts or model-specific syntax.
+
+5. Extensibility regression.
+   - Preserve the c2-fix proof that an alternate synthetic template with a different segment count and non-40-second duration passes generic validation.
+   - Update that synthetic test definition to include valid slot authoring semantics.
+   - Add focused proof that arbitrary non-default slot IDs with valid usage/instruction do not require source-code changes.
+
+6. Current output boundary.
+   - Preserve the current 1080x1920 / 30 fps / H.264 MP4 output support.
+   - Do not expand aspect ratios, codecs, or frame rates in this task.
+
+7. Version/test wiring.
+   - Set package.json and src/version.ts to 0.3.1.
+   - Keep package-lock.json absent.
+   - Keep all existing tests wired into npm test/check.
+
+FOCUSED TESTS
+
+Prove:
+- default-news-40s validates with the new schema/template versions;
+- exact default timing remains 0-5, 5-15, 15-28, 28-40;
+- every default content slot has the expected usage class and a non-empty instruction;
+- blank instruction fails;
+- unsupported usage fails;
+- extra slot fields fail;
+- duplicate slot IDs still fail;
+- arbitrary alternate slot IDs validate when their semantics are well formed;
+- corrected generic non-40-second template extensibility remains green;
+- no provider/model/media-prompt fields are introduced.
+
+REGRESSION COVERAGE
+
+Run:
+- AssemblyTemplate focused tests;
+- story-workspace tests that record template ID/version;
+- Phase 2 StoryInput/local-ingress/CLI tests;
+- runner tests;
+- npm test;
+- npm run check;
+- git diff --check.
+
+PRODUCER / CONSUMER BOUNDARY
+
+Downstream-required capability:
+template-declared slot meaning that lets a generic ClipPlan prompt builder explain every required slot without knowing default-news-40s identifiers
+
+Owning implementation/export:
+AssemblyTemplateContentSlot + AssemblyTemplate runtime/JSON Schema + declarative template data
+
+Focused proof:
+default and synthetic-template tests showing slot semantics are data-owned while generic validation remains free of default slot names and default timing assumptions
+
+PRESERVED BEHAVIOR
+
+- Templates own structure.
+- c2-fix generic temporal extensibility remains intact.
+- StoryInput remains template-independent.
+- default-news-40s timing and asset roles remain unchanged.
+- No ClipPlan/model/provider work is implemented yet.
+- No publisher retrieval, Veo, narration, FFmpeg, or Remotion.
+
+NON-GOALS
+
+Do not implement:
+- ClipPlan schema or generation;
+- prompt construction;
+- Google/Gemini calls;
+- publisher retrieval/research;
+- provider media requests;
+- generated-video prompts;
+- shot planning;
+- FFmpeg/media probing;
+- new production templates.
+
+COMPLETION
+
+Leave version 0.3.1 with template-owned authoring semantics sufficient for a generic ClipPlan producer in P2.
