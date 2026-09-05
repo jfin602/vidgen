@@ -71,6 +71,7 @@ VidGen owns:
 - response validation;
 - normalization into CanonicalFeed and CanonicalControl;
 - creative input fingerprinting;
+- downstream factual enrichment/research;
 - all downstream editorial/creative behavior.
 
 ## Database boundary
@@ -84,6 +85,18 @@ This prevents:
 - ngest database credentials from being shared with VidGen;
 - VidGen from depending on private ngest persistence semantics;
 - duplicate feed-selection logic from forming outside ngest.
+
+## Publisher retrieval and media rights
+
+Ngest supplies governed Article data and exact original publisher destinations. VidGen may use those URLs as inputs to its own bounded factual-enrichment retrieval.
+
+Where practical, basic publisher-page acquisition should be performed by VidGen's retrieval subsystem rather than delegating ordinary URL fetching to an AI provider. Retrieval must remain bounded, provenance-aware, and safe against untrusted URLs, redirects, content, and response sizes.
+
+Permission to retrieve a publisher page for factual research is not permission to reuse media from that page.
+
+Publisher images/video may enter production only when an explicit rights rule or upstream metadata says reuse is permitted. Otherwise VidGen must use generated media, approved stock/library assets, or deterministic template/graphic fallbacks.
+
+Broader web research beyond governed publisher URLs requires a separately explicit research capability.
 
 ## Failure semantics
 
@@ -103,6 +116,7 @@ VidGen must not rely on the ngest Profile digest as the editorial or script sour
 
 The open-source VidGen engine should visibly perform:
 - feed interpretation;
+- enrichment/research where configured;
 - theme discovery;
 - story clustering and selection;
 - editorial framing;
