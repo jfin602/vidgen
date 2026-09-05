@@ -12,18 +12,19 @@ The initial development goal is narrower than the eventual live integration: man
 
 ## Implementation status
 
-Phase 1 is complete and closed at version 0.1.5. The repository remains on the 0.2.0 Phase 2 baseline, but Phase 2 was rebased after Phase 1 from feed intelligence to the single-story development foundation.
+Phases 1 and 2 are complete and closed at versions 0.1.5 and 0.2.5. The repository is now on the 0.3.0 Phase 3 baseline.
 
-Phase 1 provides:
+Implemented foundation:
 - Node.js + TypeScript CLI foundation;
-- authenticated ngest manifest acquisition;
-- transport validation;
-- CanonicalFeed, CanonicalControl, and CanonicalInput normalization;
-- deterministic input fingerprinting;
-- filesystem-backed run metadata and atomic CanonicalInput persistence;
+- authenticated ngest manifest acquisition plus local ngest-shaped fixture ingress through the same validator;
+- CanonicalFeed, CanonicalControl, CanonicalInput, and explicit StoryInput normalization;
+- deterministic input and story fingerprinting;
+- a strict declarative default-news-40s assembly template and registry;
+- a manual story command that creates an independent story workspace with provenance/template metadata and future source/media directories;
+- filesystem-backed run/story metadata and shared atomic JSON persistence;
 - fail-closed handling for unsupported ngest continuation.
 
-Those capabilities remain useful. Later edition-oriented stages were planning only and are not implemented.
+Phase 3 is the first creative-planning phase: bounded factual context preparation plus one validated ClipPlan. Provider media generation, standardized asset binding/qualification, and FFmpeg assembly remain later work.
 
 ## Core architectural standards
 
