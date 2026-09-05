@@ -43,7 +43,7 @@ Current standards:
 - FFmpeg for deterministic clip assembly and finishing;
 - no Remotion in the MVP;
 - 1080x1920 9:16 H.264 MP4 at 30 fps as the initial output target;
-- publisher-page retrieval only when story context actually requires it;
+- Phase 3 works directly from sufficiently described ngest StoryInput; publisher retrieval is deferred as a later fallback;
 - no initial approval workflow, global cache, database, queue, or distributed orchestration.
 
 See docs/template-system.md for the assembly-template contract.
@@ -52,7 +52,7 @@ See docs/template-system.md for the assembly-template contract.
 
 Ngest owns governed source trust, normalization, Article identity/provenance, duplicate/moderation behavior, Profile filtering/order, production eligibility, original publisher destinations, authentication, and delivery.
 
-VidGen owns boundary validation, story-level production identity, optional bounded context preparation, ClipPlan generation, source traceability, generated media, FFmpeg assembly, and final story packages.
+VidGen owns boundary validation, story-level production identity, ClipPlan generation, source traceability, generated media, FFmpeg assembly, and final story packages.
 
 VidGen does not connect directly to ngest persistence.
 
@@ -71,7 +71,7 @@ Phases 1 and 2 are complete and closed at versions 0.1.5 and 0.2.5. The reposito
 
 The project was simplified after Phase 1. FeedAnalysis, EditorialPlan, separate Script and ProductionPlan stages, Remotion composition, edition-level planning, and story-selection logic are no longer part of the current MVP.
 
-The repository is on the 0.3.0 Phase 3 planning baseline. Phase 3 adds bounded story context preparation and one validated ClipPlan; provider media generation and FFmpeg assembly remain later phases.
+The repository is on the 0.3.0 Phase 3 planning baseline. Phase 3 turns a sufficiently described StoryInput plus its selected AssemblyTemplate into one validated ClipPlan by filling declared template slots in one logical model-assisted operation. Publisher retrieval, provider media generation, and FFmpeg assembly remain later work.
 
 ## Start here
 

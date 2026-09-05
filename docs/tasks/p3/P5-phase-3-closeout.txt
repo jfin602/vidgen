@@ -1,0 +1,169 @@
+TASK: Phase 3 / P5 — Phase 3 closeout validation
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra Medium`.
+
+VERSIONING
+- This prompt's assigned project version is `0.3.5`.
+
+CONTEXT
+
+This is the final Phase 3 closeout prompt.
+
+P1-P4 should have produced:
+- template-owned slot authoring semantics;
+- a strict provider-neutral ClipPlan contract;
+- one current Google Gemini Interactions structured-text adapter;
+- one manual `vidgen plan` workflow that creates a story workspace and persists one validated ClipPlan using one normal-path model call.
+
+Phase 3 intentionally stops before publisher retrieval, generated media, Veo, narration, standardized media qualification, and FFmpeg.
+
+Correction c2-fix must remain present: generic AssemblyTemplate validation must not have regressed to default-news-40s-only timing.
+
+GOAL
+
+Rigorously validate the complete Phase 3 boundary, perform one limited live Google ClipPlan smoke using human-provided runtime credentials, repair only bounded Phase 3 defects, and leave the repository ready for human review and Phase 4 media-generation planning.
+
+VALIDATION CHECKLIST
+
+1. Repository/runtime integrity.
+   - Re-read BOOT.md, architecture, template-system, control-interface, roadmap, and Phase 3 prompts.
+   - Confirm package-lock.json is absent.
+   - Confirm c2-fix remains applied.
+   - Run git diff --check.
+   - Run npm test and npm run check.
+   - Run CLI help.
+
+2. Template slot semantics.
+   - Verify every content slot requires id + supported usage + non-empty instruction.
+   - Verify core validation does not know default slot IDs.
+   - Verify default-news-40s exact timing/roles remain unchanged apart from intentional schema/template version updates.
+   - Verify the synthetic non-default/non-40-second extensibility proof still passes.
+
+3. ClipPlan contract.
+   - Verify durable ClipPlan contains only:
+     * schemaVersion;
+     * storyFingerprint;
+     * template identity;
+     * filled slots.
+   - Verify deterministic StoryInput/template identity is not model-owned.
+   - Verify exact slot completeness/no extras/no duplicates.
+   - Verify template slot order is canonicalized.
+   - Verify no timing, shot, media, provider-request, generated-video-prompt, or transition structure leaked into ClipPlan.
+   - Verify null-summary context fails deterministically before provider activity.
+
+4. Prompt boundary.
+   - Inspect the prompt builder.
+   - Verify slot meanings come from template data, not hard-coded default identifiers.
+   - Verify template timing is provided so spoken/display text can fit fixed beats.
+   - Verify the model is instructed to use only supplied facts and not invent missing context.
+   - Verify controls are delimited as untrusted configuration and cannot override system grounding/template rules.
+   - Verify originalUrl is not fetched.
+   - Verify no publisher/research tool path exists.
+
+5. One-call behavior.
+   - Automated tests must prove one successful planning attempt invokes StructuredTextModelClient exactly once.
+   - Verify no reflection, critique, rewriting, or hidden repair model call.
+   - Failure should require a human rerun rather than silently multiplying creative calls.
+
+6. Google adapter.
+   - Verify current Gemini Interactions API request shape:
+     * fixed Google endpoint;
+     * x-goog-api-key auth;
+     * configured model from VIDGEN_TEXT_MODEL;
+     * store:false;
+     * system_instruction + input;
+     * response_format text/application-json/schema.
+   - Verify no SDK dependency was introduced.
+   - Verify timeout, redirect, non-2xx, invalid JSON, non-completed status, and missing-text handling.
+   - Verify raw provider response/API key/story prompt cannot appear in public error output.
+
+7. Artifact honesty/provenance.
+   - Verify successful plan run persists validated clip-plan.json and small planning metadata.
+   - Verify metadata records provider/model/request identity without secrets/raw provider bodies/prompts.
+   - Verify a failed planning attempt cannot appear clip_plan_ready.
+   - Verify terminal metadata failure cannot leave a new ClipPlan falsely presented as successful.
+   - Verify Phase 2 story-run semantics remain intact.
+
+8. Live Google qualification — REQUIRED FOR PHASE 3 ACCEPTANCE.
+   - Use human-provided runtime `GEMINI_API_KEY` and `VIDGEN_TEXT_MODEL`.
+   - Do not print either secret/value unnecessarily.
+   - Use one safe, sufficiently described local ngest-shaped story. A fictional fixture is acceptable for integration qualification; an owner-selected real sample is also acceptable if already supplied.
+   - Run exactly one normal `vidgen plan` attempt for the smoke.
+   - Observe that Google returns a completed structured response accepted by VidGen validation and persisted as clip-plan.json.
+   - Inspect the resulting ClipPlan for:
+     * every required template slot exactly once;
+     * no extra production structure;
+     * no obvious unsupported factual additions relative to the supplied StoryInput;
+     * usable short-form text appropriate to the fixed template.
+   - Record only safe provider/model/request evidence.
+   - If credentials/model configuration are unavailable or the live call cannot actually be performed, DO NOT claim provider qualification and DO NOT mark Phase 3 ready for closeout. Report the exact human validation blocker instead.
+   - Do not expand this smoke into model benchmarking or repeated paid experimentation.
+
+9. Security/boundaries.
+   - Search code/artifacts/errors for accidental key/Authorization leakage.
+   - Confirm no publisher HTTP retrieval.
+   - Confirm no web research.
+   - Confirm no Veo/media provider implementation.
+   - Confirm no voice generation.
+   - Confirm no standardized intro/outro binding/media probing.
+   - Confirm no FFmpeg/Remotion.
+   - Confirm no database/queue/global cache/live fan-out.
+
+10. Focused evidence.
+   - Run all Phase 3 focused tests.
+   - Run inherited Phase 1/2 tests.
+   - Run runner tests.
+   - Run:
+       npm run codex:phase:validate -- p3
+       npm run check
+       node src/cli.ts --help
+       git diff --check
+   - Do not claim render/media/browser/live-ngest evidence that was not observed.
+
+BOUNDED REPAIRS
+
+If validation exposes a defect clearly inside Phase 3 scope:
+- fix it;
+- add/adjust focused regression coverage;
+- rerun affected checks.
+
+Do not add:
+- publisher retrieval;
+- broad research;
+- creative retry loops;
+- Veo/media generation;
+- narration;
+- intro/outro media;
+- FFmpeg;
+- Remotion;
+- live fan-out;
+- control redesign;
+- unrelated refactors.
+
+VERSION / REVIEW STATE
+
+Only if deterministic validation and the required live Google ClipPlan smoke succeed:
+- set package.json to 0.3.5;
+- set src/version.ts to 0.3.5.
+
+Closeout changes require human review and must remain uncommitted according to the phase runner workflow.
+
+If live provider qualification is blocked, do not pretend the phase is closed merely because mocked tests pass.
+
+FINAL RESPONSE
+
+Summarize:
+- validation commands actually run and outcomes;
+- files/areas inspected;
+- any bounded defects fixed;
+- c2 template-extensibility preservation;
+- ClipPlan contract/slot-completeness evidence;
+- one-call automated proof;
+- Google request/response safety evidence;
+- exact live Google smoke performed and safe observed result, or explicit blocker if not performed;
+- artifact/provenance/failure-honesty evidence;
+- confirmation that no Phase 4+ behavior leaked in;
+- whether Phase 3 is ready for human review and subsequent /closeout.
+
+Do not claim evidence that was not actually observed.

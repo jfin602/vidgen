@@ -110,42 +110,57 @@ Non-goals:
 
 Phase 2 should make it trivial for subsequent phases to run one story repeatedly while debugging video behavior.
 
-## Phase 3 — Story context and ClipPlan
+## Phase 3 — ClipPlan generation
 
 Status: CURRENT / PLANNING BASELINE 0.3.0
 
 Goal:
-Turn one selected story plus only the context it actually needs into one validated ClipPlan that fills the selected template.
+Turn one sufficiently described StoryInput plus the selected AssemblyTemplate into one validated ClipPlan by filling the template's declared content slots.
 
 Conceptual contract:
 
-    story input
+    StoryInput
        +
-    template contract
-       +
-    optional bounded
-    publisher context
+    AssemblyTemplate
+          |
+          v
+    one model-assisted
+    template-fill operation
           |
           v
        ClipPlan
 
 Likely concerns:
-- deterministic assessment of whether ngest story data is sufficient;
-- bounded publisher-page retrieval only when needed;
-- redirect/timeout/size/content-type/SSRF safeguards;
-- normalized source-context persistence when retrieval occurs;
-- one logical model-assisted creative operation per story;
-- presenter dialogue;
-- headline/supporting text;
-- off-screen narration text;
-- generated-content prompt/description;
-- closing content;
-- Article/source provenance;
-- provider-native structured output where available;
+- require sufficient normalized story context for the initial manual path;
+- fail clearly on insufficient context rather than automatically researching;
+- add small declarative authoring semantics to template content slots so core ClipPlan generation stays template-generic;
+- one logical model-assisted operation per story;
+- generic ClipPlan identity plus slot-value contract;
+- template ID/version and storyFingerprint linkage;
+- provider-neutral text-model boundary with Google as the first implementation;
+- provider-native structured output where useful without making provider shapes canonical;
 - VidGen-owned JSON Schema/runtime/semantic validation;
+- exact required-slot completeness with no missing, duplicate, or undeclared slots;
+- bounded text/slot lengths;
+- controls treated as untrusted configuration that cannot alter template structure or grounding;
 - bounded malformed-output repair/retry;
-- prevention of unsupported factual expansion;
-- proof that every required default-template slot is filled.
+- clip-plan.json persistence in the story workspace;
+- manual CLI/application integration for repeated story debugging.
+
+For default-news-40s, the ClipPlan fills hook, headline, narration, supporting-information, and closing content. It does not contain shot plans, media selection, timing decisions, provider instructions, or separate generated-video/voiceover prompts.
+
+Explicit Phase 3 non-goals:
+- publisher-page retrieval;
+- HTML parsing;
+- SSRF/network retrieval policy;
+- broader web research;
+- shot/scene planning;
+- media prompts;
+- Veo;
+- presenter/video/audio generation;
+- FFmpeg;
+- standardized intro/outro qualification;
+- control-schema redesign.
 
 There is no FeedAnalysis, EditorialPlan, separate Script, or ProductionPlan stage.
 
@@ -161,6 +176,8 @@ For the default template, the target is approximately:
 - anchor/presenter clip #2 when required by the locked template.
 
 Likely concerns:
+- deterministic resolution of generated asset-role inputs from AssemblyTemplate relationships plus ClipPlan slot values;
+- for the default template: opening-anchor <- hook + headline; content-video/content-voiceover <- narration; supporting-anchor <- supporting-information + closing;
 - thin provider-neutral request/result contracts;
 - Veo presenter generation from scripted text plus approved/reference imagery;
 - Veo or qualified generated-video path for the content clip;
@@ -238,6 +255,7 @@ Conceptual contract:
         + independent story pipelines
 
 Likely concerns:
+- add bounded publisher-page retrieval fallback before live operation if real ngest stories can lack sufficient normalized context; keep broader web research deferred;
 - live authentication/integration qualification;
 - explicit resolution of ngest continuation/pagination semantics before multi-page production use;
 - story fan-out without editorial selection;
@@ -256,7 +274,7 @@ Likely concerns:
 
 - Remotion or another programmable compositor;
 - 16:9 and 1:1 output;
-- general web research;
+- general web research beyond a future bounded publisher fallback;
 - approval workflows;
 - global asset cache;
 - sophisticated template inheritance/editor tooling;
@@ -276,4 +294,4 @@ Use:
     -> /prompt-plan
     -> /prompt-write p3
 
-Phase 3 planning should inspect the implemented StoryInput, story-workspace, assembly-template, and ngest boundaries and build the smallest bounded context-preparation plus validated ClipPlan capability needed to unlock generated story media. It must preserve the template-owned structure established in Phase 2.
+Phase 3 planning should inspect the implemented StoryInput, story-workspace, AssemblyTemplate, and ngest boundaries and build the smallest direct StoryInput + AssemblyTemplate -> validated ClipPlan capability. It should add generic slot authoring semantics where needed, keep one logical model call, persist clip-plan.json, and leave publisher retrieval, media prompting, provider generation, and FFmpeg out of scope.

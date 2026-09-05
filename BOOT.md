@@ -25,8 +25,8 @@ The initial engineering worksheet is historical decision context. Several of its
 - Phase 1 completion version: 0.1.5.
 - Phase 2 completion version: 0.2.5.
 - Current package baseline: 0.3.0.
-- Current roadmap phase: Phase 3 — Story context and ClipPlan.
-- Current repository state: Phase 1 authenticated ngest acquisition/canonicalization and Phase 2 local fixture ingress, explicit StoryInput identity, validated assembly-template contract, and manual story workspace are implemented. Publisher retrieval and ClipPlan generation are not yet implemented.
+- Current roadmap phase: Phase 3 — ClipPlan generation.
+- Current repository state: Phase 1 authenticated ngest acquisition/canonicalization and Phase 2 local fixture ingress, explicit StoryInput identity, validated assembly-template contract, and manual story workspace are implemented. ClipPlan generation is not yet implemented. Publisher retrieval is deferred from the initial creative path.
 - Current roadmap: docs/roadmap/initial-roadmap.md.
 - Current architecture: docs/architecture.md.
 - Current template contract: docs/template-system.md.
@@ -34,7 +34,7 @@ The initial engineering worksheet is historical decision context. Several of its
 - Current control notes: docs/control-interface.md.
 - Historical engineering worksheet: docs/planning/initial-engineering-question-worksheet.md.
 
-Ngest owns governed feed truth and production eligibility. VidGen does not re-rank or re-select supplied stories. VidGen owns story-level context preparation, template filling, generated media, deterministic FFmpeg assembly, story artifacts, and final clips.
+Ngest owns governed feed truth and production eligibility. VidGen does not re-rank or re-select supplied stories. VidGen owns template filling, generated media, deterministic FFmpeg assembly, story artifacts, and final clips. Publisher retrieval is a deferred fallback capability, not part of the current Phase 3 path.
 
 ## /boot
 
@@ -159,8 +159,9 @@ Run artifacts are written under .codex-runs/ and ignored by Git.
 - Manual development fixtures must exercise the same validation/normalization semantics as live ngest-shaped input.
 - One story is one independent production and artifact boundary.
 - Use one validated ClipPlan rather than FeedAnalysis, EditorialPlan, Script, and ProductionPlan stages.
-- Templates own clip structure; ClipPlan fills declared content slots.
+- Templates own clip structure and slot semantics; ClipPlan fills declared content slots.
 - Keep template-specific media requirements deterministic.
+- Phase 3 consumes StoryInput plus the selected AssemblyTemplate directly; insufficient story context should fail clearly rather than trigger an implicit research subsystem.
 - Keep provider-specific behavior behind thin explicit adapters.
 - Preserve provenance and reproducibility inside each story package.
 - Treat URLs, publisher content, administrator guidance, model output, and provider responses as untrusted input.
@@ -179,4 +180,4 @@ Before Phase 3 implementation:
     -> /prompt-plan
     -> /prompt-write p3
 
-Phase 3 should build bounded story-context preparation and one validated ClipPlan on top of the Phase 2 StoryInput, template, and story-workspace boundaries. It must not invent publisher-retrieval or model-output semantics without planning them explicitly.
+Phase 3 should build one validated ClipPlan directly from StoryInput plus the selected AssemblyTemplate. The model fills declared template slots in one logical creative operation. Publisher retrieval, HTML extraction, web research, media prompts, shot planning, and generated-media work are out of Phase 3.

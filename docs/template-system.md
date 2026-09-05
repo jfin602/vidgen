@@ -50,12 +50,20 @@ A template may describe:
 - template ID and version;
 - ordered segments;
 - expected or fixed segment duration;
-- segment type;
-- required ClipPlan content fields;
-- required generated asset type;
+- declared ClipPlan content slots;
+- small slot authoring semantics;
+- required generated asset roles;
 - standardized asset references;
 - whether a segment requires off-screen narration;
 - basic output/normalization constraints.
+
+For Phase 3, each content slot should be able to express no more than the generic semantics needed to fill it, conceptually:
+
+    id
+    usage: spoken | display
+    instruction
+
+The exact field names remain an implementation decision. The important rule is that core ClipPlan generation must not contain hard-coded knowledge that a particular slot ID means hook, narration, headline, or closing.
 
 Avoid provider-specific model parameters in ordinary template definitions. Provider tuning belongs to provider/runtime configuration.
 
@@ -80,6 +88,26 @@ The default logical story structure is:
       Closing beat
 
 This structure is the default. The model fills it rather than redesigning it.
+
+## ClipPlan slot filling
+
+ClipPlan is a generic filling of the selected template's declared content slots.
+
+Conceptually:
+
+    StoryInput
+        +
+    AssemblyTemplate
+        |
+        v
+    one model call
+        |
+        v
+    ClipPlan slots
+
+For default-news-40s, the slot values are expected to cover hook, headline, narration, supporting information, and closing content.
+
+The model must not add segments, alter timing, select media types, create provider instructions, or invent a second shot/production plan.
 
 ## Standardized intro and outro
 
@@ -107,11 +135,33 @@ Headline/supporting/closing treatments should use standardized or simple determi
 
 Do not introduce a separate generated-graphic pipeline unless real clips demonstrate that it is necessary.
 
+## Deterministic generated-role input resolution
+
+Generated media inputs should be derived from filled template slots plus the template's declared segment/asset-role relationships.
+
+For the default template, the intended relationship is:
+
+    opening-anchor
+      <- hook + headline
+
+    content-video
+      <- narration
+
+    content-voiceover
+      <- narration
+
+    supporting-anchor
+      <- supporting-information + closing
+
+Phase 3 does not generate separate media prompts for these roles. Phase 4 may translate these deterministic inputs into provider-specific requests behind its provider boundary.
+
 ## Validation
 
 Before generation/assembly, VidGen should be able to prove:
 - the selected template exists and is supported;
-- the ClipPlan fills every required story-content slot;
+- every declared content slot has usable authoring semantics;
+- the ClipPlan fills every required story-content slot exactly once;
+- the ClipPlan contains no undeclared slots;
 - no undeclared production structure is being smuggled in through ClipPlan;
 - required standardized assets are available;
 - generated asset expectations are well-defined;

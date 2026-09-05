@@ -1,0 +1,171 @@
+TASK: Phase 3 / P3 — Google structured text-model adapter
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- This prompt's assigned project version is `0.3.3`.
+
+CONTEXT
+
+P2 defines provider-neutral structured output expectations for ClipPlan generation.
+
+The project is Google-first but provider-flexible. The exact text model ID must remain runtime configuration. Do not make Gemini response shapes canonical VidGen domain objects.
+
+At Phase 3 planning time, Google's current official guidance recommends the Gemini Interactions API for new projects. Structured JSON output is requested through top-level response_format with type "text", mime_type "application/json", and a JSON schema. The REST endpoint is the fixed Google Generative Language interactions endpoint and accepts x-goog-api-key authentication.
+
+Use the current official Google API shape at implementation time and verify it against official documentation if details have changed. Do not switch to a legacy API merely because old examples are easier.
+
+GOAL
+
+Add the smallest provider-neutral structured-text boundary plus one Google Gemini implementation capable of making a single stateless structured JSON request for ClipPlan generation.
+
+SCOPE
+
+Implement:
+- generic structured text-model request/result/client interfaces;
+- Google Gemini Interactions REST adapter;
+- runtime configuration boundary;
+- bounded HTTP/response handling;
+- deterministic fake-fetch/provider tests;
+- no application-level ClipPlan orchestration yet.
+
+IMPLEMENTATION REQUIREMENTS
+
+1. Provider-neutral interface.
+   - Define a small interface conceptually equivalent to:
+       StructuredTextModelClient
+         provider
+         model
+         generateStructuredJson(request)
+   - Request should carry:
+     * system instruction;
+     * user/input text;
+     * JSON response schema.
+   - Result should carry:
+     * provider identity;
+     * actual/configured model;
+     * provider request/interaction ID when returned;
+     * structured output text only.
+   - Do not expose Gemini's raw response through core/application code.
+
+2. Google runtime configuration.
+   - Use runtime environment configuration.
+   - Use `GEMINI_API_KEY` for the credential.
+   - Introduce a VidGen-owned model setting such as `VIDGEN_TEXT_MODEL`; require it rather than freezing a model ID in source/docs.
+   - Missing/blank key or model must fail before network activity with the existing safe configuration boundary.
+   - Never persist or print the API key.
+
+3. Current Interactions REST request.
+   - Prefer Node's built-in fetch; do not add an SDK/package dependency merely for this small adapter.
+   - POST to Google's fixed Gemini Interactions endpoint.
+   - Authenticate with x-goog-api-key.
+   - Send Content-Type application/json.
+   - Send a stateless single-turn request using:
+     * configured model;
+     * `store: false`;
+     * system_instruction;
+     * input;
+     * response_format with text/application-json plus the supplied schema.
+   - Do not use conversation history, previous_interaction_id, tools, background mode, agents, web search, or function calling.
+
+4. Network bounds.
+   - Keep endpoint fixed in adapter code; do not accept arbitrary provider URLs from story/control input.
+   - Use an AbortController timeout with a reasonable injectable default.
+   - Set redirect handling to fail rather than follow unexpected redirects.
+   - Keep response parsing bounded; reject clearly excessive response bodies rather than allowing unbounded provider output.
+   - Make fetch injectable for tests.
+
+5. Response handling.
+   - Require successful HTTP status.
+   - Parse the Interaction response defensively.
+   - Require completed status for this synchronous use.
+   - Extract the final model_output text content needed for structured JSON; support the provider returning the text in multiple consecutive text content blocks when safe to concatenate.
+   - Reject missing, empty, incomplete, requires_action, failed, malformed, or non-text responses.
+   - Do not execute provider tool/function calls.
+   - Do not parse the returned JSON into ClipPlan here; that belongs to P4/P2 core validation.
+
+6. Safe errors.
+   - Configuration failures use safe configuration errors.
+   - Timeout/network/HTTP/provider-shape failures should map to a narrow existing or new provider/text-model error category only as needed.
+   - Public errors must not include:
+     * API key;
+     * Authorization/x-goog-api-key contents;
+     * full request prompt;
+     * full raw provider response;
+     * story/control text.
+   - Preserve useful causes only internally.
+
+7. No dependency churn.
+   - Do not add @google/genai or another SDK.
+   - Keep package-lock.json absent.
+   - Use Node built-ins and existing JSON helpers/types.
+
+8. Version/test wiring.
+   - Set package.json and src/version.ts to 0.3.3.
+   - Add focused tests to normal application tests.
+
+FOCUSED TESTS
+
+With injected fake fetch, prove:
+- missing key fails before fetch;
+- missing model fails before fetch;
+- request uses fixed Google Interactions endpoint;
+- x-goog-api-key is sent but never appears in public errors;
+- body includes configured model, store:false, system instruction, input, and current structured response_format;
+- no previous interaction/tools/background/search fields are sent;
+- successful completed response returns provider/model/requestId/output text;
+- multiple consecutive text blocks can be joined safely;
+- timeout aborts;
+- redirect/non-2xx fails safely;
+- invalid JSON response fails safely;
+- completed response with no model text fails;
+- requires_action/incomplete/failed status fails rather than being treated as a ClipPlan;
+- raw provider/story content is not surfaced in public errors.
+
+REGRESSION COVERAGE
+
+Run:
+- new Google adapter tests;
+- ClipPlan tests from P2;
+- template tests from P1;
+- inherited Phase 1/2 application/integration tests;
+- runner tests;
+- npm test;
+- npm run check;
+- git diff --check.
+
+PRODUCER / CONSUMER BOUNDARY
+
+Downstream-required capability:
+one stateless structured-text call that returns only provider output text plus minimal provider provenance without leaking Gemini transport shapes into ClipPlan logic
+
+Owning implementation/export:
+StructuredTextModelClient request/result contract + Google Gemini Interactions adapter/config loader
+
+Focused proof:
+fake-fetch tests verifying current request shape, safe response extraction, timeout/error handling, and secret isolation
+
+PRESERVED BEHAVIOR
+
+- Exact Gemini model ID is runtime configuration.
+- ClipPlan remains provider-neutral.
+- One successful Phase 3 generation requires one text-model call.
+- No server-side conversation state is used.
+- No new npm dependency/package-lock is introduced.
+
+NON-GOALS
+
+Do not implement:
+- ClipPlan prompt builder/application orchestration;
+- retries/repair loops;
+- publisher retrieval;
+- Gemini tools/search/agents;
+- Veo/media generation;
+- narration;
+- FFmpeg;
+- model benchmarking.
+
+COMPLETION
+
+Leave version 0.3.3 with a small tested Google structured-text adapter ready to be composed with ClipPlan generation in P4.
