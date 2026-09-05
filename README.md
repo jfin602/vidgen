@@ -58,20 +58,23 @@ VidGen does not connect directly to ngest persistence.
 
 ## Current state
 
-Phases 1 and 2 are complete and closed at versions 0.1.5 and 0.2.5. The repository now provides:
+Phases 1 and 2 are complete and closed at versions 0.1.5 and 0.2.5. Phase 3 was manually owner-closed after P4 at version 0.3.4, with its unrun live-provider closeout gate explicitly waived. The repository now provides:
 - the Node.js + TypeScript CLI foundation;
 - secure bearer-authenticated ngest manifest acquisition;
 - local ngest-shaped fixture ingress through the same transport validator;
 - CanonicalFeed, CanonicalControl, CanonicalInput, and explicit StoryInput;
 - deterministic input and story fingerprinting;
-- a validated declarative default-news-40s assembly template;
+- a validated declarative default-news-40s assembly template with template-owned slot authoring semantics;
+- a strict provider-neutral ClipPlan contract and template-derived structured-output schema;
+- a Google Gemini structured-text adapter with runtime model configuration;
 - a manual `vidgen story` workflow that creates an independent story workspace;
-- filesystem-backed run/story metadata with atomic JSON persistence;
+- a manual `vidgen plan` workflow that performs one normal-path model call and persists validated `clip-plan.json` plus safe planning metadata;
+- filesystem-backed run/story/planning metadata with atomic JSON persistence;
 - deterministic tests.
 
 The project was simplified after Phase 1. FeedAnalysis, EditorialPlan, separate Script and ProductionPlan stages, Remotion composition, edition-level planning, and story-selection logic are no longer part of the current MVP.
 
-The repository is on the 0.3.0 Phase 3 planning baseline. Phase 3 turns a sufficiently described StoryInput plus its selected AssemblyTemplate into one validated ClipPlan by filling declared template slots in one logical model-assisted operation. Publisher retrieval, provider media generation, and FFmpeg assembly remain later work.
+The repository is on the 0.4.0 Phase 4 planning baseline. Phase 4 realizes the generated presenter/video/voiceover assets required by the selected AssemblyTemplate from the already validated ClipPlan. Publisher retrieval, FFmpeg assembly, live feed fan-out, and broader orchestration remain later work.
 
 ## Start here
 
