@@ -12,6 +12,7 @@ export type VidGenErrorCode =
   | 'story_selection'
   | 'assembly_template'
   | 'clip_plan'
+  | 'text_model'
   | 'ngest_authentication'
   | 'ngest_http'
   | 'ngest_timeout'
