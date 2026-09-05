@@ -80,7 +80,6 @@ VidGen owns:
 - CanonicalFeed/CanonicalControl/CanonicalInput normalization;
 - generation identity;
 - per-story production identity/package lifecycle;
-- conditional downstream factual context preparation;
 - ClipPlan generation;
 - media-generation orchestration;
 - FFmpeg assembly;
@@ -118,15 +117,13 @@ The dedicated HTTP integration response is the cross-project boundary.
 
 Ngest supplies the original publisher destination for each story.
 
-VidGen may conditionally retrieve that governed publisher page when the supplied headline/summary/metadata are insufficient for a grounded ClipPlan.
+Publisher retrieval is not part of the initial Phase 3 creative path. The manually debugged pipeline should use a story whose normalized ngest headline and summary are sufficient for a grounded ClipPlan. If they are not sufficient, Phase 3 should fail clearly rather than silently retrieve or invent missing facts.
 
-Retrieval must remain bounded, provenance-aware, and safe against untrusted URLs, redirects, response sizes, and content types.
+Publisher-page retrieval may be added later as an explicit fallback capability before live production requires support for insufficient upstream context. Any such implementation must be bounded, provenance-aware, and safe against untrusted URLs, redirects, response sizes, and content types.
 
-Broader web research is deferred.
+Broader web research remains deferred.
 
-Permission to retrieve a publisher page for factual context is not permission to reuse media from the page.
-
-Publisher media may enter production only when reuse is explicitly permitted.
+Permission to retrieve a publisher page for factual context is not permission to reuse media from the page. Publisher media may enter production only when reuse is explicitly permitted.
 
 ## Failure semantics
 
