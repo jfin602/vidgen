@@ -1,0 +1,395 @@
+TASK: Phase 4 / P5 — Phase 4 closeout validation
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- This prompt's assigned project version is `0.4.5`.
+
+CONTEXT
+
+This is the final Phase 4 closeout prompt.
+
+Read BOOT.md, README.md, AGENTS.md, docs/architecture.md, docs/template-system.md, docs/roadmap/initial-roadmap.md, all Phase 4 prompts, and the complete P1-P4 implementation/tests before changing anything.
+
+P1-P4 should have produced:
+- deterministic per-segment GeneratedMediaUnits;
+- a strict persisted ClipPlan consumer validator;
+- thin provider-neutral video/speech generation contracts;
+- a bounded Google Veo presenter/content-video adapter;
+- a bounded Google Gemini TTS voiceover adapter;
+- a manual existing-workspace `vidgen media` workflow;
+- story-local generated asset reuse by effective generation input;
+- resumable `media-run.json`;
+- strict provider-neutral `generated-media.json` + schema.
+
+Phase 4 intentionally stops before ffprobe/FFmpeg, standardized intro/outro qualification, media normalization, final assembly, captions/mixing, and live feed fan-out.
+
+Phase 3 was manually owner-closed without its live text-provider qualification. Do not reinterpret that historical waiver as evidence for Phase 4 provider behavior.
+
+GOAL
+
+Rigorously validate the complete Phase 4 boundary, perform a deliberately limited live Google media-provider qualification using human-provided credentials/reference imagery, repair only bounded Phase 4 defects, and leave the repository ready for human review and Phase 5 FFmpeg assembly planning.
+
+VALIDATION CHECKLIST
+
+1. Repository/runtime integrity.
+   - Re-read current BOOT/roadmap and P1-P4.
+   - Confirm package-lock.json is absent.
+   - Confirm package.json/src/version.ts enter closeout from the Git-proven Phase 4 implementation prefix expected by the runner.
+   - Run git diff --check.
+   - Run npm test and npm run check.
+   - Run CLI help.
+   - Validate the Phase 4 prompt stack.
+
+2. Phase boundary.
+   Confirm Phase 4 implements only:
+
+       validated ClipPlan
+          +
+       AssemblyTemplate
+              |
+              v
+       deterministic media units
+              |
+          generated media
+              |
+       raw story-local assets
+              +
+       generated-media.json
+
+   Confirm there is no:
+   - new Script/ProductionPlan/shot plan;
+   - model-assisted media planning;
+   - publisher retrieval/web research;
+   - stock/media search;
+   - standardized intro/outro binding;
+   - ffprobe/FFmpeg;
+   - render/final clip;
+   - Remotion;
+   - live feed fan-out;
+   - database/queue/global cache.
+
+3. Deterministic media-unit resolution.
+   Verify P1:
+   - creates one unit for each segment/generated-role reference;
+   - preserves template segment and role order;
+   - keeps unit IDs deterministic and filesystem-safe;
+   - derives targetDurationSeconds only from template timing;
+   - resolves content through template-declared contentSlots + validated ClipPlan;
+   - uses only spoken slots for spokenText;
+   - does not hard-code default-news-40s IDs.
+
+   For default-news-40s, prove exactly:
+
+       u01 hook / opening-anchor / presenter / 5
+       u02 content / content-video / video / 10
+       u03 content / content-voiceover / voiceover / 10
+       u04 support / supporting-anchor / presenter / 13
+       u05 closing / supporting-anchor / presenter / 12
+
+   Verify the synthetic non-default/non-40-second template remains green.
+
+4. Repeated role semantics.
+   - Verify supporting-anchor is not collapsed into a 25-second invented unit.
+   - Verify support and closing are separate units because the template references that role in two segments.
+   - Verify no second creative layer decided this split; it comes directly from template structure.
+
+5. Persisted ClipPlan validation.
+   - Verify media mode can validate `clip-plan.json` against expected storyFingerprint + template without reconstructing creative semantics.
+   - Verify the new identity-oriented ClipPlan validator preserves all existing strict slot/order/text/template rules.
+   - Verify current `validateClipPlan(value, StoryInput, template)` behavior remains compatible.
+
+6. Provider-neutral media boundaries.
+   Inspect P1 contracts and all consumers:
+   - no Google/Veo/Gemini transport fields in core media contracts;
+   - no arbitrary provider URL in requests;
+   - clients expose only the stable configured provider/model/voice identity needed for effective-input fingerprints;
+   - results expose only bounded bytes + minimal provenance;
+   - raw provider envelopes do not cross into application/domain artifacts.
+
+7. Google Veo request path.
+   Re-check current official docs:
+   - https://ai.google.dev/gemini-api/docs/veo
+
+   Verify the implementation still matches the current API contract at closeout time:
+   - fixed Google API base;
+   - runtime model configuration;
+   - portrait 9:16 raw generation;
+   - current supported reference-image representation/count;
+   - current long-running predict/poll result shape;
+   - current extension contract;
+   - immediate bounded download of temporary output;
+   - no SDK dependency unless implementation evidence forced and explicitly justified a change.
+
+   If Google's API changed since planning, boundedly repair only the adapter/tests; do not redesign the core boundary.
+
+8. Veo raw-media boundary.
+   - Verify Veo output is not falsely labeled as final VidGen 1080x1920/30fps assembly media.
+   - Phase 4 may record provider-reported/nominal raw duration only.
+   - No code should trim, resample, transcode, normalize frame rate/resolution, or mux final audio.
+   - These remain Phase 5 responsibilities.
+
+9. Presenter path.
+   Verify:
+   - presenter units require approved local reference images;
+   - 1-3 reference images are enforced according to the current supported path;
+   - images are provided as bounded in-memory bytes/MIME identities;
+   - no publisher `imageUrl` or originalUrl is fetched;
+   - presenter prompt speaks only exact unit spokenText;
+   - display headline/context does not become extra dialogue;
+   - no generated readable text is requested;
+   - extension dialogue partitioning reconstructs the original exact text with no additions/drops/duplicates;
+   - no separate TTS/lip-sync path was introduced for presenter audio.
+
+10. Content-video path.
+   - Verify content video uses only deterministic unit context.
+   - Verify no dialogue/voiceover/readable generated text is requested from the B-roll prompt.
+   - Verify extension is deterministic continuation, not a second story interpretation.
+   - Native Veo audio is treated as raw provider media; Phase 5 decides how to mute/replace/mix it.
+
+11. Veo lifecycle/network safety.
+   Verify:
+   - missing config fails before fetch;
+   - model path is validated;
+   - operation name cannot become arbitrary URL traversal;
+   - polling is bounded;
+   - extension count is bounded;
+   - model incompatibility with required extension fails clearly;
+   - download URI requires HTTPS + allowed Google host;
+   - credential is never forwarded to arbitrary redirects/hosts;
+   - JSON/video bodies are bounded;
+   - malformed/failed operations fail safely;
+   - no generic hidden retry loop exists.
+
+12. Google TTS path.
+   Re-check current official docs:
+   - https://ai.google.dev/gemini-api/docs/speech-generation
+
+   Verify:
+   - runtime model/voice/key;
+   - current documented endpoint/request/response shape;
+   - exact ClipPlan voiceover text is recited without a rewrite model;
+   - raw audio is decoded strictly;
+   - documented PCM output, if still current, is wrapped as correct WAV;
+   - timeout/body/audio bounds exist;
+   - provider response/API key/narration/base64 do not leak;
+   - no presenter audio is routed through TTS.
+
+13. Existing planned-workspace boundary.
+   Verify `vidgen media`:
+   - requires an existing story directory;
+   - never calls createStoryWorkspace;
+   - never calls planStoryWorkspace;
+   - never creates StructuredTextModelClient;
+   - validates story-run/clip-plan-run/ClipPlan/template identities before provider-client construction;
+   - does not mutate Phase 2/3 durable artifacts.
+
+14. Reference-image safety/provenance.
+   - Explicit local files only.
+   - Signature/MIME validation, bounded size, non-empty.
+   - SHA-256 identity over exact bytes.
+   - No remote retrieval.
+   - No absolute path, raw bytes, or base64 in JSON artifacts/public errors.
+   - Durable metadata uses only safe basename/hash/MIME/size identity.
+
+15. Effective-generation-input identity.
+   Verify fingerprints include all generation-relevant semantics:
+   - contract version;
+   - clipPlanFingerprint;
+   - template identity;
+   - exact GeneratedMediaUnit;
+   - provider/model;
+   - presenter reference identities;
+   - TTS voice for voiceover;
+   - material engine-owned provider mode.
+
+   Verify they exclude:
+   - timestamps;
+   - request/job IDs;
+   - absolute paths;
+   - API keys;
+   - raw provider responses;
+   - output paths.
+
+16. Story-local reuse.
+   Automated tests must prove:
+   - file existence alone is insufficient;
+   - fingerprint + metadata + current file SHA/size must all match;
+   - identical rerun uses zero provider calls;
+   - anchor change invalidates only presenter units;
+   - video-model change invalidates presenter/video units;
+   - TTS model/voice change invalidates voiceover only;
+   - ClipPlan change invalidates all units;
+   - corrupt/missing local bytes force regeneration;
+   - no global cache exists.
+
+17. Failure/resume honesty.
+   - media-run is updated atomically at durable unit boundaries.
+   - Successful earlier units survive a later failure and can be reused.
+   - failed run cannot have current authoritative generated-media success manifest.
+   - no partial provider bytes are marked ready.
+   - terminal success-metadata failure removes/invalidates the newly published generated-media manifest where possible.
+   - prior Phase 2/3 artifacts remain valid if Phase 4 fails.
+
+18. generated-media.json contract.
+   Verify runtime/schema strictness:
+   - correct schemaVersion;
+   - storyRunId/storyFingerprint/clipPlanFingerprint/template identity;
+   - safe reference identities;
+   - exactly one asset for every current GeneratedMediaUnit;
+   - exact P1 unit order;
+   - no duplicates/extras/missing units;
+   - relative safe workspace paths only;
+   - SHA-256/size/MIME;
+   - provider/model/voice/request/operation provenance only as safely needed;
+   - no raw prompts/responses/base64/temporary URLs;
+   - no standardized intro/outro entries;
+   - no unverified final codec/fps/resolution claims.
+
+19. Secret/security search.
+   Search code/tests/artifacts from deterministic test runs for accidental:
+   - GEMINI_API_KEY values;
+   - API-key headers;
+   - prompt/story narration in public error metadata;
+   - base64 reference images/audio;
+   - raw provider response bodies;
+   - temporary provider URLs;
+   - absolute anchor-reference paths.
+
+20. Cost/operation evidence.
+   - Verify media-run records generated/reused counts and safe operation/request IDs/counts.
+   - Verify Veo nominal generated seconds are observable when known.
+   - Do not hard-code or claim billing-dollar accuracy.
+   - Do not query account billing.
+
+21. Deterministic full mocked workflow.
+   Run the fake-provider end-to-end workflow against the default template and prove:
+   - four video-client calls + one speech-client call on a cold run;
+   - five raw assets written;
+   - complete generated-media manifest;
+   - exact hashes/fingerprints;
+   - second identical run reuses all five with zero provider calls;
+   - partial failure/resume test is green.
+
+22. Live Google qualification — REQUIRED FOR ORDINARY PHASE 4 ACCEPTANCE.
+   Use only human-provided runtime credentials/model/voice/reference data:
+   - `GEMINI_API_KEY`;
+   - `VIDGEN_VIDEO_MODEL`;
+   - `VIDGEN_TTS_MODEL`;
+   - `VIDGEN_TTS_VOICE`;
+   - at least one explicit approved local anchor-reference image path supplied by the human.
+
+   Do not print secret values.
+   Do not invent or download an anchor identity image merely to satisfy closeout.
+
+   Keep the live smoke deliberately small. It is provider qualification, not a production benchmark.
+
+   A. Presenter Veo smoke.
+      - Use one short fictional/safe presenter request whose target template duration is <=8 seconds.
+      - Use the human-provided approved anchor reference(s).
+      - Observe one successful Veo generation lifecycle and immediate local byte download.
+      - Confirm non-empty bounded video bytes and safe provider/model/operation evidence.
+      - Do not claim final 30 fps/1080x1920 qualification; that belongs to Phase 5.
+
+   B. Content-video extension smoke.
+      - Use one short fictional/safe B-roll request with target duration around 10 seconds so the adapter must exercise the required current extension path.
+      - Observe initial generation plus one extension on a configured model that supports extension.
+      - Confirm returned raw bytes and nominal coverage meet/exceed the target.
+      - If the human-configured video model does not support extension, this is a closeout blocker; do not silently switch models.
+
+   C. TTS smoke.
+      - Use one short fictional narration sentence.
+      - Observe one completed speech response accepted by the adapter.
+      - Confirm non-empty bounded returned audio and the expected documented container/sample semantics.
+
+   D. Safe evidence only.
+      Record:
+      - provider/model/voice identities;
+      - request/operation IDs when returned;
+      - number of Veo generation operations;
+      - nominal generated seconds/coverage where known;
+      - local byte sizes/hashes if useful.
+
+      Do NOT record:
+      - API key;
+      - raw request prompts unless the fictional test text is intentionally safe and needed;
+      - reference image bytes/base64;
+      - raw provider bodies;
+      - temporary provider download URLs.
+
+   E. Do not repeat successful paid calls merely for confidence.
+      - One presenter generation, one initial+extension content sequence, and one TTS request are enough.
+      - If provider credentials/reference/model configuration are unavailable or a live call cannot actually be performed, report the exact blocker.
+      - Do not claim live-provider qualification from fake tests.
+      - Do not set closeout version or mark Phase 4 ordinarily accepted when this required live qualification is blocked.
+      - A later explicit owner override remains an owner decision outside this prompt; never assume it.
+
+23. Required commands/evidence.
+   Run:
+   - npm run codex:phase:validate -- p4
+   - npm test
+   - npm run check
+   - node src/cli.ts --help
+   - git diff --check
+
+   Run focused Phase 4 tests explicitly if the normal suite output does not make them clear.
+
+   Do not claim:
+   - FFmpeg render evidence;
+   - ffprobe technical media qualification;
+   - standardized intro/outro validation;
+   - live ngest fan-out;
+   - browser/UI evidence.
+
+BOUNDED REPAIRS
+
+If closeout exposes a defect clearly inside Phase 4 scope:
+- fix it;
+- add/adjust focused regression coverage;
+- rerun affected checks.
+
+Do not use closeout to add:
+- publisher retrieval;
+- broad research;
+- shot/ProductionPlan stages;
+- creative retry/rewrite loops;
+- generated graphics;
+- standardized intro/outro media;
+- FFmpeg/ffprobe;
+- final clip rendering;
+- captions/music/mixing;
+- live feed fan-out;
+- global cache/database/queue;
+- unrelated refactors.
+
+VERSION / REVIEW STATE
+
+Only if deterministic validation AND the required live Phase 4 provider qualification succeed:
+- set package.json to 0.4.5;
+- set src/version.ts to 0.4.5.
+
+Closeout changes require human review and must remain uncommitted according to the phase runner workflow.
+
+If live provider qualification is blocked:
+- leave the implementation version at 0.4.4;
+- do not pretend mocked proof is live proof;
+- report the exact blocker and all deterministic evidence that did pass.
+
+FINAL RESPONSE
+
+Summarize:
+- validation commands actually run and outcomes;
+- code/contracts/tests inspected;
+- any bounded defects repaired;
+- exact default/synthetic GeneratedMediaUnit proof;
+- provider-neutral boundary evidence;
+- Veo start/poll/extension/download and network-safety evidence;
+- TTS exact-text/audio-boundary evidence;
+- workspace loading/reuse/failure-honesty evidence;
+- generated-media manifest evidence;
+- exact live presenter/content-extension/TTS smoke actually performed, with safe evidence, OR the precise live blocker;
+- confirmation that no Phase 5+ behavior leaked in;
+- whether Phase 4 is ready for human review and subsequent /closeout.
+
+Do not claim evidence that was not actually observed.
