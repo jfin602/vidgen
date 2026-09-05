@@ -207,6 +207,7 @@ Unlike ngest, VidGen does not yet have fixed successor baselines or a terminal r
 
 - Analyze before implementation.
 - Prefer small independently reviewable prompts.
+- Codex model policy: Luna Medium is the minimum allowed configuration; prefer Terra for almost all implementation work; use Luna only for tightly bounded mechanical work; escalate to Sol rarely and only when substantial reasoning ambiguity remains after planning.
 - Keep upstream ngest responsibilities separate from VidGen creative-generation responsibilities.
 - Keep ngest transport shapes at the input boundary; creative stages consume VidGen canonical models.
 - Generic ngest Distribution/PHP consumers must remain unaware of VidGen-only controls.
