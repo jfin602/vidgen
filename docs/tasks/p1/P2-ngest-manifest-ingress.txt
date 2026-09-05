@@ -1,0 +1,148 @@
+TASK: Phase 1 / P2 — Ngest manifest ingress boundary
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Sol High`.
+
+VERSIONING
+- This prompt's assigned project version is `0.1.2`.
+
+CONTEXT
+
+Build on P1 only. The ngest integration is an external producer boundary. VidGen must not query ngest persistence, recreate Profile eligibility/order logic, or consume the ngest digest as creative input.
+
+Current accepted integration evidence for Phase 1 is:
+- VidGen receives a dedicated bearer credential;
+- the dedicated VidGen response contains governed Profile/feed data plus a versioned control object;
+- current manifest evidence includes apiVersion, snapshotRevision, profile, publication, articles, control, and nextCursor;
+- the canonical article feed preserves ngest ordering and original publisher destinations;
+- the final route/path is not authoritative in the current VidGen docs, so Phase 1 must accept a fully configured endpoint URL rather than hard-code a route constructor.
+
+The exact request syntax for using nextCursor is not documented in this repository. Do not guess it.
+
+GOAL
+
+Implement a secure, testable HTTP ingress boundary that fetches one ngest VidGen manifest page, validates its transport envelope enough to protect downstream code, and returns a typed transport object without leaking authentication or raw transport concerns into later stages.
+
+SCOPE
+
+Implement:
+- runtime configuration for the ngest endpoint and bearer credential;
+- a Node built-in fetch-based ngest client;
+- timeout and HTTP/error classification;
+- minimal manifest-envelope validation;
+- explicit fail-closed behavior for unsupported continuation;
+- deterministic local HTTP tests.
+
+IMPLEMENTATION REQUIREMENTS
+
+1. Runtime configuration.
+   - Read a full absolute endpoint URL from a VidGen-owned environment variable such as NGEST_VIDGEN_URL.
+   - Read the bearer credential from a separate secret environment variable such as NGEST_VIDGEN_BEARER_TOKEN.
+   - Support a bounded request timeout through a small documented runtime default and optional validated override.
+   - Reject missing/empty values.
+   - Require HTTPS for non-loopback endpoints; allow HTTP only for loopback/local deterministic tests.
+   - Never put the bearer token into application artifacts, public error messages, test snapshots, or logs.
+
+2. HTTP client.
+   - Use Node's built-in fetch/AbortSignal capabilities.
+   - Send GET with Authorization: Bearer <token> and an appropriate JSON Accept header.
+   - Keep the configured URL outside creative/canonical data.
+   - Do not automatically follow arbitrary cross-origin redirects. Prefer fail-closed redirect behavior at this boundary unless a narrow same-origin rule can be implemented and tested safely.
+   - Bound the request by timeout.
+   - Distinguish at least:
+     * runtime configuration failure;
+     * authentication/authorization failure (401/403);
+     * other HTTP status failure;
+     * timeout/transport failure;
+     * invalid JSON;
+     * malformed manifest envelope;
+     * unsupported continuation.
+
+3. Transport envelope.
+   - Define a narrow NgestVidGenManifestPage transport type owned by the integration module, not by core editorial code.
+   - Validate that the payload is a JSON object and includes:
+     * non-empty apiVersion;
+     * profile as an object;
+     * publication as an object;
+     * articles as an array of JSON objects;
+     * control as an object;
+     * nextCursor as null/absent or a non-empty string;
+     * snapshotRevision when present as JSON-safe provenance metadata.
+   - Do not lock speculative article/control field semantics in this prompt.
+   - Additional ngest transport fields may remain at the integration boundary; they must not become core domain fields merely because they exist upstream.
+
+4. Continuation safety.
+   - If nextCursor is non-null/non-empty, fail explicitly with a stable unsupported-continuation error.
+   - Do not return a truncated page as if it were the complete CanonicalFeed.
+   - Do not invent a cursor query-parameter name or continuation URL algorithm.
+   - This limitation must be obvious in code and tests so later work cannot accidentally treat partial input as complete.
+
+5. Secret safety.
+   - Error formatting must not include Authorization headers or bearer values.
+   - Do not persist the raw response in this prompt.
+   - Avoid including response bodies in public error messages.
+   - Tests should use a sentinel fake secret and assert it never appears in surfaced error text.
+
+6. Version.
+   - Set package.json version to 0.1.2.
+
+FOCUSED TESTS
+
+Use a local Node HTTP server and deterministic fixtures to prove:
+- the bearer header is actually sent to the configured endpoint;
+- a valid one-page envelope is returned as typed transport data;
+- missing config fails before network access;
+- non-loopback HTTP is rejected while loopback HTTP is permitted for tests;
+- 401/403 map to the auth category;
+- 5xx maps to an HTTP failure category;
+- invalid JSON fails cleanly;
+- malformed envelope fails cleanly;
+- a non-null nextCursor fails closed and never returns a partial success;
+- timeout/abort is bounded;
+- the fake bearer token never appears in surfaced errors.
+
+REGRESSION COVERAGE
+
+Run:
+- P1 application tests;
+- the new ngest ingress tests;
+- existing runner tests;
+- npm test;
+- npm run check;
+- git diff --check.
+
+PRODUCER / CONSUMER BOUNDARY
+
+Downstream-required capability:
+validated complete one-page ngest manifest transport
+
+Owning implementation/export:
+the integration client plus NgestVidGenManifestPage validator/type
+
+Focused proof:
+local HTTP tests covering success, malformed input, auth/transport failures, timeout, token redaction, and fail-closed continuation
+
+PRESERVED BEHAVIOR
+
+- Ngest remains owner of source trust, eligibility, ordering, duplicate handling, Profile semantics, and persistence.
+- Generic ngest Distribution/PHP consumers remain outside this repository and untouched.
+- No direct ngest database access.
+- No digest becomes VidGen creative input.
+- No cursor request semantics are guessed.
+
+NON-GOALS
+
+Do not implement:
+- CanonicalFeed/Control/Input normalization;
+- article semantic validation beyond JSON-object transport safety;
+- control field semantics;
+- deterministic fingerprinting;
+- artifact/run persistence;
+- multi-page continuation;
+- research retrieval;
+- AI/media providers;
+- Remotion/FFmpeg.
+
+COMPLETION
+
+Leave package version 0.1.2 with a secure one-page manifest ingress boundary that fails closed on ambiguity or continuation and is fully covered by local deterministic tests.
