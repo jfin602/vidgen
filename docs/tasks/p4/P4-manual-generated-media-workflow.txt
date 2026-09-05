@@ -1,0 +1,436 @@
+TASK: Phase 4 / P4 — Manual generated-media workflow and story-local reuse
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- This prompt's assigned project version is `0.4.4`.
+
+CONTEXT
+
+Read BOOT.md first, then README.md, docs/architecture.md, docs/template-system.md, docs/roadmap/initial-roadmap.md, P1-P3, the current story-workspace/ClipPlan workflow, CLI, atomic JSON helpers, and all generated-media/provider tests before editing.
+
+P1-P3 should now provide:
+- deterministic per-segment GeneratedMediaUnits;
+- strict persisted ClipPlan validation against expected story/template identity;
+- provider-neutral video/speech clients;
+- a bounded Google Veo video adapter;
+- a bounded Google Gemini TTS adapter.
+
+Phase 4 now needs one application workflow that consumes an EXISTING successful planned story workspace. It must not create a new story, regenerate ClipPlan, or call a text model.
+
+Conceptual flow:
+
+    existing planned story workspace
+      story-run.json = story_ready
+      clip-plan-run.json = clip_plan_ready
+      clip-plan.json
+              |
+              v
+      validate durable identities
+              |
+              v
+      AssemblyTemplate + ClipPlan
+              |
+              v
+      deterministic GeneratedMediaUnits
+              |
+              +--> presenter/video -> Veo
+              |
+              +--> voiceover ------> Gemini TTS
+              |
+              v
+      story-local raw generated assets
+              +
+      media-run.json
+              +
+      generated-media.json
+
+Phase 5, not this task, will probe/normalize/trim/mux/assemble those raw assets.
+
+GOAL
+
+Add a manual `vidgen media` workflow that:
+- opens one existing planned story workspace;
+- validates its Phase 2/3 durable state;
+- loads approved local presenter reference images;
+- resolves deterministic P1 media units;
+- generates only missing/stale story-local raw assets using P2/P3 clients;
+- reuses valid matching story-local assets by effective-generation-input identity;
+- persists honest resumable media metadata plus one strict success manifest;
+- exposes the workflow through the CLI.
+
+SCOPE
+
+Implement:
+- planned-workspace loading/validation;
+- local approved anchor-reference loading;
+- effective generation input fingerprints;
+- atomic generated-binary persistence;
+- resumable `media-run.json`;
+- strict final `generated-media.json` contract + JSON Schema;
+- story-local asset reuse;
+- manual CLI integration;
+- deterministic fake-client end-to-end tests;
+- version/test wiring.
+
+Do not implement:
+- a new ClipPlan/model call;
+- publisher/source media retrieval;
+- FFmpeg/ffprobe;
+- media technical normalization;
+- standardized intro/outro qualification;
+- final clip assembly;
+- live feed fan-out.
+
+IMPLEMENTATION REQUIREMENTS
+
+1. CLI surface.
+   Preserve:
+   - `vidgen run`;
+   - `vidgen story`;
+   - `vidgen plan`.
+
+   Add a bounded command such as:
+
+       vidgen media --story-dir <directory> \
+         --anchor-reference <image-path> \
+         [--anchor-reference <image-path> ... up to provider-supported limit]
+
+   Requirements:
+   - `--story-dir` is required.
+   - `--anchor-reference` may repeat.
+   - If the resolved template has presenter units, require the provider-supported number of local references (current Veo path: 1-3).
+   - If the template has no presenter units, zero anchor references is valid; reject unused references rather than silently implying they matter.
+   - Provider credentials/models/voice remain runtime environment configuration, never CLI arguments.
+   - Help text documents raw generated-media behavior and that FFmpeg assembly is later.
+   - Do not add arbitrary provider endpoint CLI flags.
+
+2. Existing workspace only.
+   - Media mode must not call `createStoryWorkspace()`.
+   - Media mode must not call `planStoryWorkspace()`.
+   - Media mode must not construct or invoke StructuredTextModelClient.
+   - It operates inside the user-specified existing story directory.
+   - It must not mutate `story.json`, `story-run.json`, `clip-plan.json`, or `clip-plan-run.json`.
+
+3. Durable Phase 2/3 validation.
+   Before loading provider credentials or making any provider call:
+   - read/parse `story-run.json`;
+   - require terminal `story_ready`;
+   - read/parse `clip-plan-run.json`;
+   - require terminal `clip_plan_ready`;
+   - require both metadata artifacts to agree on storyRunId, storyFingerprint, and template id/version;
+   - require `clip-plan-run.json` to identify the expected `clip-plan.json` artifact;
+   - resolve the template through the current registry and require exact version match;
+   - read `clip-plan.json`;
+   - validate it through P1's ClipPlan-owned identity-oriented validator;
+   - reject malformed/extra/identity-mismatched state before generation.
+
+   Parse only the metadata fields needed for this proof; do not create duplicate full domain schemas for story-run/clip-plan-run unless evidence requires them.
+
+4. ClipPlan identity.
+   - Compute a deterministic SHA-256 identity over the fully validated durable ClipPlan using existing canonicalJson conventions.
+   - Use this `clipPlanFingerprint` in media-run/generated-media provenance and effective generation inputs.
+   - Do not modify the ClipPlan schema merely to add this derived fingerprint.
+
+5. Deterministic units.
+   - Resolve media units only through P1.
+   - The workflow must not hard-code default-news-40s role/slot meanings.
+   - Dispatch by the unit role `kind` only:
+     * presenter -> VideoGenerationClient with approved anchor references;
+     * video -> VideoGenerationClient without anchor references;
+     * voiceover -> SpeechGenerationClient.
+   - The current default should therefore cause four video-client generations and one speech-client generation when nothing is reusable.
+   - The repeated supporting-anchor role remains two independent presenter units because P1 owns that resolution.
+
+6. Local anchor-reference loading.
+   - Read only explicit local files supplied through `--anchor-reference`.
+   - Do not fetch `StoryInput.article.imageUrl`, originalUrl, or any remote URL.
+   - Validate a small supported image set consistent with P2/current Veo reference input, preferably PNG/JPEG and WebP only if the provider path supports it.
+   - Validate by file signature/magic, not filename extension alone.
+   - Bound each reference file size with an explicit/injectable maximum.
+   - Reject empty/unsupported files.
+   - Compute SHA-256 over exact bytes.
+   - Create P1's provider-neutral reference-image values.
+   - Never persist absolute local paths, raw image bytes, or base64 in JSON metadata.
+   - Durable reference provenance may store only safe identity such as ordinal, basename, MIME type, SHA-256, and byte size.
+   - Reject unsafe/blank basenames if they would create ambiguous metadata; never use the source basename as an output path.
+
+7. Provider client construction.
+   - Complete workspace and reference-image validation before constructing default Google clients so malformed local state fails without provider configuration/network activity.
+   - Video client requires runtime model/key.
+   - Speech client requires runtime model/voice/key only when a voiceover unit actually exists.
+   - Tests must inject fake clients.
+   - Do not instantiate an unused provider client.
+
+8. Effective generation input fingerprint.
+   For every unit, compute a deterministic SHA-256 fingerprint over the exact VidGen-owned inputs that determine whether a previously generated local asset is reusable.
+
+   Include at minimum:
+   - an explicit generated-media input contract version;
+   - clipPlanFingerprint;
+   - template id/version;
+   - the complete deterministic GeneratedMediaUnit semantic input;
+   - provider identity;
+   - configured model identity;
+   - for presenter units: ordered anchor reference SHA-256/MIME identities;
+   - for speech units: configured voice identity;
+   - any engine-owned provider request mode that materially changes output (for example the raw Veo portrait/720p strategy).
+
+   Exclude:
+   - timestamps;
+   - provider request/operation IDs;
+   - temporary provider URLs;
+   - absolute filesystem paths;
+   - provider raw responses;
+   - artifact output paths;
+   - API keys.
+
+   Use canonicalJson + SHA-256.
+   Provider/model/voice identities must come from the provider-neutral client configuration boundary established by P1-P3, not by reaching into Google-private adapter fields.
+
+9. Deterministic output paths.
+   - Persist unit assets under the Phase 2 directories already created:
+     * presenter -> `assets/presenter/<unitId>.mp4`;
+     * video -> `assets/video/<unitId>.mp4`;
+     * voiceover -> `assets/audio/<unitId>.wav` when P3 returns WAV.
+   - Use engine-owned safe unit IDs, not template IDs or source filenames, in output filenames.
+   - Durable manifest paths must be workspace-relative, normalized with forward slashes, and never contain `..` or absolute paths.
+   - Do not create a global cache.
+
+10. Binary persistence.
+   - Persist provider-returned bytes atomically: temporary file in the same directory followed by rename.
+   - Bound bytes before writing even if the adapter already did.
+   - Compute SHA-256 and byte size from the exact persisted content.
+   - A failed write must not leave the unit marked reusable/ready.
+   - Do not write base64 JSON artifacts.
+
+11. media-run.json.
+   Add one resumable media-attempt metadata artifact inside the story workspace.
+
+   It should carry a small strict VidGen-owned state such as:
+   - schemaVersion;
+   - storyRunId;
+   - status: running | media_ready | failed;
+   - startedAt / endedAt where appropriate;
+   - engineVersion;
+   - storyFingerprint;
+   - clipPlanFingerprint;
+   - template id/version;
+   - safe reference-image identities;
+   - ordered unit records.
+
+   Per-unit records should contain enough to resume/reuse:
+   - unit identity + role/segment/kind;
+   - effectiveGenerationInputFingerprint;
+   - status such as pending | ready | failed;
+   - generated vs reused provenance for the current attempt;
+   - relative asset path when ready;
+   - SHA-256/byte size/MIME type;
+   - provider/configured/returned model;
+   - speech voice where applicable;
+   - provider request/operation IDs when safe;
+   - nominal provider duration/generated seconds when known;
+   - safe failure code/message when failed.
+
+   Do not store:
+   - API keys;
+   - raw prompts;
+   - full ClipPlan text duplicated into metadata;
+   - reference bytes/base64;
+   - raw provider bodies;
+   - temporary provider download URLs.
+
+12. Per-unit persistence cadence.
+   - Atomically update `media-run.json` before provider work begins and after each unit reaches a durable state.
+   - This is the resume boundary.
+   - If unit N succeeds and unit N+1 fails, unit N must remain honestly recorded/reusable.
+   - Process units sequentially for the MVP; do not add concurrency.
+
+13. Story-local reuse.
+   Before generating a unit, reuse an existing story-local ready asset only when ALL are true:
+   - prior media-run metadata describes the same story/template/clipPlan;
+   - unit ID/role/segment identity matches;
+   - effectiveGenerationInputFingerprint matches current inputs exactly;
+   - expected relative path is safe/current;
+   - file exists;
+   - current file SHA-256 and byte size match stored metadata;
+   - MIME/extension expectation remains compatible.
+
+   If any check fails:
+   - do not trust the old asset;
+   - regenerate the unit and atomically replace the deterministic unit path.
+
+   Do not treat mere file existence as cache validity.
+
+14. Selective invalidation.
+   Tests must prove:
+   - identical rerun reuses every valid unit with zero provider calls;
+   - changed anchor-reference hash invalidates presenter units but does not invalidate unrelated content-video/voiceover units;
+   - changed video model invalidates presenter/video units only;
+   - changed TTS model/voice invalidates voiceover only;
+   - changed ClipPlan invalidates all units through clipPlanFingerprint;
+   - corrupt/missing local file invalidates that unit even if metadata claims it is ready.
+
+15. generated-media.json success manifest.
+   Add a strict final success artifact plus `schemas/generated-media.schema.json`.
+
+   The manifest is the Phase 5 handoff. It should contain only validated generation output/provenance, conceptually:
+   - schemaVersion;
+   - storyRunId;
+   - storyFingerprint;
+   - clipPlanFingerprint;
+   - template { id, version };
+   - reference-image identities actually used;
+   - ordered assets, exactly one per GeneratedMediaUnit.
+
+   Each asset should include:
+   - unitId;
+   - segment identity/timing;
+   - role identity/kind;
+   - effectiveGenerationInputFingerprint;
+   - relative path;
+   - SHA-256;
+   - byte size;
+   - MIME type;
+   - provider/model;
+   - voice when applicable;
+   - safe request/operation IDs;
+   - nominal raw generated duration/seconds when known;
+   - whether this attempt generated or reused the asset only if that distinction is useful outside media-run.
+
+   Keep the schema provider-neutral.
+   Do not put provider-specific response objects into it.
+   Do not claim frame rate/resolution/codec facts that were not actually probed; Phase 5 owns media qualification.
+
+16. Exact manifest completeness.
+   - Publish `generated-media.json` only when every currently resolved GeneratedMediaUnit has a validated ready local asset.
+   - No missing units.
+   - No duplicate units.
+   - No undeclared assets.
+   - Manifest order equals P1 unit order.
+   - Standardized intro/outro do not appear as generated assets.
+   - Validate the durable manifest through VidGen runtime semantics before considering media ready.
+
+17. Failure honesty.
+   - On any provider, validation, or persistence failure:
+     * `media-run.json` must end failed when filesystem permits;
+     * `generated-media.json` must not claim success for the failed attempt;
+     * already-valid completed unit files may remain for safe resume;
+     * failed/partial provider bytes must not be marked ready.
+   - If `generated-media.json` is written but terminal `media-run.json = media_ready` cannot be published, remove/invalidate the just-published success manifest where filesystem permits and record failure.
+   - A previous success manifest that no longer matches current effective inputs must not remain authoritative; remove/invalidate it before starting regeneration.
+
+18. Cost/operation observability.
+   - Record generated versus reused unit counts.
+   - Record safe request/operation counts/IDs and nominal generated seconds returned by adapters.
+   - Do not estimate dollars in this task.
+   - Do not query provider billing APIs.
+
+19. CLI success/failure output.
+   - Success should report `media_ready`, storyRunId, generated/reused counts, and final manifest path.
+   - Do not dump provider prompts, ClipPlan text, API keys, reference paths, or provider raw responses.
+   - Preserve current safe error rendering.
+
+20. Tests and injection.
+   - Inject video/speech clients, clock, filesystem where necessary.
+   - Normal automated tests must never require real Google credentials.
+   - Use tiny fake binary fixtures with recognizable MP4/WAV-like bytes where appropriate.
+   - Assert provider calls receive the exact deterministic P1 units/references expected.
+   - Assert no StructuredTextModelClient is created or called.
+
+21. Version/test wiring.
+   - Set package.json and src/version.ts to 0.4.4.
+   - Keep package-lock.json absent.
+   - Add all new workflow/schema/CLI tests to the normal test path.
+
+FOCUSED TESTS
+
+Prove:
+- `vidgen media` parses required story-dir and repeated 1-3 anchor references;
+- existing `run`, `story`, and `plan` parsing/behavior remain green;
+- malformed/non-ready/mismatched story-run, clip-plan-run, ClipPlan, or template fails before provider-client construction;
+- media mode never creates a new story workspace and never invokes text-model planning;
+- anchor references are local-only, signature-validated, bounded, hashed, and their absolute paths/bytes are not persisted;
+- default template dispatches four video-unit calls and one speech-unit call when nothing is reusable;
+- u04 and u05 are separate presenter assets despite the same supporting-anchor role ID;
+- provider request content comes only from deterministic P1 units;
+- all five default assets persist atomically under safe deterministic paths;
+- generated-media.json contains exactly one asset per current unit in order;
+- media-run/generated-media contain safe provider/model/request/reference hashes but no secrets/raw prompts/raw responses/base64/absolute paths;
+- partial failure leaves completed units reusable, media-run failed, and no successful generated-media manifest;
+- rerun after partial failure reuses valid completed units and generates only missing/stale units;
+- identical rerun makes zero provider calls;
+- changed anchor references selectively invalidate presenter assets;
+- changed TTS model/voice selectively invalidates voiceover;
+- changed video model selectively invalidates video/presenter;
+- corrupt asset bytes force regeneration;
+- changed ClipPlan fingerprint invalidates all units;
+- terminal ready-metadata failure cannot leave generated-media.json falsely authoritative;
+- no ffprobe/FFmpeg/render operation is performed.
+
+REGRESSION COVERAGE
+
+Run:
+- new generated-media workflow/manifest/CLI tests;
+- P1 unit-resolution tests;
+- P2 Veo adapter tests;
+- P3 TTS adapter tests;
+- ClipPlan/ClipPlan workflow tests;
+- AssemblyTemplate tests;
+- StoryInput/story-workspace/local/live-ngest tests;
+- existing Google text adapter tests;
+- runner tests;
+- npm test;
+- npm run check;
+- node src/cli.ts --help;
+- git diff --check.
+
+PRODUCER / CONSUMER BOUNDARY
+
+Downstream-required capability:
+a complete story-local set of generated raw media assets that Phase 5 can consume without reinterpreting story meaning or recontacting a text model
+
+Owning implementation/export:
+existing-planned-workspace media application service + media-run persistence + strict generated-media.json manifest/schema + CLI `media`
+
+Focused proof:
+fake-provider end-to-end tests proving exact unit dispatch, selective story-local reuse, failure/resume honesty, complete manifest identity, and no Phase 5 assembly behavior
+
+PRESERVED BEHAVIOR
+
+- One story remains one independent workspace/artifact boundary.
+- `story-run.json` and `clip-plan-run.json` retain their existing semantics.
+- ClipPlan remains immutable during media generation.
+- Templates remain the sole source of structure/timing/role requirements.
+- No publisher retrieval or web research.
+- Publisher imageUrl is never treated as reuse permission or auto-downloaded.
+- Presenter path is Veo + explicit approved local references.
+- Voiceover path is exact ClipPlan narration through TTS.
+- Story-local reuse only; no global cache.
+- Sequential processing only.
+- FFmpeg/ffprobe/final assembly remain Phase 5.
+- No Remotion.
+
+NON-GOALS
+
+Do not implement:
+- new story/ClipPlan generation in media mode;
+- shot/scene planning;
+- text-model prompt generation;
+- publisher retrieval;
+- source image download;
+- automatic stock fallback;
+- generated graphics;
+- standardized intro/outro media binding;
+- ffprobe/FFmpeg;
+- final clip rendering;
+- captions/music/mixing;
+- live ngest fan-out;
+- concurrency;
+- database/queue/global cache;
+- automated publishing.
+
+COMPLETION
+
+Leave version 0.4.4 with a manually invokable, resumable, story-local generated-media workflow that consumes an already validated ClipPlan, realizes exactly the template-required raw generated units, and produces a strict provider-neutral generated-media.json handoff for Phase 5.
