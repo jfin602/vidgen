@@ -29,7 +29,7 @@ Clearly superseded:
 
 Partially superseded or narrowed:
 - Question 4: durable-artifact philosophy remains, but the number of major stage artifacts is drastically reduced.
-- Question 6: publisher retrieval remains allowed but is conditional; broader research is deferred.
+- Question 6: publisher retrieval remains allowed as a later bounded fallback but is removed from the initial Phase 3 path; broader research is deferred.
 - Question 11: template-first production remains and is strengthened; templates now remove most production reasoning.
 - Question 14: generated-media strategy is narrowed to the media required by the selected template rather than a broad fallback/composition hierarchy.
 - Question 16: presenter direction remains, while the off-screen narration/voiceover mechanism is still unresolved.
@@ -142,10 +142,9 @@ Still materially aligned:
 ## Current unresolved implementation decisions
 
 Important open items now include:
-- exact StoryInput/story-production identity;
-- exact story-package layout;
-- exact ClipPlan schema;
-- exact template JSON Schema/registry;
+- exact ClipPlan schema and validation details;
+- exact text-model provider/runtime configuration for ClipPlan generation;
+- final template content-slot authoring field names/semantics;
 - actual standardized intro/outro media duration relationship to the locked logical template timing;
 - exact Veo version and presenter-continuity method;
 - off-screen narration/voiceover provider;
