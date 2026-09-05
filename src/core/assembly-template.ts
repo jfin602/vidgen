@@ -62,10 +62,6 @@ export function validateAssemblyTemplate(value: unknown): AssemblyTemplate {
   const standardizedAssetRoles = validateStandardizedAssetRoles(template.standardizedAssetRoles);
   const segments = validateSegments(template.segments, contentSlots, generatedAssetRoles);
 
-  if (segments.length !== 4 || segments.at(-1)?.endSeconds !== 40) {
-    throw invalidTemplate('template must contain exactly four logical segments totaling 40 seconds.');
-  }
-
   return {
     schemaVersion: ASSEMBLY_TEMPLATE_SCHEMA_VERSION,
     id: requireString(template, 'id', 'template.id'),

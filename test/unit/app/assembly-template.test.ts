@@ -45,10 +45,44 @@ test('default template defines all story content and generated asset requirement
   assert.equal(JSON.stringify(template).includes('duration'), false);
 });
 
+test('runtime validation accepts a valid declarative template with a different shape and duration', () => {
+  const alternate = copyDefaultTemplate();
+  alternate.id = 'brief-update-25s';
+  alternate.version = '2';
+  alternate.contentSlots = [{ id: 'headline' }, { id: 'summary' }, { id: 'closing' }];
+  alternate.generatedAssetRoles = [
+    { id: 'brief-anchor', kind: 'presenter' },
+    { id: 'brief-video', kind: 'video' },
+    { id: 'brief-voiceover', kind: 'voiceover' },
+  ];
+  alternate.segments = [
+    {
+      id: 'opening', startSeconds: 0, endSeconds: 6,
+      contentSlots: ['headline'], generatedAssetRoles: ['brief-anchor'],
+    },
+    {
+      id: 'summary', startSeconds: 6, endSeconds: 18,
+      contentSlots: ['summary'], generatedAssetRoles: ['brief-video', 'brief-voiceover'],
+    },
+    {
+      id: 'signoff', startSeconds: 18, endSeconds: 25,
+      contentSlots: ['closing'], generatedAssetRoles: ['brief-anchor'],
+    },
+  ];
+
+  const template = validateAssemblyTemplate(alternate);
+  assert.equal(template.id, 'brief-update-25s');
+  assert.equal(template.segments.length, 3);
+  assert.equal(template.segments.at(-1)?.endSeconds, 25);
+});
+
 test('runtime validation fails closed on malformed timing, duplicate IDs, and undeclared references', () => {
   for (const mutate of [
+    (template: any) => { template.segments[0].startSeconds = 1; },
     (template: any) => { template.segments[1].startSeconds = 6; },
     (template: any) => { template.segments[1].startSeconds = 4; },
+    (template: any) => { template.segments[1].endSeconds = 5; },
+    (template: any) => { template.segments[1].endSeconds = 4; },
     (template: any) => { template.segments.reverse(); },
     (template: any) => { template.segments[1].id = 'hook'; },
     (template: any) => { template.segments[0].generatedAssetRoles = ['unrecognized']; },
