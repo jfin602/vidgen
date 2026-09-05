@@ -1,0 +1,161 @@
+TASK: Phase 1 / P4 — Phase 1 CLI run and artifact persistence
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- This prompt's assigned project version is `0.1.4`.
+
+CONTEXT
+
+P1 established the application foundation, P2 established one-page ngest manifest acquisition, and P3 established CanonicalInput normalization and fingerprinting.
+
+The MVP execution model is a CLI that processes one edition at a time. Phase 1 must make the input stage observable through durable filesystem artifacts and metadata without introducing a database, queue, provider work, or speculative resume system.
+
+The repository already ignores artifacts/ in Git.
+
+GOAL
+
+Wire the complete Phase 1 path into the VidGen CLI:
+
+configured ngest endpoint
+-> authenticated one-page manifest acquisition
+-> validation/normalization
+-> CanonicalInput + inputFingerprint
+-> durable filesystem run record and CanonicalInput artifact
+
+SCOPE
+
+Implement:
+- a small Phase 1 application service/orchestrator;
+- filesystem run directory creation;
+- run metadata;
+- atomic CanonicalInput persistence;
+- CLI run command integration;
+- deterministic end-to-end tests using a local HTTP server and temp filesystem.
+
+IMPLEMENTATION REQUIREMENTS
+
+1. Application service boundary.
+   - Create a reusable application-level function/service for the Phase 1 input stage.
+   - The CLI should call this service; transport, normalization, and persistence should not be embedded directly in argument parsing.
+   - Keep dependencies injectable where tests need deterministic clock/UUID/fetch/filesystem boundaries.
+
+2. CLI.
+   - Add a clear run command such as:
+       npm run vidgen -- run
+   - Keep --help useful.
+   - Support an optional artifacts-root override for tests/local development, with the normal default rooted under artifacts/runs.
+   - Use runtime environment configuration from P2 for the ngest URL and bearer token.
+   - Process exactly one edition/run at a time.
+   - On success print concise observable output including run ID, inputFingerprint, and artifact location.
+   - On failure print a safe error category/message and exit nonzero.
+   - Never print the bearer token or raw Authorization header.
+
+3. Run identity.
+   - Use a unique run ID separate from inputFingerprint.
+   - The same canonical input may therefore produce multiple runs.
+   - Do not automatically return/reuse an older completed run merely because inputFingerprint matches.
+   - Keep the implementation simple and deterministic-testable; inject clock/UUID generation where needed.
+
+4. Filesystem layout.
+   - Create one run directory per invocation under the configured artifacts root.
+   - Persist at minimum:
+       run.json
+       01-canonical-input.json
+   - Exact naming may vary only if it remains simple, ordered, and obvious; keep 01-canonical-input.json unless there is a concrete filesystem reason not to.
+   - Do not persist raw bearer credentials or Authorization headers.
+   - Do not persist an unvalidated raw manifest as a durable creative artifact.
+
+5. run.json.
+   - Record enough metadata to make Phase 1 observable:
+     * runId;
+     * status;
+     * start/end timestamps;
+     * package/engine version;
+     * inputFingerprint after it exists;
+     * canonical input artifact path/name;
+     * safe failure code/message on failure.
+   - Keep runtime secrets and raw response bodies out.
+   - Use clear terminal states such as input_ready/completed and failed; avoid claiming later creative/render stages completed.
+
+6. Atomic writes.
+   - Write structured artifacts safely using temp-file + rename or an equivalent atomic pattern.
+   - Do not leave a final CanonicalInput artifact that looks successful if validation/serialization fails midway.
+   - Ensure JSON artifacts end with a newline and are human-inspectable.
+
+7. Failure behavior.
+   - If a run directory has been created and a later step fails, update run.json to failed with sanitized error metadata.
+   - The existing P2 unsupported-continuation error must surface as a failed run, never as a partial CanonicalInput success.
+   - Exit status must distinguish success from failure.
+
+8. No premature resume/cache system.
+   - Phase 1 lays out durable state but does not need to implement cross-process resume, provider-asset reuse, or cache invalidation yet.
+   - Do not conflate runId with inputFingerprint.
+
+9. Package scripts/version.
+   - Ensure the VidGen CLI script remains convenient.
+   - Keep test:runner intact.
+   - Include all Phase 1 application tests in npm test/check.
+   - Set package.json version to 0.1.4.
+   - Do not create package-lock.json.
+
+FOCUSED TESTS
+
+Use a local HTTP server and temp directories to prove:
+- successful CLI/application run writes run.json and 01-canonical-input.json;
+- the persisted CanonicalInput validates and its fingerprint matches the service result;
+- run IDs are distinct from inputFingerprint;
+- two runs of identical input create separate run directories rather than silently returning an old run;
+- failure after run creation records a failed run without a successful canonical artifact;
+- non-null nextCursor produces a failed run and no partial CanonicalInput success;
+- bearer sentinel values never appear in stdout/stderr or persisted files;
+- artifacts-root override works;
+- writes are atomic enough that expected final files appear only after successful serialization.
+
+REGRESSION COVERAGE
+
+Run:
+- all Phase 1 application tests;
+- inherited runner tests;
+- npm test;
+- npm run check;
+- the CLI help command;
+- git diff --check.
+
+PRODUCER / CONSUMER BOUNDARY
+
+Downstream-required capability:
+durable validated CanonicalInput and observable run context for Phase 2
+
+Owning implementation/export:
+Phase 1 application service plus filesystem artifact store and CLI run command
+
+Focused proof:
+end-to-end local HTTP + temp-filesystem tests proving successful persistence, sanitized failure state, separate run/input identity, and no partial success on continuation
+
+PRESERVED BEHAVIOR
+
+- Ngest transport semantics stop at the integration boundary.
+- CanonicalInput remains the only durable creative input artifact.
+- The bearer credential is runtime-only.
+- No database is introduced.
+- No provider, research, or render work is introduced.
+- Existing runner behavior remains unchanged.
+
+NON-GOALS
+
+Do not implement:
+- multi-page cursor request semantics;
+- process resume/retry across prior runs;
+- inputFingerprint-based final result reuse;
+- research/enrichment;
+- FeedAnalysis or later artifacts;
+- approval gates;
+- Google AI/Veo;
+- Remotion/FFmpeg;
+- publishing.
+
+COMPLETION
+
+Leave package version 0.1.4 with a working, locally testable Phase 1 CLI input run that produces observable durable CanonicalInput/run metadata and fails safely without leaking secrets or presenting partial input as success.
