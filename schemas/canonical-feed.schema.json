@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vidgen.dev/schemas/canonical-feed.schema.json",
+  "title": "CanonicalFeed",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["profile", "publication", "articles"],
+  "properties": {
+    "profile": { "$ref": "#/$defs/profile" },
+    "publication": { "$ref": "#/$defs/publication" },
+    "articles": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/article" }
+    }
+  },
+  "$defs": {
+    "nonEmptyString": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "nullableString": {
+      "anyOf": [
+        { "$ref": "#/$defs/nonEmptyString" },
+        { "type": "null" }
+      ]
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["configKey", "displayName"],
+      "properties": {
+        "configKey": { "$ref": "#/$defs/nonEmptyString" },
+        "displayName": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "publication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": { "name": { "$ref": "#/$defs/nonEmptyString" } }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["configKey", "displayName"],
+      "properties": {
+        "configKey": { "$ref": "#/$defs/nonEmptyString" },
+        "displayName": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "article": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "articleId", "headline", "originalUrl", "effectiveFeedDate", "feedDateSource",
+        "publishedAt", "author", "summary", "imageUrl", "source", "categories"
+      ],
+      "properties": {
+        "articleId": { "$ref": "#/$defs/nonEmptyString" },
+        "headline": { "$ref": "#/$defs/nonEmptyString" },
+        "originalUrl": { "type": "string", "format": "uri", "pattern": "^https?://" },
+        "effectiveFeedDate": { "$ref": "#/$defs/nonEmptyString" },
+        "feedDateSource": { "$ref": "#/$defs/nonEmptyString" },
+        "publishedAt": { "$ref": "#/$defs/nullableString" },
+        "author": { "$ref": "#/$defs/nullableString" },
+        "summary": { "$ref": "#/$defs/nullableString" },
+        "imageUrl": { "$ref": "#/$defs/nullableString" },
+        "source": { "$ref": "#/$defs/source" },
+        "categories": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/nonEmptyString" }
+        }
+      }
+    }
+  }
+}

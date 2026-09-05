@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vidgen.dev/schemas/canonical-input.schema.json",
+  "title": "CanonicalInput",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "feed", "control", "inputFingerprint", "provenance"],
+  "properties": {
+    "schemaVersion": { "const": "1" },
+    "feed": { "$ref": "canonical-feed.schema.json" },
+    "control": { "$ref": "canonical-control.schema.json" },
+    "inputFingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ngestApiVersion"],
+      "properties": {
+        "ngestApiVersion": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "snapshotRevision": { "$ref": "#/$defs/jsonValue" }
+      }
+    }
+  },
+  "$defs": {
+    "jsonValue": {
+      "anyOf": [
+        { "type": "string" },
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "null" },
+        { "type": "array", "items": { "$ref": "#/$defs/jsonValue" } },
+        { "type": "object", "additionalProperties": { "$ref": "#/$defs/jsonValue" } }
+      ]
+    }
+  }
+}

@@ -7,6 +7,7 @@ export type VidGenErrorCode =
   | 'configuration'
   | 'transport'
   | 'artifact'
+  | 'canonical_input'
   | 'ngest_authentication'
   | 'ngest_http'
   | 'ngest_timeout'

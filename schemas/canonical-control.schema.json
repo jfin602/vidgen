@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vidgen.dev/schemas/canonical-control.schema.json",
+  "title": "CanonicalControl",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "editorial", "script", "production"],
+  "properties": {
+    "version": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "editorial": { "$ref": "#/$defs/stage" },
+    "script": { "$ref": "#/$defs/stage" },
+    "production": { "$ref": "#/$defs/stage" }
+  },
+  "$defs": {
+    "stage": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+    },
+    "jsonValue": {
+      "anyOf": [
+        { "type": "string" },
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "null" },
+        {
+          "type": "array",
+          "items": { "$ref": "#/$defs/jsonValue" }
+        },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+        }
+      ]
+    }
+  }
+}
