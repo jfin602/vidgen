@@ -2,7 +2,7 @@
 
 This is the session router for repository-aware work in jfin602/vidgen.
 
-VidGen is at bootstrap stage. The workflow below is intentionally borrowed from ngest because it has proven useful, while provider choices, production schemas, deployment topology, persistence technology, and other implementation details remain provisional unless the owner explicitly promotes them later.
+VidGen is still early-stage and has no production engine yet, but the initial engineering worksheet is complete and its accepted MVP decisions have been promoted into the current architecture and roadmap. Exact schemas, provider versions, deployment topology, and other implementation details remain provisional until implementation evidence justifies stronger contracts.
 
 ## Project identity
 
@@ -10,14 +10,21 @@ VidGen is at bootstrap stage. The workflow below is intentionally borrowed from 
 - Default branch: main
 - Product direction: a standalone cinematic news-generation engine that consumes governed ngest feed input and produces video-news editions.
 - Primary upstream integration: a dedicated bearer-authenticated ngest VidGen endpoint that returns the governed Profile feed plus VidGen-specific controls.
+- Primary application stack: Node.js + TypeScript.
+- MVP execution model: CLI, one edition at a time.
+- MVP run state: durable filesystem artifacts plus structured metadata.
+- Initial provider direction: Google-first, with Veo for generated video/presenter work behind provider-neutral VidGen boundaries.
+- MVP composition/rendering: Remotion + FFmpeg.
+- MVP production model: template-first hybrid newscast with deterministic fallbacks.
 - Current package baseline: 0.1.0.
-- Current repository state: workflow/bootstrap only; no production engine has been implemented.
-- Current roadmap: docs/roadmap/initial-roadmap.md, DRAFT / PROVISIONAL.
+- Current repository state: workflow/bootstrap and planning only; no production engine has been implemented.
+- Current roadmap: docs/roadmap/initial-roadmap.md, CURRENT MVP DIRECTION / PROVISIONAL PHASE BOUNDARIES.
 - Current architecture notes: docs/architecture.md.
 - Current ngest integration notes: docs/integrations/ngest.md.
 - Current control-interface notes: docs/control-interface.md.
+- Completed engineering worksheet: docs/planning/initial-engineering-question-worksheet.md.
 
-Ngest remains responsible for governed feed truth. VidGen owns downstream feed interpretation, editorial planning, scripting, production planning, media generation, composition, rendering, and generated artifacts.
+Ngest remains responsible for governed feed truth. VidGen owns downstream feed interpretation, research/enrichment, editorial planning, scripting, production planning, media generation, composition, rendering, and generated artifacts.
 
 VidGen does not consume the ngest Profile digest as pre-generated editorial output.
 
@@ -29,12 +36,12 @@ For substantial repository-aware work:
 2. Read README.md.
 3. Read AGENTS.md.
 4. Read docs/README.md.
-5. Read the narrowest relevant project, architecture, integration, control, or roadmap notes.
+5. Read the narrowest relevant project, architecture, integration, control, planning, or roadmap notes.
 6. Inspect current implementation and tests when repository state matters.
 
 Reply ready after bootstrap when the user asks only for /boot.
 
-Do not treat every bootstrap note as a frozen product contract. Report when a proposed decision should be promoted into a durable contract or ADR later.
+Do not treat every early implementation detail as a frozen product contract. Report when a decision should be promoted into a durable contract or ADR later.
 
 ## Working authority
 
@@ -42,10 +49,12 @@ Until stronger contracts are deliberately introduced, use this practical order:
 
 1. current explicit owner instruction;
 2. deliberately promoted contract/ADR, if one exists later;
-3. current roadmap or task-specific accepted planning;
+3. current architecture/roadmap or task-specific accepted planning;
 4. BOOT.md and AGENTS.md workflow guidance;
 5. current implementation and tests;
-6. historical prompts and commit messages.
+6. historical worksheet records, prompts, and commit messages.
+
+The completed worksheet answer files are decision-history records. After promotion, current architecture and roadmap docs are authoritative for active project direction.
 
 If sources conflict materially, report the conflict instead of silently choosing.
 
@@ -202,15 +211,16 @@ Unlike ngest, VidGen does not yet have fixed successor baselines or a terminal r
 - Keep ngest transport shapes at the input boundary; creative stages consume VidGen canonical models.
 - Generic ngest Distribution/PHP consumers must remain unaware of VidGen-only controls.
 - VidGen must not connect directly to ngest persistence.
-- Keep provider-specific behavior behind explicit adapters/boundaries where practical.
-- Preserve reproducibility and provenance for inputs, generated intermediate artifacts, provider jobs, and final outputs as the design matures.
+- All durable pipeline artifacts use VidGen-owned standardized JSON schemas; no downstream stage consumes unvalidated model output.
+- Keep provider-specific behavior behind explicit adapters/boundaries. The MVP is Google-first, not Google-coupled.
+- Preserve reproducibility and provenance for canonical input, intermediate artifacts, provider jobs/assets, and final outputs.
 - Treat URLs, publisher content, administrator guidance, model output, and provider responses as untrusted input.
+- Publisher-page retrieval permission does not imply permission to reuse publisher media in rendered output.
+- The MVP uses template-first production; generated media must have deterministic fallbacks.
 - Do not claim provider/runtime/render/browser behavior unless actually observed.
-- Avoid freezing speculative abstractions merely because the project is new.
+- Avoid freezing the exact ProductionPlan schema before real Script outputs have been evaluated.
 
 ## Current next action
-
-The repository bootstrap does not create Phase 1 implementation prompts.
 
 Before implementation, use:
 
@@ -218,4 +228,4 @@ Before implementation, use:
     -> /prompt-plan
     -> /prompt-write p1
 
-Phase 1 now begins at the direct ngest integration boundary described by docs/integrations/ngest.md and docs/control-interface.md.
+Phase 1 begins at the direct ngest integration boundary described by docs/integrations/ngest.md and docs/control-interface.md, using the current MVP stack and artifact decisions recorded in docs/architecture.md and docs/roadmap/initial-roadmap.md.
