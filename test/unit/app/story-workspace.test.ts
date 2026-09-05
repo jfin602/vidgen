@@ -32,7 +32,7 @@ test('manual story workspace selects the requested second Article and persists o
     assert.equal(result.storyRunId, 'story-run-2');
     assert.equal(result.storyInput.article.articleId, 'example-article-2');
     assert.equal(result.template.id, 'default-news-40s');
-    assert.equal(result.template.version, '1');
+    assert.equal(result.template.version, '2');
 
     const story = await readJson(result.storyInputPath);
     const expected = buildStoryInput(
@@ -54,7 +54,7 @@ test('manual story workspace selects the requested second Article and persists o
       storyFingerprint: expected.storyFingerprint,
       sourceInputFingerprint: expected.provenance.sourceInputFingerprint,
       storyInputArtifact: STORY_INPUT_ARTIFACT_NAME,
-      template: { id: 'default-news-40s', version: '1' },
+      template: { id: 'default-news-40s', version: '2' },
       generatedAssetRoles: [
         { id: 'opening-anchor', kind: 'presenter' },
         { id: 'content-video', kind: 'video' },

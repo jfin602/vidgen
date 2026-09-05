@@ -1,6 +1,6 @@
 import { VidGenError } from './error.ts';
 
-export const ASSEMBLY_TEMPLATE_SCHEMA_VERSION = '1';
+export const ASSEMBLY_TEMPLATE_SCHEMA_VERSION = '2';
 
 export interface AssemblyTemplateOutput {
   readonly width: 1080;
@@ -12,6 +12,8 @@ export interface AssemblyTemplateOutput {
 
 export interface AssemblyTemplateContentSlot {
   readonly id: string;
+  readonly usage: 'spoken' | 'display';
+  readonly instruction: string;
 }
 
 export interface AssemblyTemplateGeneratedAssetRole {
@@ -89,8 +91,16 @@ function validateOutput(value: unknown): AssemblyTemplateOutput {
 function validateContentSlots(value: unknown): readonly AssemblyTemplateContentSlot[] {
   return requireArray(value, 'template.contentSlots').map((item, index) => {
     const slot = requireObject(item, `template.contentSlots[${index}]`);
-    rejectExtraKeys(slot, ['id'], `template.contentSlots[${index}]`);
-    return { id: requireString(slot, 'id', `template.contentSlots[${index}].id`) };
+    rejectExtraKeys(slot, ['id', 'usage', 'instruction'], `template.contentSlots[${index}]`);
+    const usage = slot.usage;
+    if (usage !== 'spoken' && usage !== 'display') {
+      throw invalidTemplate(`template.contentSlots[${index}].usage is not supported.`);
+    }
+    return {
+      id: requireString(slot, 'id', `template.contentSlots[${index}].id`),
+      usage,
+      instruction: requireString(slot, 'instruction', `template.contentSlots[${index}].instruction`),
+    };
   }).map((slot, index, slots) => {
     assertUnique(slot.id, slots.slice(0, index).map((item) => item.id), 'content slot');
     return slot;

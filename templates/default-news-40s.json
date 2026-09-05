@@ -1,7 +1,7 @@
 {
-  "schemaVersion": "1",
+  "schemaVersion": "2",
   "id": "default-news-40s",
-  "version": "1",
+  "version": "2",
   "output": {
     "width": 1080,
     "height": 1920,
@@ -10,11 +10,11 @@
     "videoCodec": "h264"
   },
   "contentSlots": [
-    { "id": "hook" },
-    { "id": "headline" },
-    { "id": "narration" },
-    { "id": "supporting-information" },
-    { "id": "closing" }
+    { "id": "hook", "usage": "spoken", "instruction": "Short presenter opening hook grounded in the supplied story." },
+    { "id": "headline", "usage": "display", "instruction": "Concise on-screen headline treatment grounded in the supplied story." },
+    { "id": "narration", "usage": "spoken", "instruction": "Voiceover explaining the core story during the content beat." },
+    { "id": "supporting-information", "usage": "spoken", "instruction": "Strongest useful supporting detail for the presenter." },
+    { "id": "closing", "usage": "spoken", "instruction": "Brief concluding statement that adds no unsupported new facts." }
   ],
   "generatedAssetRoles": [
     { "id": "opening-anchor", "kind": "presenter" },

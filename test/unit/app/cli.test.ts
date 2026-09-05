@@ -82,7 +82,7 @@ test('CLI delegates a manual story without live ngest configuration', async () =
         storyInputPath: 'temp-stories/story-123/story.json',
         storyRunPath: 'temp-stories/story-123/story-run.json',
         storyInput: { storyFingerprint: 'b'.repeat(64) } as never,
-        template: { id: 'default-news-40s', version: '1' },
+        template: { id: 'default-news-40s', version: '2' },
       };
     },
   });

@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "id", "version", "output", "contentSlots", "generatedAssetRoles", "standardizedAssetRoles", "segments"],
   "properties": {
-    "schemaVersion": { "const": "1" },
+    "schemaVersion": { "const": "2" },
     "id": { "type": "string", "minLength": 1, "pattern": "\\S" },
     "version": { "type": "string", "minLength": 1, "pattern": "\\S" },
     "output": {
@@ -30,8 +30,12 @@
     "contentSlot": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id"],
-      "properties": { "id": { "type": "string", "minLength": 1, "pattern": "\\S" } }
+      "required": ["id", "usage", "instruction"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "usage": { "enum": ["spoken", "display"] },
+        "instruction": { "type": "string", "minLength": 1, "pattern": "\\S" }
+      }
     },
     "generatedAssetRole": {
       "type": "object",
