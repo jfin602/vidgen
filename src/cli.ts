@@ -6,6 +6,7 @@ import {
   DEFAULT_STORY_ARTIFACTS_ROOT,
   createStoryWorkspace,
 } from './app/story-workspace.ts';
+import { planStoryWorkspace } from './app/clip-plan-workflow.ts';
 import { isVidGenError, VidGenError } from './core/error.ts';
 
 export const helpText = `VidGen
@@ -14,11 +15,13 @@ Usage:
   vidgen [--help]
   vidgen run [--artifacts-root <directory>]
   vidgen story --input-file <manifest.json> --article-id <articleId> [--template <templateId>] [--artifacts-root <directory>]
+  vidgen plan --input-file <manifest.json> --article-id <articleId> [--template <templateId>] [--artifacts-root <directory>]
 
 Available commands:
   help, --help, -h  Show this help message.
   run              Acquire one manifest and persist its CanonicalInput.
   story            Create one selected story development workspace from a local manifest.
+  plan             Create one selected story workspace and generate its ClipPlan.
 
 Run options:
   --artifacts-root <directory>  Write runs here (default: ${DEFAULT_ARTIFACTS_ROOT}).
@@ -28,6 +31,13 @@ Story options:
   --article-id <articleId>      Required explicit Article ID to select.
   --template <templateId>       Assembly template (default: default-news-40s).
   --artifacts-root <directory>  Write story workspaces here (default: ${DEFAULT_STORY_ARTIFACTS_ROOT}).
+
+Plan options:
+  --input-file <manifest.json>  Required local ngest-shaped manifest file.
+  --article-id <articleId>      Required explicit Article ID to select.
+  --template <templateId>       Assembly template (default: default-news-40s).
+  --artifacts-root <directory>  Write story workspaces here (default: ${DEFAULT_STORY_ARTIFACTS_ROOT}).
+  Model credentials and model selection are read from the runtime environment.
 `;
 
 export interface HelpCommand {
@@ -47,7 +57,15 @@ export interface StoryCommand {
   readonly artifactsRoot?: string;
 }
 
-export type CliCommand = HelpCommand | RunCommand | StoryCommand;
+export interface PlanCommand {
+  readonly kind: 'plan';
+  readonly inputFile: string;
+  readonly articleId: string;
+  readonly templateId?: string;
+  readonly artifactsRoot?: string;
+}
+
+export type CliCommand = HelpCommand | RunCommand | StoryCommand | PlanCommand;
 
 export interface CliOutput {
   writeStdout(text: string): void;
@@ -83,12 +101,17 @@ export function parseCliArgs(args: readonly string[]): CliCommand {
     return parseStoryCommand(rest);
   }
 
+  if (command === 'plan') {
+    return { ...parseStoryCommand(rest, 'Plan'), kind: 'plan' };
+  }
+
   throw invalidArgument(`Unknown command: ${JSON.stringify(command)}.`);
 }
 
 export interface CliDependencies {
   readonly runInput?: typeof runPhase1Input;
   readonly createStory?: typeof createStoryWorkspace;
+  readonly planStory?: typeof planStoryWorkspace;
 }
 
 export async function runCli(
@@ -111,6 +134,22 @@ export async function runCli(
         `Run ${result.runId} is input_ready.\n`
         + `inputFingerprint: ${result.inputFingerprint}\n`
         + `artifacts: ${result.runDirectory}\n`,
+      );
+      return 0;
+    }
+
+    if (command.kind === 'plan') {
+      const result = await (dependencies.planStory ?? planStoryWorkspace)({
+        inputFile: command.inputFile,
+        articleId: command.articleId,
+        ...(command.templateId === undefined ? {} : { templateId: command.templateId }),
+        ...(command.artifactsRoot === undefined ? {} : { artifactsRoot: command.artifactsRoot }),
+      });
+      output.writeStdout(
+        `Story ${result.story.storyRunId} is clip_plan_ready.\n`
+        + `storyFingerprint: ${result.clipPlan.storyFingerprint}\n`
+        + `template: ${result.clipPlan.template.id}@${result.clipPlan.template.version}\n`
+        + `clipPlan: ${result.clipPlanPath}\n`,
       );
       return 0;
     }
@@ -158,7 +197,7 @@ function parseRunCommand(args: readonly string[]): RunCommand {
   throw invalidArgument(`Run does not accept arguments: ${formatArgs(args)}.`);
 }
 
-function parseStoryCommand(args: readonly string[]): StoryCommand {
+function parseStoryCommand(args: readonly string[], commandName = 'Story'): StoryCommand {
   const values: Partial<Record<'inputFile' | 'articleId' | 'templateId' | 'artifactsRoot', string>> = {};
   const optionNames: Record<string, keyof typeof values> = {
     '--input-file': 'inputFile',
@@ -171,10 +210,10 @@ function parseStoryCommand(args: readonly string[]): StoryCommand {
     const option = args[index];
     const key = optionNames[option ?? ''];
     if (key === undefined) {
-      throw invalidArgument(`Unknown story argument: ${JSON.stringify(option)}.`);
+      throw invalidArgument(`Unknown ${commandName.toLowerCase()} argument: ${JSON.stringify(option)}.`);
     }
     if (values[key] !== undefined) {
-      throw invalidArgument(`Story option ${option} must not be repeated.`);
+      throw invalidArgument(`${commandName} option ${option} must not be repeated.`);
     }
     const value = args[index + 1];
     if (value === undefined) {
@@ -187,10 +226,10 @@ function parseStoryCommand(args: readonly string[]): StoryCommand {
   }
 
   if (values.inputFile === undefined) {
-    throw invalidArgument('Story requires --input-file <manifest.json>.');
+    throw invalidArgument(`${commandName} requires --input-file <manifest.json>.`);
   }
   if (values.articleId === undefined) {
-    throw invalidArgument('Story requires --article-id <articleId>.');
+    throw invalidArgument(`${commandName} requires --article-id <articleId>.`);
   }
 
   return {

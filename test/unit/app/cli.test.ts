@@ -4,7 +4,7 @@ import test from 'node:test';
 import { helpText, parseCliArgs, runCli } from '../../../src/cli.ts';
 import { VidGenError } from '../../../src/core/error.ts';
 
-test('CLI parses its help, run, and manual story surfaces', () => {
+test('CLI parses its help, run, manual story, and manual planning surfaces', () => {
   assert.deepEqual(parseCliArgs([]), { kind: 'help' });
   assert.deepEqual(parseCliArgs(['help']), { kind: 'help' });
   assert.deepEqual(parseCliArgs(['--help']), { kind: 'help' });
@@ -18,6 +18,16 @@ test('CLI parses its help, run, and manual story surfaces', () => {
     '--template', 'default-news-40s', '--artifacts-root', 'tmp/stories',
   ]), {
     kind: 'story',
+    inputFile: 'fixture.json',
+    articleId: 'article-2',
+    templateId: 'default-news-40s',
+    artifactsRoot: 'tmp/stories',
+  });
+  assert.deepEqual(parseCliArgs([
+    'plan', '--input-file', 'fixture.json', '--article-id', 'article-2',
+    '--template', 'default-news-40s', '--artifacts-root', 'tmp/stories',
+  ]), {
+    kind: 'plan',
     inputFile: 'fixture.json',
     articleId: 'article-2',
     templateId: 'default-news-40s',
@@ -46,6 +56,11 @@ test('CLI rejects unknown commands and invalid arguments deterministically', () 
       && error.publicMessage === 'Help does not accept arguments: "extra".',
   );
   assert.throws(
+    () => parseCliArgs(['plan', '--article-id', 'article-1']),
+    (error: unknown) => error instanceof VidGenError
+      && error.publicMessage === 'Plan requires --input-file <manifest.json>.',
+  );
+  assert.throws(
     () => parseCliArgs(['story', '--input-file', 'fixture.json']),
     (error: unknown) => error instanceof VidGenError
       && error.publicMessage === 'Story requires --article-id <articleId>.',
@@ -60,6 +75,39 @@ test('CLI rejects unknown commands and invalid arguments deterministically', () 
     (error: unknown) => error instanceof VidGenError
       && error.publicMessage === '--artifacts-root requires exactly one directory argument.',
   );
+});
+
+test('CLI delegates manual planning and exposes the persisted ClipPlan location', async () => {
+  const stdout: string[] = [];
+  const stderr: string[] = [];
+  let received: Record<string, string | undefined> | undefined;
+  const exitCode = await runCli([
+    'plan', '--input-file', 'fixture.json', '--article-id', 'article-2', '--artifacts-root', 'temp-stories',
+  ], {
+    writeStdout: (text) => stdout.push(text),
+    writeStderr: (text) => stderr.push(text),
+  }, {
+    planStory: async (dependencies) => {
+      received = dependencies;
+      return {
+        story: { storyRunId: 'plan-123' } as never,
+        clipPlan: {
+          storyFingerprint: 'c'.repeat(64), template: { id: 'default-news-40s', version: '2' },
+        } as never,
+        clipPlanPath: 'temp-stories/plan-123/clip-plan.json',
+        clipPlanRunPath: 'temp-stories/plan-123/clip-plan-run.json',
+        provider: 'fake', model: 'fake-model',
+      };
+    },
+  });
+  assert.equal(exitCode, 0);
+  assert.deepEqual(received, {
+    inputFile: 'fixture.json', articleId: 'article-2', artifactsRoot: 'temp-stories',
+  });
+  assert.match(stdout.join(''), /clip_plan_ready/);
+  assert.match(stdout.join(''), /clip-plan\.json/);
+  assert.match(helpText, /vidgen plan --input-file/);
+  assert.deepEqual(stderr, []);
 });
 
 test('CLI delegates a manual story without live ngest configuration', async () => {
