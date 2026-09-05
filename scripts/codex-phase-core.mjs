@@ -1,7 +1,6 @@
 import { clearScreenDown, cursorTo, moveCursor } from 'node:readline';
 
 export const MODEL_CONFIGS = Object.freeze({
-  'Luna Low': Object.freeze({ model: 'gpt-5.6-luna', reasoning: 'low' }),
   'Luna Medium': Object.freeze({ model: 'gpt-5.6-luna', reasoning: 'medium' }),
   'Luna High': Object.freeze({ model: 'gpt-5.6-luna', reasoning: 'high' }),
   'Terra Medium': Object.freeze({
