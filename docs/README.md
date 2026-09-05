@@ -1,18 +1,19 @@
 # VidGen Documentation
 
-This is a deliberately small initial documentation set.
+This is the current early-stage documentation set.
 
-Current owner-approved architecture is recorded here, while provider choices, detailed schemas, production contracts, deployment topology, and other still-unproven decisions remain provisional until deliberately reviewed and accepted.
+The initial engineering worksheet is complete. Its accepted decisions have been promoted into the project overview, architecture, and roadmap as CURRENT MVP DIRECTION. Exact schemas, provider/model versions, deployment topology, and other implementation details remain provisional until evidence justifies stronger contracts.
 
 ## Read order
 
-- project-overview.md — product intent and ngest/VidGen ownership boundary.
-- architecture.md — current conceptual pipeline and internal boundaries.
+- project-overview.md — product intent, ngest/VidGen ownership boundary, and current MVP direction.
+- architecture.md — current pipeline, artifact, provider, production, rendering, and recovery boundaries.
 - integrations/ngest.md — direct authenticated ngest integration boundary.
 - control-interface.md — VidGen control ownership and semantics.
-- planning/initial-engineering-question-worksheet.md — pre-implementation worksheet for unresolved stack, AI, production, rendering, and operational decisions.
+- planning/initial-engineering-question-worksheet.md — completed index of the 20 initial engineering decisions.
+- planning/worksheet-answers/README.md — decision-record authority and answer-file index.
 - workflow.md — repository planning, prompt, and runner workflow.
-- roadmap/initial-roadmap.md — draft implementation sequence.
+- roadmap/initial-roadmap.md — current provisional implementation sequence.
 - codex-model-selection.md — supported runner configuration labels and selection guidance.
 - tasks/README.md — task stack storage and naming.
 
