@@ -45,6 +45,7 @@ export interface Phase1ArtifactStore {
   createRunDirectory(artifactsRoot: string, runId: string): Promise<string>;
   writeRunMetadata(runDirectory: string, metadata: Phase1RunMetadata): Promise<void>;
   writeCanonicalInput(runDirectory: string, canonicalInput: CanonicalInput): Promise<void>;
+  removeCanonicalInput(runDirectory: string): Promise<void>;
 }
 
 export interface Phase1InputRunDependencies {
@@ -119,6 +120,16 @@ export async function runPhase1Input(
   } catch (error) {
     const safeError = sanitizeRunError(error, environment);
     if (runDirectory !== undefined) {
+      if (canonicalInputWritten) {
+        try {
+          await artifactStore.removeCanonicalInput(runDirectory);
+          canonicalInputWritten = false;
+        } catch {
+          // Preserve the original safe failure. The run record below remains
+          // honest even when the filesystem cannot remove a published input.
+        }
+      }
+
       const failedMetadata: Phase1RunMetadata = {
         runId,
         status: 'failed',
@@ -187,6 +198,9 @@ export function createFilesystemArtifactStore(
         serializeJson,
         createTemporarySuffix,
       );
+    },
+    async removeCanonicalInput(runDirectory): Promise<void> {
+      await filesystem.unlink(join(runDirectory, CANONICAL_INPUT_ARTIFACT_NAME));
     },
   };
 }

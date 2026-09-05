@@ -47,7 +47,7 @@ test('CLI persists one safe, validated CanonicalInput under its artifacts-root o
         status: 'input_ready',
         startedAt: metadata.startedAt,
         endedAt: metadata.endedAt,
-        engineVersion: '0.1.4',
+        engineVersion: '0.1.5',
         inputFingerprint: canonical.inputFingerprint,
         canonicalInputArtifact: CANONICAL_INPUT_ARTIFACT_NAME,
       });
@@ -127,6 +127,46 @@ test('a failure after run creation records failed metadata without a canonical a
     );
 
     const runDirectory = join(root, 'run-failure');
+    const metadata = await readJson(join(runDirectory, 'run.json'));
+    assert.equal(metadata.status, 'failed');
+    assert.equal(metadata.failure.code, 'artifact');
+    assert.equal(metadata.canonicalInputArtifact, undefined);
+    await assert.rejects(readFile(join(runDirectory, CANONICAL_INPUT_ARTIFACT_NAME), 'utf8'));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('a failure publishing terminal input-ready metadata removes the CanonicalInput artifact', async () => {
+  const root = await makeTemporaryDirectory();
+  try {
+    const store = createFilesystemArtifactStore({
+      serializeJson: (value) => {
+        if (
+          value !== null
+          && typeof value === 'object'
+          && 'status' in value
+          && value.status === 'input_ready'
+        ) {
+          throw new Error('simulated terminal metadata serialization failure');
+        }
+        return JSON.stringify(value, null, 2);
+      },
+      createTemporarySuffix: () => 'test',
+    });
+
+    await assert.rejects(
+      runPhase1Input({
+        artifactsRoot: root,
+        fetchManifest: async () => validManifest(),
+        createRunId: () => 'run-terminal-metadata-failure',
+        artifactStore: store,
+        now: fixedClock(),
+      }),
+      (error: unknown) => error instanceof VidGenError && error.code === 'artifact',
+    );
+
+    const runDirectory = join(root, 'run-terminal-metadata-failure');
     const metadata = await readJson(join(runDirectory, 'run.json'));
     assert.equal(metadata.status, 'failed');
     assert.equal(metadata.failure.code, 'artifact');
