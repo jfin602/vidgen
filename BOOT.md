@@ -2,7 +2,7 @@
 
 This is the session router for repository-aware work in jfin602/vidgen.
 
-VidGen is still early-stage and has no production engine yet, but the initial engineering worksheet is complete and its accepted MVP decisions have been promoted into the current architecture and roadmap. Exact schemas, provider versions, deployment topology, and other implementation details remain provisional until implementation evidence justifies stronger contracts.
+VidGen is still early-stage. Phase 1 has been implemented, reviewed, and closed; Phase 2 is now the current roadmap phase. The initial engineering worksheet remains promoted into the current architecture and roadmap. Later-stage schemas, provider versions, deployment topology, and other implementation details remain provisional until implementation evidence justifies stronger contracts.
 
 ## Project identity
 
@@ -16,8 +16,10 @@ VidGen is still early-stage and has no production engine yet, but the initial en
 - Initial provider direction: Google-first, with Veo for generated video/presenter work behind provider-neutral VidGen boundaries.
 - MVP composition/rendering: Remotion + FFmpeg.
 - MVP production model: template-first hybrid newscast with deterministic fallbacks.
-- Current package baseline: 0.1.0.
-- Current repository state: workflow/bootstrap and planning only; no production engine has been implemented.
+- Phase 1 completion version: 0.1.5.
+- Current package baseline: 0.2.0.
+- Current roadmap phase: Phase 2 — Feed intelligence and bounded enrichment.
+- Current repository state: Phase 1 input acquisition, canonicalization, fingerprinting, CLI run, and durable CanonicalInput foundation are implemented; later creative stages are not yet implemented.
 - Current roadmap: docs/roadmap/initial-roadmap.md, CURRENT MVP DIRECTION / PROVISIONAL PHASE BOUNDARIES.
 - Current architecture notes: docs/architecture.md.
 - Current ngest integration notes: docs/integrations/ngest.md.
@@ -223,10 +225,12 @@ Unlike ngest, VidGen does not yet have fixed successor baselines or a terminal r
 
 ## Current next action
 
-Before implementation, use:
+Phase 1 is closed at 0.1.5 and the repository is on the 0.2.0 Phase 2 baseline.
+
+Before Phase 2 implementation, use:
 
     /prompt-ass
     -> /prompt-plan
-    -> /prompt-write p1
+    -> /prompt-write p2
 
-Phase 1 begins at the direct ngest integration boundary described by docs/integrations/ngest.md and docs/control-interface.md, using the current MVP stack and artifact decisions recorded in docs/architecture.md and docs/roadmap/initial-roadmap.md.
+Phase 2 begins from the durable CanonicalInput boundary implemented in Phase 1 and should follow docs/architecture.md and docs/roadmap/initial-roadmap.md. Exact ngest nextCursor request semantics remain unresolved; Phase 2 planning must not invent them or treat multi-page production input as qualified until that upstream contract is resolved.
