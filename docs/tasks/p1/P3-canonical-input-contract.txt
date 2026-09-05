@@ -1,0 +1,172 @@
+TASK: Phase 1 / P3 — Canonical input contract and fingerprint
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Sol High`.
+
+VERSIONING
+- This prompt's assigned project version is `0.1.3`.
+
+CONTEXT
+
+Build on the validated one-page transport boundary from P2.
+
+VidGen must convert ngest transport data once at the edge into VidGen-owned canonical models. Downstream creative stages must not need to understand ngest authentication, endpoint, pagination, or transport metadata.
+
+Current accepted Distribution/manifest evidence for article records includes:
+- articleId;
+- headline;
+- originalUrl;
+- effectiveFeedDate;
+- feedDateSource;
+- nullable publishedAt;
+- nullable author;
+- nullable summary;
+- nullable imageUrl;
+- source.configKey;
+- source.displayName;
+- categories[].
+
+Current manifest evidence also includes profile.configKey/displayName, publication.name, apiVersion, snapshotRevision, control, and nextCursor.
+
+The control interface is intentionally stage-aware but its exact field set is still provisional. Do not prematurely freeze individual editorial/script/production control fields.
+
+GOAL
+
+Define and implement the Phase 1 CanonicalFeed, CanonicalControl, and CanonicalInput contracts, durable JSON Schemas, deterministic normalization, and SHA-256 input fingerprinting.
+
+SCOPE
+
+Implement:
+- VidGen-owned canonical TypeScript types;
+- matching JSON Schema files for the Phase 1 artifacts;
+- narrow deterministic runtime validators/normalizers;
+- canonical serialization;
+- input fingerprinting;
+- provenance handling;
+- focused tests protecting semantic identity and source traceability.
+
+IMPLEMENTATION REQUIREMENTS
+
+1. CanonicalFeed.
+   - Define a VidGen-owned feed model containing only generation-relevant normalized feed semantics.
+   - Preserve upstream article order exactly.
+   - Normalize each article around the accepted fields listed in CONTEXT.
+   - Require articleId, headline, originalUrl, effectiveFeedDate, feedDateSource, source identity, and categories with sensible strict types.
+   - Preserve nullable publishedAt, author, summary, and imageUrl as explicit null-or-value fields rather than ambiguous undefined behavior.
+   - Validate originalUrl as an absolute HTTP(S) publisher destination.
+   - imageUrl may be retained as upstream metadata but must carry no implication that VidGen has reuse rights.
+   - Normalize profile/publication identity needed for generation context.
+   - Do not include bearer credentials, generatedAt, digest, endpoint URL, ETag, or other transport-only state.
+
+2. CanonicalControl.
+   - Define a VidGen-owned structure with:
+     * an explicit version;
+     * editorial object;
+     * script object;
+     * production object.
+   - Normalize missing stage objects to empty objects if the transport contract permits them to be omitted.
+   - Preserve JSON-safe fields within those stage objects without interpreting still-provisional field semantics.
+   - Reject unknown top-level control branches rather than silently discarding them.
+   - Do not implement topic-specific controls.
+   - Do not accept secrets in control data. At minimum reject obvious credential/token/password/api-key style top-level or nested keys through a bounded deterministic safety check without pretending this replaces later schema hardening.
+
+3. CanonicalInput.
+   - Define a durable structured artifact that contains:
+     * its own schema version;
+     * CanonicalFeed;
+     * CanonicalControl;
+     * inputFingerprint;
+     * provenance/debug metadata for the ngest apiVersion and snapshotRevision when present.
+   - Provenance metadata must not redefine generation identity.
+
+4. JSON Schema.
+   - Add actual .schema.json files for CanonicalFeed, CanonicalControl, and CanonicalInput.
+   - Keep schemas strict at the fields owned by Phase 1.
+   - Because the repository currently has no JSON Schema runtime dependency, do not implement a generic schema engine solely for this task.
+   - Pair the schemas with narrow deterministic TypeScript runtime validators/normalizers.
+   - Add tests that keep schema required/optional/additionalProperties intent aligned with runtime validation for the Phase 1 fields.
+
+5. Deterministic canonical serialization.
+   - Implement one reusable canonical JSON serializer for fingerprint input.
+   - Sort object keys recursively.
+   - Preserve array order.
+   - Reject non-JSON-safe values.
+   - Do not rely on insertion order or locale-sensitive behavior.
+
+6. inputFingerprint.
+   - Compute lowercase SHA-256 hex over the canonical serialization of generation-relevant CanonicalFeed + CanonicalControl only.
+   - Exclude snapshotRevision, apiVersion, endpoint URL, bearer credential, timestamps/export time, and other provenance/transport metadata.
+   - Feed article order is generation-relevant and therefore must affect the fingerprint.
+   - A semantic feed/control change must affect the fingerprint.
+   - A provenance-only snapshotRevision change must not.
+
+7. Source traceability.
+   - Preserve articleId and originalUrl through CanonicalFeed.
+   - Do not copy ngest digest/editorial output.
+   - Do not add generated research or derived story ranking.
+
+8. Version.
+   - Set package.json version to 0.1.3.
+
+FOCUSED TESTS
+
+Add fixtures and tests proving:
+- valid feed/control normalize into the exact canonical shape;
+- nullable fields normalize deterministically;
+- malformed article IDs/URLs/source/categories fail;
+- article order is preserved;
+- unknown control top-level branches fail;
+- nested control JSON is preserved without interpreting provisional semantics;
+- obvious secret-bearing control keys fail;
+- CanonicalInput does not contain bearer token, endpoint URL, digest, generatedAt, or equivalent transport-only fields;
+- object-key ordering differences produce the same fingerprint;
+- article-order differences produce different fingerprints;
+- feed/control semantic changes produce different fingerprints;
+- snapshotRevision-only changes do not change the fingerprint;
+- schemas parse as JSON and reflect the runtime contract for required fields/additionalProperties policy.
+
+REGRESSION COVERAGE
+
+Run:
+- P1 foundation tests;
+- P2 ngest ingress tests;
+- new canonical-contract/fingerprint tests;
+- existing runner tests;
+- npm test;
+- npm run check;
+- git diff --check.
+
+PRODUCER / CONSUMER BOUNDARY
+
+Downstream-required capability:
+stable validated CanonicalInput for Phase 2 FeedAnalysis
+
+Owning implementation/export:
+CanonicalFeed, CanonicalControl, CanonicalInput types/schemas plus the normalize/build function and fingerprint utility
+
+Focused proof:
+fixture-driven normalization/schema/fingerprint tests proving transport-only data is excluded, provenance is retained separately, order is preserved, and semantic identity is deterministic
+
+PRESERVED BEHAVIOR
+
+- P2 transport errors remain distinct and do not leak into canonical models.
+- Ngest remains authoritative for governed Article order and original destinations.
+- Generated creative output is not added to canonical feed truth.
+- Publisher image URLs remain metadata only, not usage authorization.
+- The exact editorial/script/production control field set remains provisional.
+
+NON-GOALS
+
+Do not implement:
+- ngest continuation request semantics;
+- filesystem run directories;
+- CLI orchestration of the complete Phase 1 path;
+- resume/reuse;
+- research/enrichment;
+- FeedAnalysis;
+- AI/media providers;
+- rendering.
+
+COMPLETION
+
+Leave package version 0.1.3 with a stable, schema-backed, deterministic CanonicalInput producer that is ready for persistence and later Phase 2 consumption.
