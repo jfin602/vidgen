@@ -10,6 +10,14 @@ The primary production integration is ngest. VidGen receives its own bearer cred
 
 Generic Distribution consumers, including PHP integration packages, remain unaware of VidGen-only controls.
 
+## Implementation status
+
+Phase 1 is complete and closed at version 0.1.5. The repository is on the 0.2.0 baseline for Phase 2 — Feed intelligence and bounded enrichment.
+
+Phase 1 now provides the implemented boundary from authenticated ngest transport into durable CanonicalInput: secure manifest acquisition, transport validation, CanonicalFeed/CanonicalControl normalization, deterministic inputFingerprint generation, CLI execution, and filesystem-backed run/artifact persistence.
+
+The exact ngest nextCursor request contract remains unresolved. Current ingress intentionally fails closed when continuation is required, so production multi-page input is not yet qualified and downstream work must not invent continuation semantics.
+
 ## Core architectural law
 
 Ngest determines which governed Articles are available in the feed.
@@ -174,9 +182,9 @@ The following remain intentionally unresolved:
 - exact ngest persistence/table schema for controls;
 - exact token/scope representation inside ngest;
 - exact control v1 field set, ranges, and defaults;
-- exact Node.js version and TypeScript/tooling configuration;
-- exact JSON schemas and schema-versioning conventions;
-- exact filesystem run-directory and metadata layout;
+- long-term runtime/tooling changes beyond the current Node 24 Phase 1 baseline;
+- later-stage artifact schemas and schema-versioning conventions beyond the implemented Phase 1 canonical-input schemas;
+- later-stage run/artifact layout, resume, and cache semantics beyond the implemented Phase 1 run directory;
 - exact Google model choices for analysis/planning/scripting and generated stills;
 - exact Veo model/version and presenter consistency strategy;
 - exact provider interface shapes and future fallback providers;
