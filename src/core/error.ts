@@ -3,6 +3,7 @@
  * only when a caller needs a distinct, stable recovery path.
  */
 export type VidGenErrorCode =
+  | 'unexpected'
   | 'invalid_argument'
   | 'configuration'
   | 'transport'
