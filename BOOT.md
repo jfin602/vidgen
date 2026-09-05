@@ -2,20 +2,24 @@
 
 This is the session router for repository-aware work in jfin602/vidgen.
 
-VidGen is at bootstrap stage. The workflow below is intentionally borrowed from ngest because it has proven useful, but the product architecture, roadmap, schemas, provider choices, and detailed contracts are still provisional unless the owner explicitly promotes them later.
+VidGen is at bootstrap stage. The workflow below is intentionally borrowed from ngest because it has proven useful, while provider choices, production schemas, deployment topology, persistence technology, and other implementation details remain provisional unless the owner explicitly promotes them later.
 
 ## Project identity
 
 - Repository: jfin602/vidgen
 - Default branch: main
-- Product direction: an external cinematic news-generation engine that consumes governed feed input and produces a video-news edition.
-- Intended upstream integration: ngest VidGen Manifest / server-to-server pull boundary.
+- Product direction: a standalone cinematic news-generation engine that consumes governed ngest feed input and produces video-news editions.
+- Primary upstream integration: a dedicated bearer-authenticated ngest VidGen endpoint that returns the governed Profile feed plus VidGen-specific controls.
 - Current package baseline: 0.1.0.
 - Current repository state: workflow/bootstrap only; no production engine has been implemented.
 - Current roadmap: docs/roadmap/initial-roadmap.md, DRAFT / PROVISIONAL.
-- Current architecture notes: docs/architecture.md, DRAFT / PROVISIONAL.
+- Current architecture notes: docs/architecture.md.
+- Current ngest integration notes: docs/integrations/ngest.md.
+- Current control-interface notes: docs/control-interface.md.
 
-The initial concept is intentionally provider-agnostic. Research, story selection, scripting, scene planning, media generation, composition, rendering, and publication handoff belong in this repository rather than in ngest, but their exact implementation remains open.
+Ngest remains responsible for governed feed truth. VidGen owns downstream feed interpretation, editorial planning, scripting, production planning, media generation, composition, rendering, and generated artifacts.
+
+VidGen does not consume the ngest Profile digest as pre-generated editorial output.
 
 ## /boot
 
@@ -25,12 +29,12 @@ For substantial repository-aware work:
 2. Read README.md.
 3. Read AGENTS.md.
 4. Read docs/README.md.
-5. Read the narrowest relevant project/architecture/roadmap notes.
+5. Read the narrowest relevant project, architecture, integration, control, or roadmap notes.
 6. Inspect current implementation and tests when repository state matters.
 
 Reply ready after bootstrap when the user asks only for /boot.
 
-Do not treat this bootstrap document as a frozen product contract. Report when a proposed decision should be promoted into a durable contract or ADR later.
+Do not treat every bootstrap note as a frozen product contract. Report when a proposed decision should be promoted into a durable contract or ADR later.
 
 ## Working authority
 
@@ -88,6 +92,7 @@ Read-only assessment. Identify:
 Requires a completed /prompt-ass. Inspect relevant docs, implementation, helpers/consumers/tests, likely file scope, failure modes, validation needs, evidence environment, and non-goals.
 
 For meaningful producer/consumer dependencies, record:
+
 downstream-required capability -> owning implementation/export -> focused proof
 
 If downstream work would have to invent upstream semantics, return Planning needed.
@@ -194,6 +199,9 @@ Unlike ngest, VidGen does not yet have fixed successor baselines or a terminal r
 - Analyze before implementation.
 - Prefer small independently reviewable prompts.
 - Keep upstream ngest responsibilities separate from VidGen creative-generation responsibilities.
+- Keep ngest transport shapes at the input boundary; creative stages consume VidGen canonical models.
+- Generic ngest Distribution/PHP consumers must remain unaware of VidGen-only controls.
+- VidGen must not connect directly to ngest persistence.
 - Keep provider-specific behavior behind explicit adapters/boundaries where practical.
 - Preserve reproducibility and provenance for inputs, generated intermediate artifacts, provider jobs, and final outputs as the design matures.
 - Treat URLs, publisher content, administrator guidance, model output, and provider responses as untrusted input.
@@ -205,8 +213,9 @@ Unlike ngest, VidGen does not yet have fixed successor baselines or a terminal r
 The repository bootstrap does not create Phase 1 implementation prompts.
 
 Before implementation, use:
+
     /prompt-ass
     -> /prompt-plan
     -> /prompt-write p1
 
-The draft roadmap is only a starting point. Refine it as the VidGen project moves into its own GPT project.
+Phase 1 now begins at the direct ngest integration boundary described by docs/integrations/ngest.md and docs/control-interface.md.
