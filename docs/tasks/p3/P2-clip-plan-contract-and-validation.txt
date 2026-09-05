@@ -1,0 +1,183 @@
+TASK: Phase 3 / P2 — ClipPlan contract and validation
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- This prompt's assigned project version is `0.3.2`.
+
+CONTEXT
+
+P1 gives every validated AssemblyTemplate content slot a small declarative authoring contract.
+
+Phase 3 needs one durable creative artifact only: ClipPlan. ClipPlan is a filled template form, not a shot list, Script, ProductionPlan, media request, or provider prompt.
+
+The model should not be trusted to generate deterministic identity fields. Story fingerprint and template ID/version already exist in validated VidGen-owned inputs and must be attached by VidGen itself.
+
+Read StoryInput, AssemblyTemplate, JSON helpers, schemas, and current tests before editing.
+
+GOAL
+
+Create a strict provider-neutral ClipPlan contract and deterministic builder/validator that converts unknown structured model output containing only slot values into a durable ClipPlan bound to one StoryInput and one AssemblyTemplate.
+
+Conceptual durable artifact:
+
+    ClipPlan
+      schemaVersion
+      storyFingerprint
+      template
+        id
+        version
+      slots
+        - id
+          text
+
+Conceptual model-owned output:
+
+    {
+      slots: [
+        { id, text },
+        ...
+      ]
+    }
+
+SCOPE
+
+Implement:
+- ClipPlan TypeScript contract;
+- durable ClipPlan JSON Schema;
+- provider-response schema builder for slot-only structured output;
+- deterministic model-output -> ClipPlan builder/validator;
+- simple StoryInput context-sufficiency guard for the current manual path;
+- focused tests.
+
+IMPLEMENTATION REQUIREMENTS
+
+1. Durable ClipPlan.
+   - Define a small strict ClipPlan schema/version.
+   - Required fields:
+     * schemaVersion;
+     * storyFingerprint;
+     * template { id, version };
+     * slots: ordered array of { id, text }.
+   - Do not include provider/model/request IDs in ClipPlan.
+   - Do not include timing, segment definitions, generated asset roles, media prompts, shot plans, provider instructions, transitions, or final-media decisions.
+
+2. Deterministic identity.
+   - The model must not own storyFingerprint or template identity.
+   - Build those fields from the validated StoryInput and AssemblyTemplate supplied by VidGen.
+   - Model output supplies only slot IDs/text.
+   - Durable validation must require storyFingerprint and template identity to match the supplied StoryInput/template exactly.
+
+3. Slot completeness semantics.
+   - The final ClipPlan must contain every template content slot exactly once.
+   - No missing slots.
+   - No duplicate slot IDs.
+   - No undeclared slot IDs.
+   - Preserve template content-slot order in the durable ClipPlan even if the model returns valid slots in a different order.
+   - Trim outer whitespace from slot text.
+   - Reject empty text after trimming.
+   - Apply one conservative generic maximum text length per slot to prevent pathological output; do not invent per-default-slot length rules in core code.
+   - Do not implement a general fact checker.
+
+4. Provider structured-output schema.
+   - Export a provider-neutral function/value that produces a JSON Schema suitable for asking a text model for:
+       { slots: [{ id, text }] }
+   - Use the selected template's declared slot IDs as the allowed ID enum where practical.
+   - Set minItems/maxItems to the selected template's content-slot count where supported.
+   - Keep deterministic duplicate/completeness enforcement in VidGen even if the provider schema also constrains shape.
+   - Do not make a provider response schema the canonical durable ClipPlan schema.
+
+5. Context sufficiency.
+   - Implement the smallest deterministic initial rule needed by the approved Phase 3 docs:
+     * headline already exists by StoryInput contract;
+     * summary must be non-null for the current automatic ClipPlan path.
+   - A missing summary returns a clear VidGen-owned insufficient-context failure before any provider call.
+   - Do not introduce fuzzy summary scoring, minimum semantic quality heuristics, publisher retrieval, or web research.
+   - The owner will select a sufficiently descriptive story while qualifying the initial pipeline.
+
+6. Control treatment.
+   - ClipPlan core types do not need to understand the provisional control branches.
+   - Do not redesign CanonicalControl.
+   - Later prompt construction may pass the existing control object as untrusted configuration.
+
+7. Errors.
+   - Add one narrow ClipPlan-owned error category only if useful to callers, such as `clip_plan`.
+   - Insufficient context and malformed/semantically invalid model output may share that category with safe distinct public messages.
+   - Do not include raw model output or full story text in public errors.
+
+8. JSON Schema.
+   - Add schemas/clip-plan.schema.json.
+   - Keep required fields and additionalProperties behavior aligned with runtime validation.
+   - No generic JSON Schema runtime engine dependency is required.
+
+9. Version/test wiring.
+   - Set package.json and src/version.ts to 0.3.2.
+   - Keep package-lock.json absent.
+   - Add tests to the normal application path.
+
+FOCUSED TESTS
+
+Prove:
+- a valid slot-only model result builds a durable ClipPlan with deterministic story/template identity;
+- model-return order is normalized to template slot order;
+- missing slot fails;
+- duplicate slot fails;
+- undeclared slot fails;
+- blank slot text fails;
+- pathological overlong text fails;
+- StoryInput with null summary fails before generation can proceed;
+- summary-present StoryInput passes the simple context guard;
+- default slot IDs are not hard-coded into ClipPlan validation by using a synthetic template with different slot IDs;
+- wrong durable storyFingerprint/template identity fails validation;
+- model-output response schema uses only declared template slot IDs and exact expected count;
+- durable JSON Schema parses and matches runtime strictness intent.
+
+REGRESSION COVERAGE
+
+Run:
+- ClipPlan focused tests;
+- AssemblyTemplate tests from P1;
+- StoryInput tests;
+- story-workspace/CLI tests;
+- inherited Phase 1/2 tests;
+- runner tests;
+- npm test;
+- npm run check;
+- git diff --check.
+
+PRODUCER / CONSUMER BOUNDARY
+
+Downstream-required capability:
+one provider-neutral validated ClipPlan whose identity is VidGen-owned and whose story content exactly fills the selected template
+
+Owning implementation/export:
+ClipPlan type/schema + context guard + model-output schema builder + model-output-to-ClipPlan validator/builder
+
+Focused proof:
+tests with default and synthetic templates proving exact slot completeness, deterministic identity, template-order normalization, and no hard-coded default slot meanings
+
+PRESERVED BEHAVIOR
+
+- StoryInput remains the factual input.
+- AssemblyTemplate remains the structure/slot authority.
+- ClipPlan contains story-specific words, not production structure.
+- No provider call is required to test ClipPlan core behavior.
+- No media generation semantics are introduced.
+
+NON-GOALS
+
+Do not implement:
+- text-model client;
+- Google API calls;
+- prompt construction;
+- persistence/CLI planning workflow;
+- publisher retrieval/research;
+- generated-video/voiceover prompts;
+- Veo;
+- FFmpeg;
+- control redesign.
+
+COMPLETION
+
+Leave version 0.3.2 with a strict, template-generic ClipPlan producer boundary ready for one structured text-model call in P3.
