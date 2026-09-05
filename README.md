@@ -52,14 +52,20 @@ Exact schemas, provider/model versions, run-directory layout, retry counts, cost
 
 ## Current state
 
-This repository still contains no production VidGen engine. It currently contains:
-- the project/session workflow;
-- a port of the ngest Codex phase runner;
-- phase-runner tests;
-- documentation snapshot tooling;
-- the ngest integration/control architecture;
-- the completed initial engineering worksheet and answer records;
-- the current MVP architecture and implementation roadmap.
+Phase 1 is implemented and closed at version 0.1.5. The repository is now on the 0.2.0 Phase 2 planning baseline.
+
+Implemented Phase 1 capabilities include:
+- the Node.js + TypeScript CLI foundation;
+- secure bearer-authenticated ngest manifest acquisition;
+- fail-closed handling for unsupported manifest continuation;
+- VidGen-owned CanonicalFeed, CanonicalControl, and CanonicalInput models and schemas;
+- deterministic SHA-256 input fingerprinting;
+- filesystem-backed run metadata and atomic CanonicalInput persistence;
+- deterministic application and runner tests.
+
+The repository also contains the project/session workflow, Codex phase runner, documentation tooling, completed engineering worksheet, current MVP architecture, and roadmap.
+
+FeedAnalysis and later creative/provider/render stages are not yet implemented.
 
 ## Start here
 
@@ -99,6 +105,8 @@ Create a clean committed documentation snapshot:
 
 ## Status
 
-Package baseline: 0.1.0
+Phase 1 completion: 0.1.5
 
-The baseline is a bootstrap marker for the inherited phase-runner version grammar, not a promise about the final product versioning strategy.
+Current Phase 2 baseline: 0.2.0
+
+The phase baseline exists for the inherited phase-runner version grammar and is not a promise about the final public product versioning strategy.
