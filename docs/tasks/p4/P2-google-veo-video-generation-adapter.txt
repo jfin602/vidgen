@@ -66,6 +66,8 @@ IMPLEMENTATION REQUIREMENTS
    - Reuse `GEMINI_API_KEY` as the Google credential.
    - Add explicit runtime model selection such as `VIDGEN_VIDEO_MODEL`.
    - Do not freeze a Veo model ID in source or durable template data.
+   - Keep a small Google-adapter-owned capability check for the configured current model when a request requires reference images or extension.
+   - Current official docs show reference images and extension on Veo 3.1 / Veo 3.1 Fast, not Veo 3.1 Lite; reject a known/unknown incompatible configured model clearly rather than silently dropping required capabilities or switching models.
    - Missing/blank credential or model must fail before network activity.
    - Validate model configuration before interpolating it into a path; reject slash/query/fragment/path-traversal shaped values rather than accepting arbitrary endpoint fragments.
    - Never print or persist the API key.
@@ -213,6 +215,7 @@ Use injected fake fetch/time boundaries to prove:
 - presenter request sends one to three supplied reference images and exact assigned dialogue;
 - presenter with zero or too many references fails before network;
 - a target longer than initial coverage performs the required bounded extension lifecycle;
+- configured model without required reference-image capability fails clearly for presenter generation;
 - configured model without extension capability fails clearly when extension is necessary;
 - presenter dialogue partitioning reconstructs the original exact text without additions/drops/duplicates;
 - content extension does not invent a second story prompt/claim;
