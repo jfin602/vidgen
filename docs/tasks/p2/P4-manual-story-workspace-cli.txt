@@ -1,0 +1,218 @@
+TASK: Phase 2 / P4 — Manual story workspace CLI
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- This prompt's assigned project version is `0.2.4`.
+
+CONTEXT
+
+P1 provides local ngest-shaped manifest loading through the real producer-envelope validator.
+P2 provides explicit StoryInput selection and storyFingerprint.
+P3 provides the validated default-news-40s assembly-template contract and registry.
+
+Phase 2 now needs one manually invokable end-to-end development boundary that creates an independent filesystem workspace for a selected story. It must stop before publisher retrieval, ClipPlan, provider calls, and FFmpeg.
+
+The existing Phase 1 `vidgen run` command and live ngest run behavior are already implemented and must remain available.
+
+GOAL
+
+Add a manual story CLI/application service that:
+
+    ngest-shaped JSON file
+          |
+          v
+    shared manifest validation
+          |
+          v
+      CanonicalInput
+          |
+          v
+    explicit articleId
+          |
+          v
+       StoryInput
+          +
+    selected template
+          |
+          v
+    independent story workspace
+
+The result must be the stable filesystem boundary later phases can repeatedly use while debugging real video generation.
+
+SCOPE
+
+Implement:
+- a Phase 2 story-workspace application service;
+- story artifact persistence;
+- manual CLI command and argument parsing;
+- minimal shared atomic-JSON refactor if needed;
+- deterministic end-to-end filesystem tests.
+
+IMPLEMENTATION REQUIREMENTS
+
+1. CLI surface.
+   - Add a clear command such as:
+       npm run vidgen -- story --input-file <manifest.json> --article-id <articleId>
+   - Support optional:
+       --template <templateId>
+       --artifacts-root <directory>
+   - Default template is default-news-40s.
+   - Default story artifact root should be a clear location under artifacts/, separate from Phase 1 runs, such as artifacts/stories.
+   - Required options must fail cleanly.
+   - Accept flags in a deterministic documented form without building a generic CLI framework.
+   - Never treat article position/order as selection.
+
+2. Preserve existing CLI behavior.
+   - Existing help remains useful and documents both live `run` and manual `story` commands.
+   - Existing `vidgen run` semantics remain unchanged.
+   - Unknown/invalid arguments remain deterministic.
+   - Keep application services injectable for unit tests rather than embedding file/network/persistence logic in argument parsing.
+
+3. Story application service.
+   - Orchestrate existing producers in this order:
+     * load/validate local ngest-shaped manifest;
+     * build CanonicalInput using the existing builder;
+     * explicitly build StoryInput by requested articleId;
+     * load/validate the selected assembly template;
+     * initialize the story workspace.
+   - Do not fetch the live ngest endpoint in manual story mode.
+   - Do not perform publisher retrieval or any creative/model work.
+
+4. Production/run identity.
+   - Generate a unique storyRunId separate from storyFingerprint.
+   - Re-running the same story/template may create a separate workspace.
+   - Do not use articleId directly as a filesystem directory name.
+   - Keep UUID/run generation injectable for deterministic tests.
+   - Do not implement global dedupe/cache behavior.
+
+5. Workspace layout.
+   - Create one directory per story invocation.
+   - Establish a simple forward-compatible runtime layout, approximately:
+       story-run.json
+       story.json
+       sources/
+       assets/
+         presenter/
+         video/
+         audio/
+       final/
+   - `story.json` is the validated durable StoryInput artifact.
+   - Do not persist unrelated feed Articles into the story workspace.
+   - Do not copy the raw input manifest into the workspace merely for convenience.
+   - `sources/` may be empty in Phase 2; it exists for later story-specific retrieved/source material.
+   - Do not create fake media/source files.
+
+6. story-run.json.
+   - Record at minimum:
+     * storyRunId;
+     * status;
+     * start/end timestamps;
+     * engine/package version;
+     * articleId;
+     * storyFingerprint;
+     * source inputFingerprint;
+     * StoryInput artifact path/name;
+     * selected template ID/version;
+     * generated asset roles required by the selected template;
+     * standardized asset roles required by the selected template;
+     * safe failure code/message when a workspace has been created and a later persistence step fails.
+   - The metadata must not claim that standardized intro/outro assets are present or qualified when they are not.
+   - It must not claim ClipPlan/media/render completion.
+   - Use a terminal success state such as story_ready.
+
+7. Atomic JSON persistence.
+   - Reuse a shared temp-file + rename helper.
+   - The current writeJsonAtomically helper lives in the Phase 1 application module; if Phase 2 needs it, perform a bounded extraction to a neutral shared module.
+   - Preserve the existing Phase 1 export/caller behavior or update all consumers/tests coherently so Phase 1 does not regress.
+   - Do not duplicate two subtly different atomic JSON implementations.
+
+8. Failure honesty.
+   - Validate input/article/template before publishing a successful story_ready state.
+   - If the workspace exists and a later write fails, leave honest failed metadata where the filesystem permits.
+   - No failed invocation may present story-run.json as story_ready.
+   - Sanitize public failure messages; do not leak bearer values or raw manifest contents.
+
+9. Story/template separation.
+   - Do not copy the full shared template definition into every story package.
+   - Record template ID/version and required asset roles so later stages can resolve the shared template.
+   - Do not bind invented intro/outro filenames/durations.
+   - Do not put future ClipPlan fields into story.json.
+
+10. Version/test wiring.
+   - Set package.json and src/version.ts to 0.2.4.
+   - Keep package-lock.json absent.
+   - Ensure all new Phase 2 tests are included in npm test/check.
+
+FOCUSED TESTS
+
+Use temp files/directories and deterministic injected IDs/clocks to prove:
+- manual story CLI parses required and optional arguments;
+- the command can select the second Article from a multi-Article fixture explicitly by articleId;
+- manual mode does not require live ngest URL/bearer configuration;
+- story.json contains only the selected StoryInput and validates against its contract;
+- separate invocations of identical StoryInput produce separate storyRunIds/directories while retaining the same storyFingerprint;
+- storyRunId is never derived from unsafe articleId text;
+- story-run.json records source input fingerprint and template ID/version;
+- story-run.json records required generated and standardized asset roles without claiming missing intro/outro files are available;
+- workspace contains sources/, assets/presenter/, assets/video/, assets/audio/, and final/ directories;
+- no raw manifest/unrelated Article is copied into the story workspace;
+- invalid/missing articleId and unknown template fail cleanly;
+- write failure after workspace creation cannot leave a successful story_ready metadata state;
+- existing `vidgen run` behavior and Phase 1 tests still pass;
+- help output documents manual story usage.
+
+REGRESSION COVERAGE
+
+Run:
+- Phase 2 story-workspace/CLI tests;
+- template tests;
+- StoryInput tests;
+- local-file ingress tests;
+- all Phase 1 application/integration tests;
+- runner tests;
+- npm test;
+- npm run check;
+- npm run vidgen -- --help;
+- git diff --check.
+
+PRODUCER / CONSUMER BOUNDARY
+
+Downstream-required capability:
+a repeatable, independently persisted story workspace containing validated StoryInput plus deterministic selected-template metadata
+
+Owning implementation/export:
+manual story application service + filesystem story artifact store + CLI `story` command
+
+Focused proof:
+temp-filesystem end-to-end tests from ngest-shaped fixture through explicit Article selection into story.json/story-run.json and empty future source/media directories
+
+PRESERVED BEHAVIOR
+
+- Live Phase 1 ngest run remains unchanged.
+- One story is selected explicitly, never editorially ranked.
+- StoryInput identity stays independent of unrelated feed Articles.
+- Templates own structure; story workspace only records selection/requirements.
+- No credentials or raw Authorization data enter artifacts.
+- Existing artifacts/runs behavior remains intact.
+- No database or global cache is introduced.
+
+NON-GOALS
+
+Do not implement:
+- publisher-page retrieval;
+- ClipPlan;
+- AI/model calls;
+- Veo/provider adapters;
+- narration generation;
+- intro/outro binary assets;
+- media probing;
+- FFmpeg;
+- Remotion;
+- final video rendering;
+- live multi-story fan-out.
+
+COMPLETION
+
+Leave version 0.2.4 with a manually invokable `vidgen story` workflow that produces one honest, self-contained story-development workspace ready for Phase 3 context/ClipPlan work.
