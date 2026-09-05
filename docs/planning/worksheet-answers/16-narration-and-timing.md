@@ -6,23 +6,16 @@ What narration/TTS system owns spoken timing?
 
 ## Answer
 
-Decision: Use an audio-first timing model. VidGen should generate narration before final visual production, and the resulting narration audio should become the authoritative timing source for the edition.
+Decision: Do not use a separate audio-first TTS pipeline as the timing authority for the MVP. Presenter/anchor segments should follow the Veo generation path and be generated from the scripted text together with source/reference images for the intended anchor.
 
-The intended flow is:
-- Script defines narration text plus pacing, emphasis, pronunciation, and target-duration metadata;
-- TTS generates the final narration audio;
-- measured narration timing becomes authoritative;
-- ProductionPlan and downstream scene timing are built around the actual audio duration;
-- anchor/presenter generation must support synchronization to that prerecorded narration contract;
-- Veo should primarily handle cinematic/B-roll shots and other visuals that do not require exact mouth synchronization to the finalized narration;
-- Remotion + FFmpeg assemble the final timed program around the narration track.
+For anchor segments, Script should provide the spoken text and production intent, ProductionPlan should provide the relevant presenter/reference-image inputs and generation instructions, and the resulting Veo presenter clip should become the timed media asset consumed by final composition.
 
-TTS should remain behind a provider-neutral adapter, and the MVP should use a stable program voice unless a later decision requires otherwise.
+Remotion + FFmpeg remain responsible for assembling those generated presenter clips with B-roll, deterministic graphics, transitions, captions, music, and other program elements.
 
 Confidence: High.
 
-Why: Generating narration first removes timing guesswork from downstream production. It gives the compositor exact durations, makes scene planning more deterministic, and provides a clear synchronization contract for anchor scenes. It also prevents a video-generation provider from becoming the authority for spoken wording or timing when exact script fidelity matters.
+Why: The MVP already intends to use Veo and has a specific anchor concept in mind. Generating the presenter directly from text plus source/reference images keeps the first implementation within the Google/Veo production path and avoids introducing a separate TTS-to-lip-sync subsystem before it is proven necessary.
 
-Deferred details: Exact TTS provider, voice identity, pronunciation-override format, pacing/emphasis schema, audio format, silence/pause handling, anchor/lip-sync provider, regeneration behavior, and whether any scenes may intentionally use provider-native generated dialogue remain open for implementation planning.
+Deferred details: Exact Veo model/version, anchor reference-image requirements, continuity/identity strategy across presenter clips, pronunciation controls, dialogue fidelity validation, generated-audio handling, clip-duration constraints, retry/regeneration policy, and whether a dedicated TTS or lip-sync path is introduced later remain open for implementation planning.
 
-Docs affected: docs/architecture.md, docs/project-overview.md, docs/roadmap/initial-roadmap.md, and future Script/TTS/ProductionPlan/presenter contract documentation when this decision is promoted.
+Docs affected: docs/architecture.md, docs/project-overview.md, docs/roadmap/initial-roadmap.md, and future Script/ProductionPlan/presenter/provider contract documentation when this decision is promoted.
