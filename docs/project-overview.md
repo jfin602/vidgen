@@ -12,19 +12,22 @@ The initial development goal is narrower than the eventual live integration: man
 
 ## Implementation status
 
-Phases 1 and 2 are complete and closed at versions 0.1.5 and 0.2.5. The repository is now on the 0.3.0 Phase 3 baseline.
+Phases 1 and 2 are complete and closed at versions 0.1.5 and 0.2.5. Phase 3 was manually owner-closed after P4 at version 0.3.4; its unrun live-provider closeout smoke was explicitly waived. The repository is now on the 0.4.0 Phase 4 baseline.
 
 Implemented foundation:
 - Node.js + TypeScript CLI foundation;
 - authenticated ngest manifest acquisition plus local ngest-shaped fixture ingress through the same validator;
 - CanonicalFeed, CanonicalControl, CanonicalInput, and explicit StoryInput normalization;
 - deterministic input and story fingerprinting;
-- a strict declarative default-news-40s assembly template and registry;
+- a strict declarative default-news-40s assembly template and registry with template-owned slot authoring semantics;
+- a strict provider-neutral ClipPlan contract and template-derived structured-output schema;
+- a Google Gemini structured-text adapter with runtime model configuration;
 - a manual story command that creates an independent story workspace with provenance/template metadata and future source/media directories;
-- filesystem-backed run/story metadata and shared atomic JSON persistence;
+- a manual plan command that performs one normal-path model call and persists validated ClipPlan plus safe planning metadata;
+- filesystem-backed run/story/planning metadata and shared atomic JSON persistence;
 - fail-closed handling for unsupported ngest continuation.
 
-Phase 3 is the first creative-planning phase: one validated ClipPlan generated directly from a sufficiently described StoryInput plus the selected AssemblyTemplate. Publisher retrieval, provider media generation, standardized asset binding/qualification, and FFmpeg assembly remain later work.
+Phase 3 implemented the first creative-planning stage: one validated ClipPlan generated directly from a sufficiently described StoryInput plus the selected AssemblyTemplate. Phase 4 now owns generated story media. Publisher retrieval, standardized asset binding/qualification, FFmpeg assembly, and live fan-out remain later work.
 
 ## Core architectural standards
 
@@ -156,9 +159,9 @@ The story package should retain the story-specific source files and generated fi
 
 Shared engine code and shared standardized template assets do not need to be duplicated into every story directory; the story package should identify the template/version and shared asset identities used.
 
-## Phase 3 grounding input
+## ClipPlan grounding input
 
-Phase 3 starts from StoryInput and does not automatically perform research.
+The implemented ClipPlan workflow starts from StoryInput and does not automatically perform research.
 
 For the initial manually debugged pipeline, choose an ngest story whose normalized headline and summary provide enough factual context to fill the selected template. Article/source identity, dates, byline, categories, controls, and provenance may also inform the plan.
 
