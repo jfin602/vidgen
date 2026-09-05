@@ -4,360 +4,274 @@ Status: CURRENT MVP DIRECTION / EARLY-STAGE
 
 ## Conceptual pipeline
 
-    ngest VidGen integration endpoint
-               |
-               v
-      authenticated acquisition
-               |
-               v
-        boundary validation
-               |
-               v
-          CanonicalInput
-      /          |          \
-CanonicalFeed CanonicalControl metadata
-               |
-               v
-      input identity / run context
-               |
-               v
-          FeedAnalysis
-               |
-               v
-         EditorialPlan
-               |
-               v
-             Script
-               |
-               v
-       approval gate
-        (configurable)
-               |
-               v
-        ProductionPlan
-               |
-               v
-     provider-neutral requests
-        /        |         \
-     Veo     still media   other
-        \        |         /
-               v
-       generated/acquired assets
-               |
-               v
-        RenderManifest
-               |
-               v
-         Remotion + FFmpeg
-               |
-               v
-      final video + run record
+Initial development:
 
-This is a responsibility sketch, not a committed module tree.
+    manually selected
+    ngest-shaped story fixture
+              |
+              v
+      boundary validation
+              |
+              v
+        CanonicalInput
+              |
+              v
+       select one story
+              |
+              v
+   initialize story package
+              |
+              v
+   prepare factual context
+     only as necessary
+              |
+              v
+          ClipPlan
+   one validated creative step
+              |
+              v
+   generate required media
+      /       |       \
+ presenter  content  voiceover
+      \       |       /
+              v
+      standardized intro/outro
+              |
+              v
+        FFmpeg assembly
+              |
+              v
+         final clip.mp4
 
-## MVP runtime and execution shape
+Live ngest acquisition remains a supported boundary from Phase 1, but live feed fan-out is not required to debug the initial video-production path.
+
+## Runtime and execution shape
 
 The MVP application runtime is Node.js + TypeScript.
 
-The first execution model is a CLI that processes one edition at a time. The engine should remain structured so later worker/service/API hosting can be added without rewriting editorial or production semantics, but distributed infrastructure is not an MVP requirement.
+Development execution is manually invoked through the CLI and processes one selected story at a time.
 
-Orchestration, Remotion, and FFmpeg may run on an ordinary CPU host. Veo and other managed generation providers supply their own generation infrastructure.
+The engine should remain separable enough that live feed orchestration can later fan stories into the same story pipeline, but queues, workers, databases, and distributed orchestration are not initial requirements.
 
-## Ngest integration boundary
+FFmpeg runs locally. Managed media providers supply their own generation infrastructure.
 
-VidGen's production input comes from a dedicated bearer-authenticated ngest integration endpoint.
+## Ngest boundary
 
-The endpoint should compose:
-- the same governed Distribution Profile feed semantics used by ngest's outward feed producer; and
-- Profile-associated VidGen controls.
+VidGen's eventual production input comes from the dedicated bearer-authenticated ngest VidGen integration endpoint.
 
-It must not create a second implementation of Article eligibility, ordering, normalization, provenance, duplicate handling, moderation, or Profile filtering.
+Ngest's feed is pre-curated for VidGen production. Every supplied story is already eligible for content creation.
 
-Generic ngest Distribution endpoints and PHP integration packages remain unchanged and do not receive VidGen-specific controls.
-
-VidGen must not connect directly to ngest persistence or depend on ngest database schema.
+VidGen must not:
+- rank stories for production eligibility;
+- cluster stories to choose winners;
+- apply a second newsworthiness filter;
+- recreate ngest moderation, duplicate, eligibility, Profile filtering, or ordering logic;
+- connect directly to ngest persistence.
 
 See docs/integrations/ngest.md.
 
-## Input normalization boundary
+## Manual fixture boundary
 
-The external ngest response is transport input, not the VidGen domain model.
+The first video-production phases use a manually selected sample story shaped like real ngest integration input.
 
-VidGen validates and normalizes once at the edge:
+This is a development transport substitute, not a second creative contract.
 
-    ngest response
-          |
-          v
-    validate/normalize
-          |
-          +--> CanonicalFeed
-          |
-          +--> CanonicalControl
-          |
-          +--> provenance/debug metadata
-          |
-          v
-      CanonicalInput
+Both fixture and live input should converge through the same validation/normalization semantics before story-level production logic begins.
 
-CanonicalInput is the durable structured input artifact for a run. It contains or references the normalized CanonicalFeed and CanonicalControl plus generation identity/provenance metadata.
+No demo-only story fields should be invented merely to make the fixture path easier.
 
-Feed analysis, editorial planning, scripting, and production must not contain ngest endpoint, pagination, authentication, or persistence semantics.
+## Canonical input and story fan-out
 
-Only the input boundary should need to understand supported external response/control versions.
+Phase 1 already persists CanonicalInput containing CanonicalFeed, CanonicalControl, fingerprint, and provenance.
 
-## Control boundary
+The single-story pipeline should build on that boundary.
 
-Controls represent administrator intent, preferences, and constraints. They are not pre-generated creative output.
+A later live run may contain multiple feed Articles, but each Article becomes an independent production unit.
 
-Ngest owns control persistence, Profile association, administrator configuration, authorization, and delivery.
+The exact StoryInput schema and story-production identity are intentionally deferred to Phase 2 planning. They should preserve Article provenance and relevant controls without dragging the whole feed into every downstream artifact when it is unnecessary.
 
-VidGen owns control validation at its semantic boundary, normalization, defaults, hard-constraint enforcement, preference handling, and all creative consequences.
+## Story package boundary
 
-See docs/control-interface.md.
+One story owns one self-contained production directory.
 
-## Input identity
+Conceptually:
 
-VidGen derives deterministic generation identity from generation-relevant canonical input:
+    story package
+      |
+      +-- story input / metadata
+      +-- source context actually used
+      +-- ClipPlan
+      +-- generated presenter/video/audio assets
+      +-- generation/provenance metadata
+      +-- final clip
 
-    CanonicalFeed
-    +
-    CanonicalControl
-            |
-            v
-    deterministic canonical serialization
-            |
-            v
-          SHA-256
-            |
-            v
-       inputFingerprint
+Shared engine code, provider credentials, and globally standardized intro/outro files are not copied into every story package. The package records the identities/versions needed to understand what was used.
 
-The bearer credential is never part of the creative fingerprint.
+A story failure must not make another story appear failed or successful.
 
-An ngest snapshot/revision may be retained as provenance/debugging metadata, but it must not by itself define VidGen generation identity.
+## Context preparation
 
-## Durable artifact model
+Context preparation is supporting work for ClipPlan, not a large independent editorial stage.
 
-The MVP uses filesystem artifacts plus structured metadata. A database is not required for the first end-to-end pipeline.
+Start with the normalized ngest story:
+- headline;
+- summary when present;
+- Article/source identity;
+- original publisher URL;
+- dates/byline/categories as available.
 
-The major pipeline artifacts are durable and inspectable:
+Publisher-page retrieval is conditional. If the supplied story data is sufficient to produce a grounded clip, do not fetch merely because a retrieval subsystem exists.
 
-    01 CanonicalInput.json
-    02 FeedAnalysis.json
-    03 EditorialPlan.json
-    04 Script.json
-    05 ProductionPlan.json
-    06 RenderManifest.json
-    07 final video
+When retrieval is required:
+- bound redirects;
+- enforce timeout and response-size limits;
+- constrain content types;
+- use SSRF-safe URL/network policy;
+- normalize untrusted publisher content before model use;
+- retain enough source/provenance metadata to audit what informed the plan.
 
-Exact filenames and directory layout are not locked.
+Broader web research requires a later explicit capability.
 
-All structured pipeline artifacts use VidGen-owned standardized JSON schemas and carry enough version/provenance metadata to identify their producer and upstream inputs.
+## ClipPlan boundary
 
-The final video is the terminal media artifact.
+ClipPlan is the only planned model-assisted creative artifact in the initial pipeline.
 
-Traceability must survive creative transformation:
+It fills a selected template. It does not invent the template.
 
-    rendered factual segment
-        -> Script segment
-        -> EditorialPlan story
-        -> supporting Article IDs
-        -> governed Article
-        -> original publisher URL
+A ClipPlan should eventually carry only the story-specific data the declared template requires, for example:
+- template ID/version;
+- presenter dialogue for required presenter slots;
+- headline/supporting text;
+- off-screen narration where required;
+- generated-content prompt/description;
+- closing content;
+- source/provenance support;
+- caution metadata where needed.
 
-## Model-output validation boundary
+Exact schema is deferred until Phase 3 planning.
 
-No downstream stage consumes raw or unvalidated model output.
+No downstream stage consumes raw model output. ClipPlan requires structured-output validation, runtime validation, deterministic semantic checks, and bounded repair/retry where appropriate.
 
-Model-assisted stages should combine:
-- provider-native structured output where available;
-- VidGen-owned JSON Schema validation;
-- runtime type validation;
-- deterministic semantic validators;
-- bounded repair/retry for malformed or incomplete output;
-- rejection when required provenance, Article support, or stage-owned semantics are missing.
+If media generation or assembly must infer missing story meaning, ClipPlan is incomplete.
 
-Exact libraries, schemas, retry counts, and repair strategies remain provisional.
+## Template boundary
 
-## Research/enrichment boundary
+Templates remove production reasoning.
 
-CanonicalInput remains the governed ngest input. Research/enrichment is downstream VidGen output and must not be confused with upstream canonical truth.
+A template defines deterministic assembly requirements:
+- ordered segments;
+- expected timing;
+- required media/content slot types;
+- standardized intro/outro positions;
+- which assets are generated versus fixed;
+- output requirements needed for assembly.
 
-VidGen may retrieve governed original publisher URLs for factual enrichment. Where practical, ordinary publisher-page acquisition should be performed by VidGen's bounded HTTP retrieval subsystem instead of consuming model URL-context/browsing capability merely to fetch content.
+ClipPlan fills only declared story-content slots.
 
-Retrieval must use explicit redirect, timeout, size, content-type, and SSRF-safe policies. Retrieved content remains untrusted input and must be normalized before model-assisted stages consume it.
+Adding a new template should normally require adding a template definition and any associated standardized media assets, not changing the story-reasoning engine.
 
-Broader web research beyond governed publisher URLs requires a separately explicit research capability.
+See docs/template-system.md.
 
-Research permission is not media-reuse permission. Publisher images/video may be used in production only when reuse is explicitly permitted.
+## Default template
 
-## Editorial pipeline boundary
+The locked default logical content structure is:
 
-FeedAnalysis and EditorialPlan are separate durable stages.
+    0-05 sec
+      Hook
+      Presenter
+      Headline treatment
 
-FeedAnalysis owns:
-- themes and clusters;
-- repeated entities/coverage;
-- candidate stories;
-- uncertainty/conflict;
-- Article-level support/provenance.
+    05-15 sec
+      Narration
+      Generated visual
 
-EditorialPlan owns:
-- final theme;
-- selected stories;
-- ordering/grouping;
-- opening/closing intent;
-- transitions;
-- control-driven editorial choices.
+    15-28 sec
+      Presenter
+      Supporting information
 
-EditorialPlan is a standardized JSON artifact and must not encode Remotion implementation details or invent the final composition system.
+    28-40 sec
+      Closing beat
 
-## Script boundary
+The MVP should generate only the story-specific media the template truly requires.
 
-Script is a standardized structured JSON artifact. Narration text is only one field.
+Current simplification target:
+- presenter/anchor clip(s);
+- one generated content clip;
+- voiceover for the content clip;
+- standardized premade intro/outro assets.
 
-Script segments should carry enough editorial semantics that ProductionPlan does not need to reinterpret story meaning, including concepts such as:
-- stable segment identity;
-- supporting Article IDs/provenance;
-- narration/presentation text;
-- intended duration;
-- emphasis/priority;
-- quoted or on-screen text;
-- visualizable entities/events/subjects;
-- transition intent;
-- factual or visual caution metadata.
+A supporting treatment must not become a separate generative subsystem unless evidence requires it. It may be part of presenter media, a fixed treatment, or simple deterministic FFmpeg-level presentation.
 
-If ProductionPlan would need to invent missing editorial semantics, the producer boundary is incomplete and planning must return to Script.
+The exact duration relationship between standardized intro/outro assets and the locked logical content beat timing should be qualified from the real assets in Phase 2 rather than guessed in documentation.
 
-## Human approval boundary
+## Provider boundary
 
-The MVP supports configurable approval gates.
+The MVP is Google-first, not Google-coupled.
 
-During development, the default gate is after Script and before expensive media generation. Fully automatic execution remains possible when gating is disabled.
+Keep thin provider-neutral requests/results at the VidGen boundary so story planning and FFmpeg assembly do not depend directly on provider response shapes.
 
-Exact CLI interaction and persisted approval-state shape remain provisional.
+Initial direction:
+- Veo for generated presenter/video work;
+- off-screen narration/voiceover mechanism remains unresolved;
+- provider jobs/assets retain story-local provenance and effective-input identity where useful.
 
-## Production architecture
+Do not build a large generalized provider framework before a second provider or real complexity requires it.
 
-The MVP uses a template-first hybrid production model.
+## Asset rights and trust
 
-The program has a stable deterministic broadcast shell and reusable scene/composition templates. Generated media fills declared slots instead of determining the fundamental program layout.
+Public accessibility is not reuse permission.
 
-Remotion components define deterministic scene behavior. Separate JSON template definitions expose production-facing capabilities such as:
-- content/media slots;
-- timing constraints;
-- safe areas;
-- supported media types;
-- configurable parameters;
-- responsive behavior.
+Publisher pages may be retrieved for factual context under bounded policy, but publisher images/video may enter a rendered clip only when reuse is explicitly permitted.
 
-ProductionPlan selects templates and fills their declared slots. Editorial stages do not import or depend on Remotion components.
+Generated media, approved stock/library media, and standardized VidGen-owned assets remain safe alternatives.
 
-The exact ProductionPlan schema is intentionally deferred until real Script outputs have been evaluated.
+Provider output, publisher content, URLs, and administrator text remain untrusted inputs.
 
-## Generated media and provider boundary
+## FFmpeg assembly boundary
 
-The MVP is Google-first, with Veo as the initial generated-video and presenter path. Provider-specific details remain behind VidGen adapters so upstream and downstream stages consume provider-neutral contracts.
+Remotion is not part of the current MVP.
 
-Preferred visual fallback order:
-1. Veo-generated video when motion materially benefits the scene;
-2. generated still imagery;
-3. deterministic Remotion motion graphics/text treatments;
-4. template-only fallback.
+FFmpeg owns deterministic assembly and finishing needed by the fixed templates, including where appropriate:
+- normalization of resolution/frame rate/codec;
+- trimming to template timing;
+- concatenation;
+- voiceover/audio replacement or muxing;
+- audio normalization;
+- simple deterministic overlays/treatments;
+- burned captions if enabled;
+- final H.264 MP4 encoding.
 
-Generated video is an enhancement, not a single point of failure.
+The assembly layer consumes the selected template, validated ClipPlan, local generated assets, and standardized assets. It must not reinterpret story meaning.
 
-The anchor/presenter is first-class from the beginning. The initial presenter path uses scripted text plus source/reference images with Veo. The resulting presenter clip is a timed media asset consumed by composition.
-
-Exact Veo version, identity-continuity strategy, pronunciation/dialogue controls, generated-audio handling, and off-screen narration ownership remain open for provider qualification and production planning.
-
-## Asset rights boundary
-
-Production asset priority is:
-1. governed publisher media only when reuse is explicitly permitted;
-2. generated media;
-3. approved stock/library assets;
-4. deterministic templates/graphics.
-
-Public accessibility does not imply licensing permission. Media found during article-page retrieval must not automatically enter production.
-
-## Composition, design system, and rendering
-
-Remotion owns deterministic program composition:
-- program shell;
-- scene templates;
-- typography;
-- lower thirds;
-- source labels;
-- headline treatments;
-- quote/stat cards;
-- captions;
-- logos/branding;
-- intro/outro;
-- transitions;
-- music-bed placement;
-- stingers;
-- audio ducking rules;
-- safe areas;
-- responsive layout behavior.
-
-These should be driven by reusable design-system tokens/configuration rather than generated ad hoc per edition.
-
-FFmpeg owns lower-level media processing where appropriate:
-- encoding;
-- muxing;
-- normalization;
-- conversion/transcoding;
-- other media operations better expressed outside the Remotion composition layer.
+A separate persisted RenderManifest is not required as a conceptual pipeline stage. Emit render/debug metadata only if implementation evidence shows it is useful.
 
 ## Output baseline
 
-The first-class output baseline is:
-- 1920x1080 16:9 landscape master;
-- 1080x1920 9:16 derived vertical variant;
-- responsive templates from the beginning;
-- MP4 container;
-- H.264 video;
-- 30 fps;
-- burned-in captions;
-- configurable edition duration.
+Initial first-class output:
+- 1080x1920;
+- 9:16;
+- MP4;
+- H.264;
+- 30 fps.
 
-1:1 output and exact codec/audio/loudness tuning remain deferred.
+16:9, 1:1, responsive-template logic, and advanced composition are deferred.
 
-## Runtime recovery and reuse
+## Recovery and reuse
 
-The MVP processes one edition at a time.
+The initial execution boundary is one story.
 
-Every completed valid stage is persisted so an interrupted run can resume from the last reusable stage rather than repeat all prior work.
+Persist enough completed story-local work to debug failures and avoid needlessly regenerating expensive media.
 
-Successful expensive provider assets may be reused when their effective generation inputs match.
+A sophisticated global cache is not required. Asset reuse can initially be local to the story package and keyed by effective generation inputs.
 
-Identical CanonicalInput + CanonicalControl must not automatically return a previous final edition. Valid intermediate work and provider assets may be reused while final composition/rendering may be regenerated.
+External operations must be bounded and failures explicit.
 
-Provider/network retries are bounded. Provider spend is constrained by a configurable per-run ceiling. No edition-wide hard wall-clock limit is required initially, but individual external operations must be bounded, observable, and fail explicitly.
-
-Exact retry/backoff, cache keys, spend defaults, and invalidation semantics remain provisional.
-
-## Production-plan checkpoint
-
-The high-level production architecture is chosen; the exact ProductionPlan contract is not.
-
-After Phase 4, generate and inspect several materially different Script artifacts before locking ProductionPlan v1.
-
-Observed Script requirements should determine the exact durable production concepts and fields while preserving the already-selected boundaries:
-- template-first composition;
-- first-class presenter scenes;
-- provider-neutral generated-media requests;
-- Veo as the initial video/presenter provider;
-- deterministic fallback hierarchy;
-- Remotion + FFmpeg composition;
-- responsive 16:9 and 9:16 output;
-- provenance and resumability.
-
-If downstream production work would need to invent Script-owned semantics, return Planning needed and correct the producer boundary first.
+No approval-state machine is required for the first end-to-end pipeline. Human inspection occurs after generation while the pipeline is being developed.
 
 ## Deployment shape
 
-The MVP deployment shape is a CLI process with filesystem-backed run artifacts and one edition at a time.
+The MVP is a manually invoked CLI with filesystem-backed artifacts.
 
-Future service, worker, API, queue, or database topology remains open. Do not introduce distributed infrastructure before real workload evidence requires it.
+Future live feed processing should reuse the same story pipeline by fanning each supplied Article into an independent production package.
+
+Service/API/worker/queue/database topology remains deferred until real workload evidence requires it.
