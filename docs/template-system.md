@@ -57,13 +57,13 @@ A template may describe:
 - whether a segment requires off-screen narration;
 - basic output/normalization constraints.
 
-For Phase 3, each content slot should be able to express no more than the generic semantics needed to fill it, conceptually:
+Phase 3 implemented the minimal generic authoring semantics required on every content slot:
 
     id
     usage: spoken | display
     instruction
 
-The exact field names remain an implementation decision. The important rule is that core ClipPlan generation must not contain hard-coded knowledge that a particular slot ID means hook, narration, headline, or closing.
+These are the implemented field names. Core ClipPlan generation remains free of hard-coded knowledge that a particular slot ID means hook, narration, headline, or closing.
 
 Avoid provider-specific model parameters in ordinary template definitions. Provider tuning belongs to provider/runtime configuration.
 
@@ -153,7 +153,7 @@ For the default template, the intended relationship is:
     supporting-anchor
       <- supporting-information + closing
 
-Phase 3 does not generate separate media prompts for these roles. Phase 4 may translate these deterministic inputs into provider-specific requests behind its provider boundary.
+Phase 3 generates no separate media prompts for these roles. Phase 4 may translate these deterministic inputs into provider-specific requests behind its provider boundary.
 
 ## Validation
 
@@ -167,7 +167,7 @@ Before generation/assembly, VidGen should be able to prove:
 - generated asset expectations are well-defined;
 - resulting media can be normalized to the template's assembly constraints.
 
-Phase 2 now provides the strict AssemblyTemplate schema and runtime validator. Phase 3 should consume that validated contract rather than redefine template structure.
+The strict AssemblyTemplate schema/runtime validator now includes the Phase 3 slot authoring contract. The implemented ClipPlan producer consumes that validated template directly and preserves generic non-default/non-40-second template validation.
 
 ## Story package linkage
 
