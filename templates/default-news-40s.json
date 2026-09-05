@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "1",
+  "id": "default-news-40s",
+  "version": "1",
+  "output": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "container": "mp4",
+    "videoCodec": "h264"
+  },
+  "contentSlots": [
+    { "id": "hook" },
+    { "id": "headline" },
+    { "id": "narration" },
+    { "id": "supporting-information" },
+    { "id": "closing" }
+  ],
+  "generatedAssetRoles": [
+    { "id": "opening-anchor", "kind": "presenter" },
+    { "id": "content-video", "kind": "video" },
+    { "id": "content-voiceover", "kind": "voiceover" },
+    { "id": "supporting-anchor", "kind": "presenter" }
+  ],
+  "standardizedAssetRoles": [
+    { "id": "intro", "placement": "before-story" },
+    { "id": "outro", "placement": "after-story" }
+  ],
+  "segments": [
+    {
+      "id": "hook",
+      "startSeconds": 0,
+      "endSeconds": 5,
+      "contentSlots": ["hook", "headline"],
+      "generatedAssetRoles": ["opening-anchor"]
+    },
+    {
+      "id": "content",
+      "startSeconds": 5,
+      "endSeconds": 15,
+      "contentSlots": ["narration"],
+      "generatedAssetRoles": ["content-video", "content-voiceover"]
+    },
+    {
+      "id": "support",
+      "startSeconds": 15,
+      "endSeconds": 28,
+      "contentSlots": ["supporting-information"],
+      "generatedAssetRoles": ["supporting-anchor"]
+    },
+    {
+      "id": "closing",
+      "startSeconds": 28,
+      "endSeconds": 40,
+      "contentSlots": ["closing"],
+      "generatedAssetRoles": ["supporting-anchor"]
+    }
+  ]
+}

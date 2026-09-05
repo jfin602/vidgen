@@ -15,6 +15,7 @@ import {
 } from '../../../src/app/phase-1-input-run.ts';
 import { buildCanonicalInput, fingerprintCanonicalInput } from '../../../src/core/canonical-input.ts';
 import { VidGenError } from '../../../src/core/error.ts';
+import { VIDGEN_ENGINE_VERSION } from '../../../src/version.ts';
 import { validManifest } from '../../fixtures/canonical-input.ts';
 
 const bearerSentinel = 'vidgen-phase-1-bearer-sentinel';
@@ -47,7 +48,7 @@ test('CLI persists one safe, validated CanonicalInput under its artifacts-root o
         status: 'input_ready',
         startedAt: metadata.startedAt,
         endedAt: metadata.endedAt,
-        engineVersion: '0.2.2',
+        engineVersion: VIDGEN_ENGINE_VERSION,
         inputFingerprint: canonical.inputFingerprint,
         canonicalInputArtifact: CANONICAL_INPUT_ARTIFACT_NAME,
       });

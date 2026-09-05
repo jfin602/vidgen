@@ -10,6 +10,7 @@ export type VidGenErrorCode =
   | 'artifact'
   | 'canonical_input'
   | 'story_selection'
+  | 'assembly_template'
   | 'ngest_authentication'
   | 'ngest_http'
   | 'ngest_timeout'
