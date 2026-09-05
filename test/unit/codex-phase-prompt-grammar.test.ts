@@ -593,7 +593,6 @@ test('correction closeout classification uses only agreeing filename and TASK ti
 
 test('documented runner model labels stay explicit and finite', () => {
   assert.deepEqual(Object.keys(MODEL_CONFIGS), [
-    'Luna Low',
     'Luna Medium',
     'Luna High',
     'Terra Medium',
@@ -606,9 +605,8 @@ test('documented runner model labels stay explicit and finite', () => {
   ]);
 });
 
-test('Luna and Medium recommendation labels parse without broadening unknown labels', () => {
+test('supported Luna and Medium recommendation labels parse without broadening unknown labels', () => {
   for (const config of [
-    'Luna Low',
     'Luna Medium',
     'Luna High',
     'Terra Medium',
@@ -620,6 +618,14 @@ test('Luna and Medium recommendation labels parse without broadening unknown lab
       config,
     );
   }
+  assert.throws(
+    () =>
+      parsePrompt(
+        prompt(1, { config: 'Luna Low' }).filename,
+        prompt(1, { config: 'Luna Low' }).text,
+      ),
+    /Unknown recommended configuration/,
+  );
   assert.throws(
     () =>
       parsePrompt(

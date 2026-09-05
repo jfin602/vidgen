@@ -360,7 +360,6 @@ const testOutput = (interactive = false) => {
 
 test('resolves every repository recommendation to its verified concrete CLI configuration', () => {
   const expected: Record<string, { model: string; reasoning: string }> = {
-    'Luna Low': { model: 'gpt-5.6-luna', reasoning: 'low' },
     'Luna Medium': { model: 'gpt-5.6-luna', reasoning: 'medium' },
     'Luna High': { model: 'gpt-5.6-luna', reasoning: 'high' },
     'Terra Medium': { model: 'gpt-5.6-terra', reasoning: 'medium' },
