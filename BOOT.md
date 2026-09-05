@@ -2,7 +2,7 @@
 
 This is the session router for repository-aware work in jfin602/vidgen.
 
-VidGen is early-stage. Phase 1 has been implemented, reviewed, and closed. The product direction was deliberately simplified after Phase 1: ngest supplies a pre-curated set of production-worthy stories, and VidGen's primary production unit is now one self-contained, postable clip per story.
+VidGen is early-stage. Phases 1 and 2 have been implemented, reviewed, and closed. Phase 3 is now the current roadmap phase. The product direction was deliberately simplified after Phase 1: ngest supplies a pre-curated set of production-worthy stories, and VidGen's primary production unit is now one self-contained, postable clip per story.
 
 The initial engineering worksheet is historical decision context. Several of its promoted edition/newscast decisions were superseded by the single-story rebase on 2026-09-05. Current architecture and roadmap docs govern active direction.
 
@@ -23,9 +23,10 @@ The initial engineering worksheet is historical decision context. Several of its
 - Remotion: not part of the current MVP; defer programmable composition until evidence requires it.
 - Initial output: 1080x1920 9:16 H.264 MP4 at 30 fps.
 - Phase 1 completion version: 0.1.5.
-- Current package baseline: 0.2.0.
-- Current roadmap phase: Phase 2 — Single-story development foundation.
-- Current repository state: Phase 1 authenticated ngest acquisition, canonicalization, fingerprinting, CLI run, and durable CanonicalInput are implemented. Single-story clip generation is not yet implemented.
+- Phase 2 completion version: 0.2.5.
+- Current package baseline: 0.3.0.
+- Current roadmap phase: Phase 3 — Story context and ClipPlan.
+- Current repository state: Phase 1 authenticated ngest acquisition/canonicalization and Phase 2 local fixture ingress, explicit StoryInput identity, validated assembly-template contract, and manual story workspace are implemented. Publisher retrieval and ClipPlan generation are not yet implemented.
 - Current roadmap: docs/roadmap/initial-roadmap.md.
 - Current architecture: docs/architecture.md.
 - Current template contract: docs/template-system.md.
@@ -170,12 +171,12 @@ Run artifacts are written under .codex-runs/ and ignored by Git.
 
 ## Current next action
 
-Phase 1 is closed at 0.1.5 and the repository remains on the 0.2.0 Phase 2 baseline.
+Phases 1 and 2 are closed at 0.1.5 and 0.2.5 respectively, and the repository is on the 0.3.0 Phase 3 baseline.
 
-Before Phase 2 implementation:
+Before Phase 3 implementation:
 
     /prompt-ass
     -> /prompt-plan
-    -> /prompt-write p2
+    -> /prompt-write p3
 
-Phase 2 should build a manual ngest-shaped single-story fixture path, story package boundary, and assembly-template contract on top of the useful Phase 1 canonical-input foundation.
+Phase 3 should build bounded story-context preparation and one validated ClipPlan on top of the Phase 2 StoryInput, template, and story-workspace boundaries. It must not invent publisher-retrieval or model-output semantics without planning them explicitly.
