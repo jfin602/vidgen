@@ -1,52 +1,111 @@
 # Project Overview
 
-Status: DRAFT / PROVISIONAL
+Status: CURRENT DIRECTION / EARLY-STAGE
 
 ## Purpose
 
-VidGen is intended to turn a bounded, governed news feed into a cinematic or broadcast-style video edition.
+VidGen turns a bounded, governed news feed into a cinematic or broadcast-style video edition.
 
-The first concrete integration target is ngest. ngest can provide a Profile-scoped VidGen manifest containing governed feed items plus bounded administrator controls. VidGen consumes that input as an external engine rather than becoming part of the ngest aggregation runtime.
+The primary production integration is ngest. VidGen receives its own bearer credential and calls a dedicated ngest VidGen integration endpoint. That endpoint composes the same governed Distribution Profile feed semantics used by ngest's outward distribution system with Profile-associated VidGen controls.
 
-## Core direction
+Generic Distribution consumers, including PHP integration packages, remain unaware of VidGen-only controls.
 
-A VidGen run may eventually include:
+## Core architectural law
 
-1. acquire and validate the input manifest;
-2. research or enrich selected stories within explicit safety and provenance limits;
-3. develop an edition theme and story structure;
-4. write a script;
-5. produce scene and shot plans;
-6. generate or acquire allowed media assets through provider adapters;
-7. compose narration, visuals, titles, transitions, and timing;
-8. render a final video;
-9. retain enough run metadata and artifacts to explain what was produced from which input.
+Ngest determines which governed Articles are available in the feed.
 
-The exact set of stages, providers, data models, and storage technology is not yet locked.
+VidGen determines what those Articles mean together and how to turn them into a program.
+
+Administrator influence reaches VidGen through bounded controls containing intent, preferences, and constraints rather than pre-generated themes, rankings, scripts, scene prompts, or production decisions.
 
 ## Boundary with ngest
 
-ngest should remain the authority for its own canonical feed selection, source provenance, article destinations, and administrator-controlled manifest input.
+Ngest owns:
+- approved-source trust;
+- collection;
+- normalization;
+- canonical Article identity;
+- provenance;
+- duplicate handling;
+- moderation;
+- canonical outward eligibility;
+- Distribution Profile selection;
+- feed ordering;
+- exact original publisher URLs;
+- bearer-token authorization;
+- Profile-associated persistence and delivery of VidGen controls.
 
-VidGen should not reimplement ngest source collection, moderation, duplicate policy, canonical feed ordering, or Profile filtering simply to produce a video.
+VidGen owns:
+- authenticated acquisition from the ngest VidGen endpoint;
+- boundary validation and normalization;
+- canonical feed and control models;
+- input fingerprinting;
+- bounded enrichment/research where later permitted;
+- feed analysis and theme discovery;
+- story ranking, grouping, selection, and editorial framing;
+- script generation;
+- source traceability through generated artifacts;
+- production planning;
+- media and narration generation;
+- captions and graphics;
+- assembly and rendering;
+- final artifacts and run provenance.
 
-VidGen owns downstream creative decisions and generated artifacts.
+VidGen must not reproduce ngest's Source trust, moderation, duplicate, Profile filtering, or canonical outward eligibility logic.
+
+VidGen must not connect directly to ngest's database.
+
+VidGen does not use the ngest Profile digest as creative input. Competition-visible editorial intelligence belongs inside VidGen.
+
+## Intended pipeline
+
+A VidGen run is expected to evolve through explicit intermediate stages:
+
+    ngest VidGen endpoint
+            |
+            v
+    CanonicalFeed + CanonicalControl
+            |
+            v
+       FeedAnalysis
+            |
+            v
+      EditorialPlan
+            |
+            v
+          Script
+            |
+            v
+      ProductionPlan
+            |
+            v
+     generated media
+            |
+            v
+     composition/render
+            |
+            v
+       final program
+
+Intermediate artifacts should remain inspectable enough to support reproducibility, debugging, review, retry/recovery, and hackathon demonstration.
 
 ## Initial product goal
 
-The first useful milestone is a reproducible end-to-end prototype that can consume one valid feed manifest and produce one coherent news-show-style video edition.
+The first useful milestone is a reproducible engine foundation that can authenticate to the dedicated ngest VidGen endpoint, validate and normalize its response, create deterministic generation identity, and expose clean canonical input to later creative stages.
 
-Quality matters, but the early architecture should make it easy to replace individual research, script, media-generation, speech, composition, or render providers as the project learns.
+After that foundation, the roadmap develops FeedAnalysis, EditorialPlan, and Script as separate visible stages before locking the production-plan contract.
 
-## Open questions
+## Intentionally open questions
 
 Examples intentionally left open:
-- exact manifest client and authentication flow;
-- persistence technology;
+- exact ngest VidGen route name;
+- exact ngest persistence/table schema for controls;
+- exact token/scope representation inside ngest;
+- exact control v1 field set, ranges, and defaults;
+- VidGen persistence technology;
 - job/queue topology;
-- story selection policy;
 - research providers;
-- script/model providers;
+- model/provider selection;
 - image/video generation providers;
 - TTS/narration provider;
 - compositor/render stack;
@@ -54,7 +113,7 @@ Examples intentionally left open:
 - approval/review workflow;
 - publishing destinations;
 - cost controls;
-- retry/resume semantics;
-- public API or UI requirements.
+- detailed retry/resume semantics;
+- public VidGen API or UI requirements.
 
-These should be decided through planning and evidence, not assumed by bootstrap docs.
+These should be decided through planning and evidence rather than assumed by bootstrap documentation.
