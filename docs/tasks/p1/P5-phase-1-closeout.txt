@@ -1,0 +1,114 @@
+TASK: Phase 1 / P5 — Phase 1 closeout validation
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Sol High`.
+
+VERSIONING
+- This prompt's assigned project version is `0.1.5`.
+
+CONTEXT
+
+This is the final Phase 1 closeout prompt. P1-P4 should have produced:
+- a Node.js + TypeScript production foundation;
+- secure one-page ngest manifest acquisition;
+- schema-backed CanonicalFeed, CanonicalControl, and CanonicalInput;
+- deterministic SHA-256 inputFingerprint;
+- a CLI Phase 1 run service;
+- durable filesystem run metadata and CanonicalInput artifacts.
+
+Closeout changes require human review and must remain uncommitted. Do not broaden the phase.
+
+GOAL
+
+Rigorously validate the complete Phase 1 boundary, repair only bounded Phase 1 defects discovered by validation, and leave a review-ready repository proving that the input foundation is safe for Phase 2 planning.
+
+VALIDATION CHECKLIST
+
+1. Repository/runtime integrity.
+   - Read BOOT.md and the Phase 1 roadmap section again.
+   - Confirm package-lock.json is absent.
+   - Confirm existing Codex runner source/behavior was not unnecessarily changed.
+   - Run git diff --check.
+   - Run npm test and npm run check.
+   - Run the VidGen CLI help surface.
+
+2. Phase 1 architecture.
+   - Confirm ngest authentication/transport details stop at the integration boundary.
+   - Confirm no direct ngest database/persistence dependency exists.
+   - Confirm no ngest digest is treated as creative input.
+   - Confirm CanonicalInput contains VidGen-owned normalized feed/control semantics rather than raw transport state.
+   - Confirm no Phase 2 FeedAnalysis/research/provider/render behavior leaked into Phase 1.
+
+3. Manifest ingress safety.
+   - Verify the bearer token is only used for the outbound Authorization header.
+   - Inspect error/log/artifact paths for secret leakage.
+   - Verify 401/403, other HTTP errors, timeout/transport errors, invalid JSON, malformed envelope, and unsupported continuation remain distinguishable.
+   - Verify non-null nextCursor fails closed and cannot yield a successful or partial CanonicalInput.
+   - Do not invent or add cursor request syntax during closeout.
+
+4. Canonical contracts.
+   - Verify the CanonicalFeed, CanonicalControl, and CanonicalInput JSON Schemas parse and match the runtime validator intent.
+   - Verify article order and originalUrl/articleId traceability are preserved.
+   - Verify publisher imageUrl is treated only as metadata and no rights assumption is encoded.
+   - Verify provisional control fields are not prematurely interpreted.
+   - Verify obvious secret-bearing control data is rejected.
+
+5. Fingerprint semantics.
+   - Verify inputFingerprint is lowercase SHA-256 over deterministic canonical feed + control semantics only.
+   - Verify recursively sorted object keys and preserved array order.
+   - Verify snapshotRevision/apiVersion/endpoint URL/bearer/timestamps/digest/export metadata do not affect the creative fingerprint.
+   - Verify semantic feed/control changes do affect it.
+
+6. Artifact/run behavior.
+   - Verify runId is distinct from inputFingerprint.
+   - Verify repeated identical inputs create distinct runs rather than silently returning an old final/run result.
+   - Verify run.json terminal state is honest.
+   - Verify failed runs do not leave a successful-looking CanonicalInput artifact.
+   - Verify canonical artifact writes are atomic and inspectable.
+   - Verify no raw bearer token or Authorization header appears in persisted artifacts.
+
+7. Focused evidence.
+   - Run the local HTTP-server ingress tests.
+   - Run canonical normalization/fingerprint tests.
+   - Run CLI/application end-to-end tests using temp artifacts.
+   - Run inherited runner regression tests.
+   - Do not claim live ngest qualification; this phase uses deterministic local/mock proof unless live evidence is explicitly available and authorized.
+
+8. Known deferred dependency.
+   - Record in the final response that exact ngest continuation request syntax is still not defined in the current VidGen repository.
+   - Phase 1 intentionally fails closed on nextCursor rather than guessing producer-owned semantics.
+   - This must be resolved before production use of multi-page manifests or any downstream stage that requires them.
+
+BOUNDED REPAIRS
+
+If validation exposes a defect that is clearly inside Phase 1 scope, fix it, add/adjust focused regression coverage, and rerun the relevant validation.
+
+Do not add:
+- pagination request guessing;
+- research/enrichment;
+- FeedAnalysis;
+- Google AI/Veo;
+- media generation;
+- Remotion/FFmpeg;
+- databases/queues;
+- resume/cache systems;
+- publishing;
+- unrelated refactors.
+
+VERSION / REVIEW STATE
+
+If Phase 1 validation succeeds, set package.json version to 0.1.5.
+
+Do not commit closeout changes. Leave all closeout edits, including the version change and any bounded fixes, for human review as required by the phase runner.
+
+FINAL RESPONSE
+
+Summarize:
+- validation commands actually run and their outcomes;
+- files/areas inspected;
+- any bounded defects fixed;
+- secret-safety/fingerprint/artifact evidence;
+- the explicit deferred nextCursor request-semantics dependency;
+- whether Phase 1 is ready for human review and subsequent /closeout.
+
+Do not claim live provider, live ngest, render, browser, or deployment behavior that was not actually observed.
