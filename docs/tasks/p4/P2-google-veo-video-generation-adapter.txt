@@ -1,0 +1,281 @@
+TASK: Phase 4 / P2 — Google Veo video-generation adapter
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- This prompt's assigned project version is `0.4.2`.
+
+CONTEXT
+
+Read BOOT.md first, then docs/architecture.md, docs/template-system.md, docs/roadmap/initial-roadmap.md, P1, the generated-media core contracts/tests, the existing Google Gemini text adapter, and current official Google Veo API documentation before editing.
+
+Official documentation to verify at implementation time:
+- https://ai.google.dev/gemini-api/docs/veo
+
+The project is Google-first but not Google-coupled. Keep Veo request/response details inside one thin integration adapter.
+
+Current planning assumptions from Google's official Veo 3.1 documentation must be rechecked before implementation:
+- portrait 9:16 generation is supported;
+- Veo output is provider media, not the final VidGen 30 fps assembly artifact;
+- Veo 3.1 supports native audio;
+- up to three subject/reference images are supported on compatible models;
+- reference-image and 1080p generation have duration constraints;
+- video extension is an explicit provider operation on compatible Veo 3.1 models;
+- generated provider files are temporary and should be downloaded promptly.
+
+Do not move Phase 5 normalization/trimming into this adapter merely because Veo's native duration/frame rate differs from the AssemblyTemplate target.
+
+GOAL
+
+Implement the smallest Google Veo REST adapter behind P1's provider-neutral VideoGenerationClient boundary for:
+- presenter generation from exact ClipPlan spoken text plus approved local reference images;
+- generated content/B-roll video from deterministic unit content;
+- bounded extension when one provider generation cannot nominally cover the target template segment;
+- prompt-safe, secret-safe, immediately downloaded raw video results.
+
+SCOPE
+
+Implement:
+- Google Veo runtime configuration;
+- deterministic provider request construction from P1 video-generation requests;
+- start/poll/download lifecycle;
+- bounded video extension for target-duration coverage;
+- deterministic presenter speech chunking where an extension is required;
+- strict network/response/download safety;
+- fake-fetch/provider lifecycle tests;
+- version/test wiring.
+
+Do not implement:
+- media-workflow persistence/CLI;
+- anchor-reference filesystem loading;
+- TTS/voiceover;
+- FFmpeg/ffprobe;
+- final frame-rate/resolution normalization;
+- live provider qualification beyond deterministic tests.
+
+IMPLEMENTATION REQUIREMENTS
+
+1. Thin provider adapter.
+   - Implement P1's VideoGenerationClient.
+   - Core/application code must receive only the provider-neutral result.
+   - Do not export raw Veo operation/result envelopes.
+   - Do not add a general provider registry/framework.
+
+2. Runtime configuration.
+   - Reuse `GEMINI_API_KEY` as the Google credential.
+   - Add explicit runtime model selection such as `VIDGEN_VIDEO_MODEL`.
+   - Do not freeze a Veo model ID in source or durable template data.
+   - Missing/blank credential or model must fail before network activity.
+   - Validate model configuration before interpolating it into a path; reject slash/query/fragment/path-traversal shaped values rather than accepting arbitrary endpoint fragments.
+   - Never print or persist the API key.
+
+3. REST implementation.
+   - Prefer Node's built-in `fetch`; do not add `@google/genai` or another SDK solely for this adapter.
+   - Use Google's fixed Generative Language v1beta API base and the current official long-running video-generation endpoint shape.
+   - At implementation time, verify current fields/operation semantics against official docs instead of copying stale examples.
+   - Start generation with one video result.
+   - Request portrait 9:16.
+   - Keep the Phase 4 raw-generation target at 720p so compatible Veo extension remains available; Phase 5 owns normalization to 1080x1920/30 fps.
+   - Request an initial duration compatible with reference-image generation and the current Veo API. Under the current documented contract, use an 8-second initial generation where required.
+   - Do not claim the returned raw media itself satisfies the final AssemblyTemplate technical output contract.
+
+4. Presenter generation.
+   - A presenter unit requires one to three approved provider-neutral reference images.
+   - Reject zero reference images for a presenter request.
+   - Reject more than the provider-supported count.
+   - Pass only the in-memory approved image bytes/MIME types from P1; do not fetch a publisher/source image URL.
+   - Prompt deterministically from unit content:
+     * preserve the intended anchor's appearance from supplied references;
+     * speak only the supplied presenter spoken text;
+     * do not add dialogue;
+     * do not add readable/generated on-screen text;
+     * do not add unsupported story facts.
+   - Display-slot context may influence the visual/news context but must not be converted into spoken dialogue.
+
+5. Generated content/B-roll.
+   - A video-only unit does not require anchor references.
+   - Build a deterministic visual prompt from the unit's supplied content.
+   - The prompt must:
+     * remain grounded in supplied ClipPlan text;
+     * avoid invented specific facts;
+     * request no dialogue/voice narration;
+     * request no readable generated text;
+     * avoid publisher-media reuse.
+   - Veo native/ambient audio may exist in the raw output. Phase 5 owns whether it is muted/replaced/mixed.
+
+6. Duration and extension strategy.
+   - Treat provider generation duration as raw coverage, not a template rewrite.
+   - If the target segment is shorter than the initial generated clip, do not trim in Phase 4; record the raw nominal duration and let Phase 5 trim.
+   - If targetDurationSeconds exceeds the initial generated coverage:
+     * use Veo's documented video-extension path only on a configured model that supports it;
+     * each extension is an explicit required generation operation, not a retry/reflection call;
+     * continue until nominal generated coverage meets/exceeds the target;
+     * enforce a small explicit/injectable maximum extension count and fail before runaway spend;
+     * fail clearly if the configured model does not support required extension.
+   - Do not silently switch to a different model.
+
+7. Presenter speech across extensions.
+   - When a presenter target requires multiple provider chunks, partition the already validated exact spokenText deterministically across initial/extension generations.
+   - Partition at word/punctuation boundaries using target/provider chunk duration proportions.
+   - The concatenation of chunk dialogue text must equal the original spokenText modulo only existing whitespace normalization; no words may be added, dropped, duplicated, summarized, or rewritten.
+   - Extension prompts should preserve the same presenter and scene continuity and speak only their assigned remaining text.
+   - Add focused tests for exact reconstruction.
+   - Do not call a text model to rewrite dialogue for duration.
+
+8. Content-video extension.
+   - An extension prompt for non-presenter video should request deterministic continuation of the same supplied visual treatment.
+   - Do not introduce new story claims to make the extension interesting.
+
+9. Long-running operation polling.
+   - Poll only a provider-returned operation name that is validated as a safe relative Google API operation identifier.
+   - Do not accept an arbitrary absolute URL from the provider response.
+   - Bound:
+     * total generation/poll timeout;
+     * poll interval;
+     * maximum poll response bytes;
+     * maximum poll iterations if useful.
+   - Make time/sleep/fetch injection testable.
+   - Non-completed/failed/malformed operations must fail safely.
+   - Never execute tools/functions returned by a malformed provider response.
+
+10. Download immediately.
+   - Download the completed generated video immediately rather than persisting only a temporary provider URI.
+   - Treat the returned download URI as untrusted input.
+   - Require HTTPS.
+   - Restrict credential-bearing requests to an explicit Google API host allowlist/suffix accepted by the current documented response behavior.
+   - Never send `GEMINI_API_KEY` to an arbitrary host.
+   - Use bounded/manual redirect handling if the documented download flow redirects; revalidate every redirect target before forwarding credentials.
+   - Bound downloaded video bytes with an injectable maximum.
+   - Reject empty/oversized/obviously malformed download responses.
+   - Return raw bytes plus MIME type through the provider-neutral result.
+   - Do not persist provider URLs as the durable asset identity.
+
+11. Extension input safety.
+   - If the REST extension contract requires re-uploading the prior generated video, use the just-downloaded provider result bytes through the documented field shape.
+   - Bound the re-upload size.
+   - Do not read unrelated local files or arbitrary URLs.
+   - If the official API shape has changed, implement the current documented equivalent while preserving the provider-neutral boundary and tests.
+
+12. Reference-image encoding.
+   - Accept only P1-approved image MIME types.
+   - Encode bytes as required by the current Veo REST contract.
+   - Do not include absolute local paths in provider requests or public errors.
+   - Do not persist base64 request content.
+
+13. Result/provenance.
+   Return enough provider-neutral evidence for P4 to persist:
+   - provider identity;
+   - configured/returned model where available;
+   - operation/request IDs for initial generation and extensions;
+   - MIME type;
+   - raw generated bytes;
+   - nominal provider duration/coverage;
+   - number of generation operations if useful for cost observability.
+
+   Do not return:
+   - API key;
+   - raw prompts as durable metadata;
+   - provider response bodies;
+   - reference image base64;
+   - temporary provider URI as the asset identity.
+
+14. Cost observability.
+   - Expose safe operation counts and nominal generated seconds where deterministically known.
+   - Do not hard-code dollar prices into core contracts or durable artifacts.
+   - Do not implement billing/account APIs.
+
+15. Error handling.
+   - Add/reuse one narrow media-provider error category only if needed for stable recovery.
+   - Public errors must not contain:
+     * API key;
+     * full story/dialogue prompt;
+     * reference-image bytes/base64;
+     * raw provider body;
+     * download URI query secrets.
+   - Timeout, HTTP failure, malformed operation, failed provider job, unsafe URI, and invalid video body must fail explicitly.
+
+16. No hidden retry policy.
+   - Do not add generic automatic retries/backoff in this task.
+   - Required polling and deterministic extension are lifecycle operations, not retries.
+   - A failed generation returns failure for a later human/application rerun.
+
+17. Version/test wiring.
+   - Set package.json and src/version.ts to 0.4.2.
+   - Keep package-lock.json absent.
+   - Add adapter tests to the normal application test path.
+
+FOCUSED TESTS
+
+Use injected fake fetch/time boundaries to prove:
+- missing key/model fails before fetch;
+- one <=8-second content request starts, polls, downloads, and returns one bounded provider-neutral result;
+- presenter request sends one to three supplied reference images and exact assigned dialogue;
+- presenter with zero or too many references fails before network;
+- a target longer than initial coverage performs the required bounded extension lifecycle;
+- configured model without extension capability fails clearly when extension is necessary;
+- presenter dialogue partitioning reconstructs the original exact text without additions/drops/duplicates;
+- content extension does not invent a second story prompt/claim;
+- result preserves operation IDs/nominal generated seconds without exposing raw response envelopes;
+- timeout, non-2xx, failed operation, malformed JSON, missing video, oversized response, oversized video, unsafe download URL, and unsafe redirects fail safely;
+- the API key is never sent outside allowed Google hosts;
+- raw provider body, API key, full prompts, and image base64 never appear in public errors;
+- no provider SDK dependency/package-lock is added.
+
+REGRESSION COVERAGE
+
+Run:
+- Google Veo adapter tests;
+- P1 generated-media contract/resolution tests;
+- ClipPlan/template tests;
+- Phase 3 Google text adapter tests;
+- ClipPlan workflow/story-workspace/CLI tests;
+- inherited Phase 1/2 tests;
+- runner tests;
+- npm test;
+- npm run check;
+- git diff --check.
+
+PRODUCER / CONSUMER BOUNDARY
+
+Downstream-required capability:
+raw presenter/content video bytes plus safe provenance whose generation lifecycle may require polling and deterministic extension, without exposing Veo shapes to application code
+
+Owning implementation/export:
+Google Veo VideoGenerationClient adapter over P1's provider-neutral video request/result contract
+
+Focused proof:
+fake-provider lifecycle tests covering initial generation, reference-image presenter generation, one-or-more extensions, immediate bounded download, exact dialogue partitioning, and safe failure behavior
+
+PRESERVED BEHAVIOR
+
+- AssemblyTemplate timing remains unchanged.
+- GeneratedMediaUnit content remains the sole input to provider prompt construction.
+- ClipPlan is not rewritten.
+- Presenter uses the Veo path from scripted text + approved reference images.
+- Content video is generated without publisher retrieval or media reuse.
+- Phase 4 persists raw provider media only later in P4.
+- Phase 5 owns trim, frame-rate/resolution normalization, audio replacement/mixing, and final assembly.
+- No Remotion.
+- No second text-model creative call.
+
+NON-GOALS
+
+Do not implement:
+- Gemini TTS;
+- media-run/generated-media persistence;
+- CLI `media`;
+- story-local asset reuse;
+- ffprobe/FFmpeg;
+- final video validation/normalization;
+- publisher retrieval;
+- source image downloading;
+- generated graphics;
+- standardized intro/outro qualification;
+- provider benchmarking;
+- fallback provider routing;
+- global cache/database/queue.
+
+COMPLETION
+
+Leave version 0.4.2 with a bounded, testable Google Veo adapter that can produce raw portrait presenter/content media through the provider-neutral Phase 4 boundary while preserving template timing and leaving final media normalization to Phase 5.
