@@ -42,7 +42,7 @@ Conceptually:
       breaking-news-25s.json
       explainer-60s.json
 
-The exact registry location and JSON Schema remain Phase 2 implementation decisions.
+Phase 2 implemented the built-in template registry, runtime validator, strict JSON Schema, and `templates/default-news-40s.json` declarative definition.
 
 ## What a template may declare
 
@@ -93,7 +93,7 @@ The intended assembly is conceptually:
           +
     standardized outro
 
-The exact duration relationship between these fixed clips and the locked 0-40 logical story timing is intentionally left for Phase 2 qualification against the actual media files. The implementation should resolve that deterministically and document the resulting template version rather than asking the creative model to make the decision.
+Phase 2 intentionally kept intro/outro references role-only because the real standardized media files were not present. Their concrete filenames, hashes, durations, codecs, and relationship to the locked 0-40 logical story timing must be qualified from the actual owner-supplied media before final assembly rather than guessed or delegated to the creative model.
 
 ## Default generated-media expectation
 
@@ -117,7 +117,7 @@ Before generation/assembly, VidGen should be able to prove:
 - generated asset expectations are well-defined;
 - resulting media can be normalized to the template's assembly constraints.
 
-Exact schema and validator implementation remain provisional until Phase 2 planning.
+Phase 2 now provides the strict AssemblyTemplate schema and runtime validator. Phase 3 should consume that validated contract rather than redefine template structure.
 
 ## Story package linkage
 
