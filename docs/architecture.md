@@ -22,12 +22,8 @@ Initial development:
    initialize story package
               |
               v
-   prepare factual context
-     only as necessary
-              |
-              v
           ClipPlan
-   one validated creative step
+   one validated template-fill step
               |
               v
    generate required media
@@ -109,28 +105,15 @@ Shared engine code, provider credentials, and globally standardized intro/outro 
 
 A story failure must not make another story appear failed or successful.
 
-## Context preparation
+## Phase 3 grounding boundary
 
-Context preparation is supporting work for ClipPlan, not a large independent editorial stage.
+Phase 3 consumes the normalized StoryInput directly.
 
-Start with the normalized ngest story:
-- headline;
-- summary when present;
-- Article/source identity;
-- original publisher URL;
-- dates/byline/categories as available.
+The initial manual pipeline should use a story with a usable headline and summary so the creative path can be qualified without building a retrieval subsystem first. Article/source identity, original URL, dates/byline/categories, controls, and provenance remain available as supporting context.
 
-Publisher-page retrieval is conditional. If the supplied story data is sufficient to produce a grounded clip, do not fetch merely because a retrieval subsystem exists.
+If StoryInput is insufficient to support a grounded ClipPlan, Phase 3 should fail with a clear insufficient-context outcome rather than automatically retrieving the publisher page or fabricating missing facts.
 
-When retrieval is required:
-- bound redirects;
-- enforce timeout and response-size limits;
-- constrain content types;
-- use SSRF-safe URL/network policy;
-- normalize untrusted publisher content before model use;
-- retain enough source/provenance metadata to audit what informed the plan.
-
-Broader web research requires a later explicit capability.
+Publisher-page retrieval, HTML extraction, SSRF/network policy, and broader web research are deferred capabilities. If later added, they must be separately bounded and provenance-aware.
 
 ## ClipPlan boundary
 
@@ -138,19 +121,23 @@ ClipPlan is the only planned model-assisted creative artifact in the initial pip
 
 It fills a selected template. It does not invent the template.
 
-A ClipPlan should eventually carry only the story-specific data the declared template requires, for example:
-- template ID/version;
-- presenter dialogue for required presenter slots;
-- headline/supporting text;
-- off-screen narration where required;
-- generated-content prompt/description;
-- closing content;
-- source/provenance support;
-- caution metadata where needed.
+A ClipPlan should carry only identity plus the story-specific values required by the declared template. Conceptually:
 
-Exact schema is deferred until Phase 3 planning.
+    ClipPlan
+      schemaVersion
+      storyFingerprint
+      template
+        id
+        version
+      slots
+        - id
+          text
 
-No downstream stage consumes raw model output. ClipPlan requires structured-output validation, runtime validation, deterministic semantic checks, and bounded repair/retry where appropriate.
+The exact wire shape remains a Phase 3 implementation decision, but the contract should stay generic across templates.
+
+The model does not write shot plans, media-type decisions, provider instructions, transition plans, timing changes, or separate generated-video/voiceover prompts.
+
+No downstream stage consumes raw model output. ClipPlan requires structured-output validation, runtime validation, deterministic semantic checks, and at most a bounded malformed-output repair/retry path where appropriate.
 
 If media generation or assembly must infer missing story meaning, ClipPlan is incomplete.
 
@@ -161,16 +148,40 @@ Templates remove production reasoning.
 A template defines deterministic assembly requirements:
 - ordered segments;
 - expected timing;
-- required media/content slot types;
+- declared content slots;
+- brief slot authoring semantics;
 - standardized intro/outro positions;
-- which assets are generated versus fixed;
+- which generated asset roles consume each segment;
 - output requirements needed for assembly.
 
 ClipPlan fills only declared story-content slots.
 
+Each content slot should be capable of declaring a small amount of generic authoring guidance, initially no more than:
+- id;
+- usage, such as spoken or display;
+- instruction describing what content belongs in the slot.
+
+Core ClipPlan generation must not hard-code meanings for default-news-40s slot IDs.
+
 Adding a new template should normally require adding a template definition and any associated standardized media assets, not changing the story-reasoning engine.
 
 See docs/template-system.md.
+
+Phase 4 can then deterministically resolve generated-asset inputs from the template graph and filled slots. For the default template, the intended relationship is conceptually:
+
+    opening-anchor
+      <- hook + headline
+
+    content-video
+      <- narration
+
+    content-voiceover
+      <- narration
+
+    supporting-anchor
+      <- supporting-information + closing
+
+That mapping comes from template segment/role relationships rather than a second creative planning artifact.
 
 ## Default template
 
@@ -208,10 +219,11 @@ Phase 2 established role-only standardized intro/outro requirements without fabr
 
 The MVP is Google-first, not Google-coupled.
 
-Keep thin provider-neutral requests/results at the VidGen boundary so story planning and FFmpeg assembly do not depend directly on provider response shapes.
+Keep thin provider-neutral requests/results at the VidGen boundary so ClipPlan generation, media generation, and FFmpeg assembly do not depend directly on provider response shapes.
 
 Initial direction:
-- Veo for generated presenter/video work;
+- a thin text-model boundary for Phase 3, with Google as the first implementation and exact model ID kept in runtime configuration;
+- Veo for generated presenter/video work in Phase 4;
 - off-screen narration/voiceover mechanism remains unresolved;
 - provider jobs/assets retain story-local provenance and effective-input identity where useful.
 
@@ -221,7 +233,7 @@ Do not build a large generalized provider framework before a second provider or 
 
 Public accessibility is not reuse permission.
 
-Publisher pages may be retrieved for factual context under bounded policy, but publisher images/video may enter a rendered clip only when reuse is explicitly permitted.
+Future publisher retrieval may be added as a bounded fallback for insufficient StoryInput, but publisher images/video may enter a rendered clip only when reuse is explicitly permitted.
 
 Generated media, approved stock/library media, and standardized VidGen-owned assets remain safe alternatives.
 
