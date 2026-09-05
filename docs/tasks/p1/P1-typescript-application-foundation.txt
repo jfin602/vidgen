@@ -1,0 +1,114 @@
+TASK: Phase 1 / P1 — TypeScript application foundation
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- This prompt's assigned project version is `0.1.1`.
+
+CONTEXT
+
+VidGen is currently a planning/workflow repository with no production src/ tree. Phase 1 establishes the minimum executable Node.js + TypeScript foundation without introducing AI, media, rendering, research, database, or queue behavior.
+
+Read BOOT.md first, then the current README.md, AGENTS.md, docs/README.md, docs/architecture.md, docs/integrations/ngest.md, docs/control-interface.md, docs/workflow.md, and docs/roadmap/initial-roadmap.md before editing.
+
+Preserve the existing Codex phase runner and its tests. The repository intentionally has package-lock disabled and package-lock.json must not be created.
+
+GOAL
+
+Create the minimal production application skeleton and shared primitives that later Phase 1 prompts can safely build on.
+
+SCOPE
+
+Implement only:
+- an executable Node.js + TypeScript application entrypoint;
+- a small CLI parsing/help boundary;
+- shared JSON-safe types/utilities;
+- a small typed application-error boundary suitable for later transport/config/artifact failures;
+- test wiring for production-code tests while preserving the inherited runner test suite.
+
+IMPLEMENTATION REQUIREMENTS
+
+1. Stay dependency-light.
+   - Prefer Node 24 built-ins.
+   - Do not add a framework.
+   - Do not add Gemini, Veo, Remotion, FFmpeg wrappers, database clients, queue clients, or HTTP libraries.
+   - Use TypeScript syntax that Node 24 can execute directly under the repository's current type-stripping model.
+
+2. Establish a production source layout under src/.
+   - Keep concerns explicit rather than building one large file.
+   - A reasonable initial shape is src/cli.ts plus narrow src/core/ or src/shared/ modules, but choose the smallest coherent structure.
+   - Do not create speculative folders for later phases.
+
+3. CLI foundation.
+   - Provide a help surface that identifies VidGen and the currently available command surface.
+   - Unknown commands/arguments must fail cleanly and deterministically.
+   - Do not perform network calls yet.
+   - Structure the CLI so later prompts can inject the Phase 1 run workflow without rewriting argument parsing.
+
+4. Shared JSON boundary.
+   - Define explicit JsonPrimitive / JsonValue / JsonObject-style types or equivalent.
+   - Provide narrow validation helpers for confirming that unknown input is JSON-safe.
+   - Reject unsupported JavaScript values rather than silently coercing them.
+   - Do not implement a generic JSON Schema engine.
+
+5. Error boundary.
+   - Create a small VidGen-owned error type or equivalent with a stable machine-readable code/category and safe public message.
+   - Preserve original causes where useful without exposing secrets.
+   - Do not build a giant error taxonomy in this prompt.
+
+6. Package scripts.
+   - Add a script for running the VidGen CLI.
+   - Add an application-test script.
+   - Keep test:runner working exactly as the runner-focused suite.
+   - Make the main test/check path run both inherited runner tests and new application tests.
+   - Do not create package-lock.json.
+
+7. Version.
+   - Set package.json version to 0.1.1.
+
+FOCUSED TESTS
+
+Add deterministic unit coverage for:
+- CLI help parsing;
+- rejection of an unknown command/invalid argument form;
+- JSON-safe value acceptance/rejection;
+- stable VidGen error code/message behavior.
+
+Use only local deterministic tests. No external network calls.
+
+REGRESSION COVERAGE
+
+Run:
+- the new application unit tests;
+- the existing phase-runner tests;
+- npm test;
+- npm run check;
+- git diff --check.
+
+PRESERVED BEHAVIOR
+
+- Existing runner command names and runner grammar remain unchanged.
+- .npmrc package-lock=false remains effective.
+- package-lock.json remains absent.
+- Existing documentation authority and roadmap boundaries remain unchanged.
+- No production integration semantics are invented in this prompt.
+
+NON-GOALS
+
+Do not implement:
+- ngest HTTP acquisition;
+- ngest response schemas;
+- CanonicalFeed, CanonicalControl, or CanonicalInput;
+- input fingerprinting;
+- filesystem run artifacts;
+- continuation/pagination;
+- research/enrichment;
+- provider adapters;
+- media generation;
+- rendering;
+- human approval gates.
+
+COMPLETION
+
+Leave the repository with a clean, minimal production TypeScript foundation, package version 0.1.1, focused tests, and all inherited runner tests passing.
