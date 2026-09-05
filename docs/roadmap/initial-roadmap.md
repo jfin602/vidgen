@@ -2,7 +2,8 @@
 
 Status: CURRENT MVP DIRECTION / PROVISIONAL PHASE BOUNDARIES
 Phase 1 completion: 0.1.5
-Current baseline: 0.2.0
+Phase 2 completion: 0.2.5
+Current baseline: 0.3.0
 
 This roadmap was rebased on 2026-09-05 after Phase 1. The original edition/newscast phases were intentionally removed in favor of the smallest useful single-story clip pipeline.
 
@@ -59,7 +60,7 @@ The existing CanonicalInput foundation should be reused rather than replaced.
 
 ## Phase 2 — Single-story development foundation
 
-Status: CURRENT / PLANNING BASELINE 0.2.0
+Status: COMPLETE / CLOSED AT 0.2.5
 
 Goal:
 Create the minimum deterministic boundary for manually feeding one selected ngest-shaped story into an independent story-production workspace.
@@ -83,19 +84,21 @@ Conceptual contract:
             +
       selected template
 
-Likely concerns:
-- one representative local sample fixture using the real ngest external shape;
-- reuse of the same boundary validation/normalization semantics as live input;
-- selecting exactly one Article for the manual development run without inventing editorial ranking;
-- story-production identity/fingerprint;
-- story directory/package layout;
+Implemented capabilities:
+- representative fictional ngest-shaped local fixture using the real external manifest shape;
+- local fixture loading through the same validateNgestVidGenManifestPage() boundary as live ingress;
+- explicit one-Article StoryInput selection with fail-closed missing/ambiguous behavior;
+- deterministic storyFingerprint isolated from unrelated feed Articles and provenance-only changes;
 - provenance linkage back to CanonicalInput/Article;
-- template registry and validation boundary;
-- implementation of the locked default assembly template definition;
-- handling/versioning of standardized intro/outro assets;
-- qualification of the actual intro/outro durations and their deterministic relationship to the locked logical 0-40 story timing;
-- 9:16 media normalization assumptions needed by later FFmpeg assembly;
-- focused deterministic tests.
+- strict StoryInput JSON Schema;
+- validated declarative assembly-template contract and registry;
+- built-in default-news-40s template with exact 0-5, 5-15, 15-28, and 28-40 logical timing;
+- 1080x1920 at 30 fps output contract;
+- standardized intro/outro asset roles without fabricated filenames, durations, hashes, codecs, or availability claims;
+- manual `vidgen story` command and independent story workspace with story.json, story-run.json, sources/, assets/, and final/ boundaries;
+- shared atomic JSON persistence and deterministic regression coverage.
+
+Deferred from Phase 2 because the real standardized media were not present: concrete intro/outro binding plus duration/codec/media qualification.
 
 Non-goals:
 - AI ClipPlan generation;
@@ -108,6 +111,8 @@ Non-goals:
 Phase 2 should make it trivial for subsequent phases to run one story repeatedly while debugging video behavior.
 
 ## Phase 3 — Story context and ClipPlan
+
+Status: CURRENT / PLANNING BASELINE 0.3.0
 
 Goal:
 Turn one selected story plus only the context it actually needs into one validated ClipPlan that fills the selected template.
@@ -269,6 +274,6 @@ Use:
 
     /prompt-ass
     -> /prompt-plan
-    -> /prompt-write p2
+    -> /prompt-write p3
 
-Phase 2 planning should inspect the implemented CanonicalInput/run boundaries and build the smallest manual single-story fixture, story package, and default assembly-template foundation needed to unlock video debugging.
+Phase 3 planning should inspect the implemented StoryInput, story-workspace, assembly-template, and ngest boundaries and build the smallest bounded context-preparation plus validated ClipPlan capability needed to unlock generated story media. It must preserve the template-owned structure established in Phase 2.
