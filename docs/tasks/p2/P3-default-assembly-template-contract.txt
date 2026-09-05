@@ -1,0 +1,171 @@
+TASK: Phase 2 / P3 — Default assembly template contract
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra Medium`.
+
+VERSIONING
+- This prompt's assigned project version is `0.2.3`.
+
+CONTEXT
+
+P1 provides local ngest-shaped file ingress and P2 provides one explicit StoryInput boundary.
+
+VidGen no longer uses Remotion or asks a model to invent scene structure. Assembly templates remove that reasoning. The current default logical story structure is locked:
+
+    0-05 sec
+      Hook
+      Presenter
+      Headline treatment
+
+    05-15 sec
+      Narration
+      Generated visual
+
+    15-28 sec
+      Presenter
+      Supporting information
+
+    28-40 sec
+      Closing beat
+
+The owner also standardized the production concept around premade intro/outro clips plus generated anchor clips and one generated content clip/voiceover. The actual intro/outro media files are not currently present in the repository, so this phase must not fabricate their filenames, durations, hashes, or codec evidence.
+
+GOAL
+
+Implement a small declarative assembly-template contract and registry with one built-in default-news-40s template that deterministically expresses the locked logical timing, output target, story-content slots, and generated/standardized asset roles without provider or compositor logic.
+
+SCOPE
+
+Implement:
+- AssemblyTemplate TypeScript/runtime validation;
+- matching JSON Schema;
+- a declarative default-news-40s template file;
+- a minimal template registry/lookup boundary;
+- focused template-contract tests.
+
+IMPLEMENTATION REQUIREMENTS
+
+1. Declarative template file.
+   - Store the default template as data, not hard-coded AI reasoning.
+   - A reasonable location is a top-level templates/ directory, but keep the structure minimal.
+   - The definition must have a stable template ID and template version.
+   - The exact internal field names are implementation choices, but keep the schema small and obvious.
+
+2. Locked logical timing.
+   - Express exactly four contiguous logical story beats:
+     * hook: 0 through 5 seconds;
+     * content: 5 through 15 seconds;
+     * support: 15 through 28 seconds;
+     * closing: 28 through 40 seconds.
+   - Validate no gaps, overlaps, negative durations, or out-of-order segments.
+   - Logical story duration is exactly 40 seconds.
+
+3. Deterministic content/media roles.
+   - The template, not ClipPlan, owns the media shape.
+   - Encode enough slot semantics so later ClipPlan work knows what story-specific content to provide.
+   - Default expectations should support:
+     * opening anchor/presenter content with hook + headline;
+     * one generated content-video segment with off-screen narration/voiceover;
+     * a second anchor/presenter asset for supporting information and the closing beat, avoiding a needless third generated video asset;
+     * standardized premade intro and outro roles around the story media.
+   - The support and closing logical beats may reference the same second anchor asset role so future generation does not need to create an extra closing clip.
+   - Do not include provider/model parameters.
+
+4. Standardized intro/outro references.
+   - Declare required standardized roles for intro and outro.
+   - Do not invent production filenames, paths, hashes, durations, or codec details while the actual media is absent.
+   - The contract must be able to bind concrete standardized assets later without changing story reasoning.
+   - Do not create placeholder binary media files.
+
+5. Output requirements.
+   - Encode the current deterministic target needed by later generation/assembly:
+     * width 1080;
+     * height 1920;
+     * 9:16 orientation implied by those dimensions;
+     * 30 fps.
+   - H.264/MP4 is the final assembly target, but do not implement encoding or media probing here.
+
+6. Runtime validation.
+   - Validate template schema version, ID/version, output dimensions/fps, segment order/timing, unique segment IDs, declared content slots, generated asset roles, and standardized intro/outro roles.
+   - Fail closed on malformed templates.
+   - Do not add a generic framework or dynamic plugin system.
+
+7. Registry.
+   - Add a tiny lookup boundary that returns the validated built-in default template by ID.
+   - Unknown template IDs fail clearly.
+   - Do not add filesystem scanning, inheritance, hot reload, or marketplace behavior.
+
+8. JSON Schema.
+   - Add a strict AssemblyTemplate schema under schemas/.
+   - Keep it aligned with runtime validation through focused tests.
+   - No new generic schema engine dependency is required.
+
+9. Version/test wiring.
+   - Set package.json and src/version.ts to 0.2.3.
+   - Keep package-lock.json absent.
+   - Add template tests to the application test path.
+
+FOCUSED TESTS
+
+Prove:
+- default-news-40s loads through the registry and validates;
+- logical segment timing is exactly 0-5, 5-15, 15-28, 28-40;
+- segments are contiguous and total logical duration is 40 seconds;
+- output is exactly 1080x1920 at 30 fps;
+- hook/content/support/closing required content/media roles are present;
+- content requires generated video + voiceover;
+- support and closing can deterministically reuse the same second-anchor asset role;
+- intro and outro are required standardized roles without fabricated duration/path metadata;
+- malformed gaps/overlaps/order/duplicate IDs fail;
+- unknown template ID fails;
+- schema parses and matches runtime required/additionalProperties intent;
+- no provider-specific model tuning or Remotion contract is introduced.
+
+REGRESSION COVERAGE
+
+Run:
+- new template tests;
+- StoryInput tests from P2;
+- local-file ingress tests from P1;
+- all Phase 1 application/integration tests;
+- runner tests;
+- npm test;
+- npm run check;
+- git diff --check.
+
+PRODUCER / CONSUMER BOUNDARY
+
+Downstream-required capability:
+a validated deterministic template that tells ClipPlan exactly which story-content/media roles must be filled
+
+Owning implementation/export:
+AssemblyTemplate type/schema + default-news-40s data definition + template registry/validator
+
+Focused proof:
+template tests proving locked timing, output dimensions, generated asset-role reuse, required intro/outro roles, and failure on malformed definitions
+
+PRESERVED BEHAVIOR
+
+- Templates define structure; models do not.
+- StoryInput remains template-independent.
+- Actual standardized intro/outro asset qualification is not fabricated.
+- FFmpeg remains the future assembler but is not invoked here.
+- Remotion remains out of the MVP.
+
+NON-GOALS
+
+Do not implement:
+- ClipPlan;
+- AI/model calls;
+- Veo;
+- narration provider;
+- actual intro/outro media files;
+- ffprobe/FFmpeg;
+- media normalization;
+- story directory persistence;
+- CLI story workflow;
+- multi-template discovery beyond a minimal built-in registry.
+
+COMPLETION
+
+Leave version 0.2.3 with one strict, extensible assembly-template contract and a validated default-news-40s definition ready for story-workspace selection and later ClipPlan generation.
