@@ -1,0 +1,264 @@
+TASK: Correction 2 / P1 — Template extensibility fix and Phase 2 closeout
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra Medium`.
+
+VERSIONING
+- Required unchanged project version: `0.3.0`.
+
+CONTEXT
+
+Read BOOT.md first, then README.md, AGENTS.md, docs/README.md, docs/architecture.md, docs/template-system.md, docs/roadmap/initial-roadmap.md, docs/codex-model-selection.md, the Phase 2 task stack under docs/tasks/p2/, and the current template/story-workspace implementation and tests before editing.
+
+Phases 1 and 2 are already closed and the repository is on the 0.3.0 Phase 3 baseline. This correction must not roll the roadmap back, advance it, or change package/src versioning.
+
+Human review found one bounded Phase 2 defect after closeout:
+
+- `default-news-40s` is correctly represented as declarative template data;
+- however, `validateAssemblyTemplate()` still enforces exactly four segments ending at exactly 40 seconds;
+- therefore a valid 25-second, 60-second, or otherwise differently structured template cannot be added as data without changing the generic core validator.
+
+That violates the accepted template-system standard: templates own clip structure, and adding another template should normally require a new declarative definition rather than changes to story reasoning or generic temporal validation.
+
+The current 1080x1920 / 30 fps / H.264 MP4 output baseline is intentionally still a project-wide MVP constraint. Do not broaden output-format support in this correction. The defect is generic template timing/segment-shape extensibility, not deferred 16:9/1:1 support.
+
+This single correction prompt intentionally combines the bounded fix with the correction closeout validation.
+
+GOAL
+
+Repair the AssemblyTemplate validation boundary so generic validation accepts any supported declarative template with a non-empty, contiguous, ordered, positive-duration segment sequence beginning at 0, while keeping all exact `default-news-40s` timing and role semantics owned by `templates/default-news-40s.json` and its focused tests.
+
+Then rerun the complete relevant Phase 2 evidence and leave the unchanged 0.3.0 repository review-ready.
+
+TARGET BEHAVIOR
+
+Generic template contract:
+
+    template data
+        |
+        v
+    generic structural validation
+        |
+        +-- non-empty segment list
+        +-- unique segment IDs
+        +-- first segment starts at 0
+        +-- positive durations
+        +-- contiguous ordered timing
+        +-- references resolve to declared slots/roles
+        +-- current supported output contract
+        +-- standardized intro/outro contract
+        |
+        v
+    valid AssemblyTemplate
+
+Default-specific contract:
+
+    templates/default-news-40s.json
+        |
+        v
+    exactly:
+      0-5   hook
+      5-15  content
+      15-28 support
+      28-40 closing
+
+The generic validator must not know that a normal template has four segments or a 40-second terminal duration.
+
+IMPLEMENTATION REQUIREMENTS
+
+1. Remove default-template shape from generic validation.
+   - Inspect `src/core/assembly-template.ts`.
+   - Remove the generic rule that requires exactly four logical segments totaling 40 seconds.
+   - Do not replace it with a different hard-coded segment count or terminal duration.
+   - Preserve the existing generic segment validation that starts from time 0 and rejects gaps, overlaps, reversed/out-of-order timing, non-finite values, zero/negative durations, duplicate IDs, duplicate references, and undeclared references.
+   - Keep malformed templates fail-closed with the existing `assembly_template` error boundary.
+
+2. Preserve current MVP output support.
+   - Keep the current 1080x1920, 30 fps, H.264/MP4 output constraint unless an existing test/schema mismatch requires a strictly bounded alignment repair.
+   - Do not add 16:9, 1:1, arbitrary codecs, arbitrary frame rates, responsive output, or media normalization behavior.
+   - This correction is not Phase 5 rendering work.
+
+3. Keep `default-news-40s` exact.
+   - Do not weaken or alter the locked default template.
+   - Focused default-template tests must continue proving:
+     * template ID/version;
+     * 0-5 hook;
+     * 5-15 content;
+     * 15-28 support;
+     * 28-40 closing;
+     * exact 40-second logical duration;
+     * 1080x1920 at 30 fps;
+     * hook/headline opening-anchor requirements;
+     * generated content-video + content-voiceover;
+     * support + closing reuse of `supporting-anchor`;
+     * standardized intro/outro roles.
+
+4. Add direct extensibility proof.
+   - Add a focused test that constructs or loads at least one second valid template shape whose segment count and total duration differ from `default-news-40s`.
+   - Prefer a small in-test synthetic definition rather than adding a second product template that the owner has not requested.
+   - Example acceptable proof: a valid contiguous 25-second template with a different number of segments.
+   - The alternate definition should use the current supported output baseline and valid declared content/generated/standardized roles.
+   - Prove it passes `validateAssemblyTemplate()` without modifying the validator for that template ID, segment count, segment IDs, or total duration.
+   - This test is the focused regression guard for the defect.
+
+5. Schema/runtime alignment.
+   - Inspect `schemas/assembly-template.schema.json`.
+   - Do not change the schema merely for churn: it already appears not to encode the four-segment/40-second restriction.
+   - If a change is actually necessary to keep runtime/schema semantics coherent, keep it minimal and explain why.
+   - Preserve strict additionalProperties behavior and existing role/type constraints.
+
+6. Template registry scope.
+   - Do not build filesystem discovery, plugins, inheritance, hot reload, or a template marketplace.
+   - The current small built-in registry may remain.
+   - This correction only needs to prove that the generic template contract itself does not force the default-news-40s temporal shape.
+
+7. Preserve Phase 2 story behavior.
+   - Do not change StoryInput selection/fingerprinting semantics.
+   - Do not change the manual ngest-shaped ingress contract.
+   - Do not change story workspace identity/layout/status semantics unless a regression caused by the template fix is discovered.
+   - `vidgen story` must continue to default to `default-news-40s`.
+
+8. Version and roadmap state.
+   - `package.json` must remain 0.3.0.
+   - `src/version.ts` must remain 0.3.0.
+   - Do not run or emulate `/closeout`.
+   - Do not rewrite BOOT.md/README/roadmap back to Phase 2.
+   - Phase 3 remains current after this correction.
+   - Correction commits, if owned by the runner, must preserve the unchanged-version semantics.
+
+FOCUSED TESTS
+
+At minimum prove:
+- `default-news-40s` still validates with exact locked timings and roles;
+- a valid alternate template with a different segment count and non-40-second duration validates through the same generic function;
+- first segment must start at 0;
+- gaps still fail;
+- overlaps still fail;
+- zero/negative durations still fail;
+- reversed/out-of-order timing still fails;
+- duplicate segment IDs still fail;
+- undeclared content/generated-role references still fail;
+- standardized intro/outro requirements still fail closed when malformed;
+- unknown registry IDs still fail;
+- schema parsing/strictness tests still pass.
+
+PHASE 2 CLOSEOUT REVALIDATION
+
+After the fix, re-prove the Phase 2 foundation rather than assuming the previous closeout remains sufficient.
+
+Validate:
+
+1. Manual ingress convergence.
+   - Local file ingress still calls the same `validateNgestVidGenManifestPage()` boundary as live ingress.
+   - Invalid local JSON/read failures remain safe.
+   - Malformed envelopes and non-null cursors still fail closed.
+   - Existing live HTTP auth/timeout/redirect/continuation/secret-safety tests remain green.
+
+2. StoryInput.
+   - Explicit `articleId` remains mandatory and unambiguous.
+   - No hidden first-item/ranking behavior exists.
+   - StoryInput contains only the selected Article plus required profile/publication/control/provenance.
+   - Story fingerprint remains stable against unrelated/provenance-only changes and sensitive to selected-story/control/profile/publication changes.
+
+3. Story workspace.
+   - Repeated same-story runs remain separate storyRunIds/directories with the same storyFingerprint.
+   - Unsafe article IDs do not become paths.
+   - `story.json` and `story-run.json` remain honest.
+   - Future source/media directories remain empty placeholders only.
+   - No raw full manifest is copied into a story workspace.
+
+4. Template boundary.
+   - Default exactness remains proven.
+   - Generic alternate-shape extensibility is now proven.
+   - No provider/model/ClipPlan/FFmpeg/Remotion behavior leaks into the template layer.
+
+5. Phase boundaries.
+   - Confirm no publisher retrieval, general web research, ClipPlan generation, AI/Veo/provider implementation, narration provider, media probing/binding, FFmpeg, Remotion, database, queue, global cache, approval workflow, or live story fan-out was introduced by this correction.
+   - Confirm no standardized intro/outro filename, duration, hash, codec, or availability is fabricated when owner-supplied media is absent.
+
+REGRESSION / VALIDATION COMMANDS
+
+Run:
+- focused AssemblyTemplate tests;
+- all Phase 2 application/integration tests;
+- inherited Phase 1 application/integration tests;
+- runner tests;
+- `npm run codex:phase:validate -- c2-fix`;
+- `npm run check`;
+- `node src/cli.ts --help`;
+- `git diff --check`.
+
+Also confirm:
+- no `package-lock.json`;
+- package.json remains 0.3.0;
+- src/version.ts remains 0.3.0.
+
+If owner-supplied standardized intro/outro media are still absent, report their real binding/duration qualification as deferred. Do not create placeholders.
+
+PRODUCER / CONSUMER BOUNDARY
+
+Downstream-required capability:
+an AssemblyTemplate contract where temporal structure is data-owned, so future ClipPlan work can consume a selected template without core code assuming default-news-40s shape
+
+Owning implementation/export:
+`validateAssemblyTemplate()` + AssemblyTemplate contract + declarative template definitions
+
+Focused proof:
+the locked default-news-40s test plus a second valid synthetic template with different segment count/total duration passing the same generic validator
+
+PRESERVED BEHAVIOR
+
+- Phases 1 and 2 remain closed; Phase 3 remains current.
+- Project version remains 0.3.0.
+- Ngest remains owner of production eligibility.
+- Manual selection remains explicit.
+- StoryInput identity remains isolated from unrelated feed content.
+- Default template timing/roles remain unchanged.
+- Current vertical output baseline remains unchanged.
+- Intro/outro concrete media qualification remains deferred until real assets exist.
+- FFmpeg remains the future assembler and is not introduced here.
+- Remotion remains out of the MVP.
+- No provider or ClipPlan work is pulled forward.
+
+NON-GOALS
+
+Do not implement:
+- a second production template merely to demonstrate the test;
+- generalized template discovery/plugins/inheritance;
+- 16:9 or 1:1 support;
+- arbitrary output codecs/frame rates;
+- ClipPlan;
+- publisher retrieval;
+- AI/provider/Veo/narration;
+- standardized binary intro/outro assets;
+- ffprobe/FFmpeg;
+- media generation or rendering;
+- live feed fan-out;
+- database/queue/cache;
+- unrelated refactors;
+- Phase 3 roadmap advancement.
+
+BOUNDED REPAIRS
+
+During closeout validation, if another defect is found:
+- repair it only if it is clearly a regression or invariant violation inside the already-implemented Phase 1/2 foundation;
+- add focused regression coverage;
+- rerun affected validation.
+
+If the issue requires new Phase 3+ semantics, provider/media decisions, output-format expansion, or new architecture, do not invent it. Report it as deferred/planning-needed instead.
+
+FINAL RESPONSE
+
+Report:
+- exact files changed;
+- the generic hard-coding removed;
+- the alternate-template extensibility proof added;
+- confirmation that default-news-40s remains exact;
+- validation commands actually run and outcomes;
+- Phase 1/2 regression status;
+- package/version unchanged at 0.3.0;
+- whether standardized intro/outro media were present;
+- confirmation that no Phase 3+ behavior leaked in;
+- whether correction c2-fix is ready for human review.
+
+Do not claim evidence that was not actually observed.
