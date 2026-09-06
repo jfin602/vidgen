@@ -1,0 +1,51 @@
+TASK: Phase 6 / P5 — Phase 6 closeout
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- This prompt's assigned project version is `0.6.5`.
+
+GOAL
+
+Review Phase 6 as a new simple production path beside, not instead of, the completed cinematic pipeline. Repair only bounded Phase 6 defects.
+
+Read BOOT.md, current roadmap/architecture, P1-P4 prompts and commits, and the resulting implementation/tests. Inspect actual source and diffs; do not approve solely because tests pass.
+
+ACCEPTANCE
+
+Confirm:
+- `headline` consumes validated StoryInput semantics directly and never requires AssemblyTemplate, ClipPlan, cinematic GeneratedMediaUnit, or AssemblyPlan;
+- `maxSeconds` is enforced as an integer 4-20 hard final-output ceiling, with provider raw-duration quirks kept non-authoritative;
+- presenter copy is grounded, duration-budgeted, strictly validated, and produced with one normal-path text-model call;
+- presenter video uses approved local anchor references and the existing safe Veo transport without weakening cinematic behavior;
+- lower-third headline/source text is deterministic, complete, staged safely, and not model-generated;
+- final output is exactly one authoritative MP4/JSON pair with safe identity/provenance and no secrets or absolute local paths;
+- temporary/raw/candidate artifacts and terminal publication failures cannot masquerade as success;
+- FFprobe/FFmpeg process, stream, duration, normalization, and text-injection safety remain bounded;
+- existing `run`, `story`, `plan`, `media`, and `assemble` behavior and durable cinematic artifacts remain regression-protected;
+- no Phase 7 live fan-out, publisher retrieval, database/queue, global cache, automated publishing, Remotion, or unrelated refactor entered Phase 6.
+
+VALIDATION
+
+Run:
+- `npm run codex:phase:validate -- p6`;
+- all focused Phase 6 tests;
+- `npm test`;
+- `npm run check`;
+- `node src/cli.ts --help`;
+- `git diff --check`.
+
+If FFmpeg/FFprobe are available, perform a bounded real local synthetic finisher smoke, including a sub-8-second final trim, and post-probe the result.
+
+If valid runtime credentials, an owner-approved anchor reference, a local font, and a suitable governed fixture are available, run exactly one real `vidgen headline` invocation and report only observed provider/render facts. Otherwise report the exact live-qualification blocker. Do not fabricate provider, playback, or aesthetic evidence.
+
+Human playback/aesthetic quality remains unclaimed unless actually observed.
+
+BOUNDARIES
+
+A missing live-provider input is not permission to change product behavior. Repair only defects clearly inside Phase 6 and add focused regression coverage. Keep Phase 7 deferred.
+
+FINAL RESPONSE
+
+Report P1-P4 review findings, bounded repairs, exact validation/evidence observed, simple-path output facts or live blocker, cinematic regression status, version state, and whether Phase 6 is ready for human review and subsequent `/closeout`.
