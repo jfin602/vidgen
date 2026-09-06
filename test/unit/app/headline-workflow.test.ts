@@ -45,6 +45,9 @@ test('four-second plan trims the initial provider coverage and rejects provider-
     await assert.rejects(generateHeadlineClip({ ...fakeDependencies(directory, anchor, font), createVideoClient: () => ({ provider: 'fake-video', model: 'fake-model', generatePresenterVideo: async () => ({ ...video(4), rawDurationSeconds: 15 }) }) }), /incompatible with the selected duration plan/);
     await assert.rejects(readFile(join(directory, 'clip-safe-1.mp4')));
     await assert.rejects(readFile(join(directory, 'clip-safe-1.json')));
+    await assert.rejects(generateHeadlineClip({ ...fakeDependencies(directory, anchor, font), createVideoClient: () => ({ provider: 'fake-video', model: 'fake-model', generatePresenterVideo: async () => ({ ...video(4), operationId: '/tmp/provider-response' }) }) }), /provenance was unsafe/);
+    await assert.rejects(readFile(join(directory, 'clip-safe-1.mp4')));
+    await assert.rejects(readFile(join(directory, 'clip-safe-1.json')));
   });
 });
 
@@ -66,6 +69,7 @@ test('sidecar write failure removes a promoted MP4 and strict validation rejects
     const result = await generateHeadlineClip(fakeDependencies(directory, anchor, font)); const sidecar = JSON.parse(await readFile(result.metadataPath, 'utf8'));
     assert.throws(() => validateHeadlineSidecar({ ...sidecar, unsupported: true }));
     assert.throws(() => validateHeadlineSidecar({ ...sidecar, final: { ...sidecar.final, technical: { output: sidecar.final.technical.output } } }));
+    assert.throws(() => validateHeadlineSidecar({ ...sidecar, finishing: { ...sidecar.finishing, policy: 'file:///tmp/ffmpeg.log' } }));
   });
 });
 
