@@ -1,0 +1,44 @@
+TASK: Correction 5 / P2 — Optional wrapper render, CLI, and provenance
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.5.3`.
+
+GOAL
+
+Carry P1's optional-wrapper capability through FFmpeg assembly, the manual CLI, fingerprints, and durable assembly provenance without weakening Phase 5 render safety.
+
+Read BOOT.md, current docs, P1 output, and the current renderer/workflow/CLI/tests before editing. Choose the smallest implementation that naturally consumes P1's AssemblyPlan.
+
+MUST REMAIN TRUE
+
+- `vidgen assemble` requires `--story-dir`; `--intro` and `--outro` are independently optional; `--font-file` retains its existing display-text rule.
+- All four wrapper combinations render deterministically in declared order: optional intro, story segments, optional outro. Omission inserts nothing.
+- Only supplied wrappers become FFmpeg inputs/filtergraph pairs, are normalized, and affect concat count/duration.
+- Existing story-segment timing, voiceover replacement, display-text staging, normalization, loudnorm, codec/output policy, argv-only/no-shell execution, bounded process handling, candidate isolation, post-render validation, atomic publication, and failure cleanup remain intact.
+- Durable `standardizedAssets` remains a required array containing only wrappers actually used, in canonical intro-then-outro order when both exist; allow 0, 1, or 2 entries, reject duplicates/wrong placements/noncanonical two-entry order.
+- Because this deliberately changes durable cardinality/meaning, new assembly-run/final-clip writes and validation use assembly schema version `2`, `schemas/final-clip.schema.json` matches it, and the assembly input/fingerprint contract advances to `2`. Do not silently reinterpret new semantics as v1.
+- Backward compatibility for v1 final assembly artifacts is not required by the current MVP unless current authoritative code/docs explicitly require it at execution time.
+- Assembly fingerprints include exactly the supplied wrapper identities/probes and remain path-secret-safe.
+- Template data/schema/version and story-run declared standardized roles remain unchanged.
+- No Remotion, provider changes, new dependencies, alternate formats, publishing, live fan-out, or other Phase 6 work.
+- Package/engine version remains 0.5.3.
+
+CONSUMER PROOF
+
+qualified optional wrapper set -> FFmpeg renderer/CLI/durable assembly evidence -> focused proof for all four combinations, canonical provenance, duration/fingerprint sensitivity, schema v2 validation, and unchanged render/security behavior.
+
+VALIDATION
+
+Run focused assembly-workflow, CLI, FFmpeg-renderer, assembly-input, and schema tests, then:
+- `npm run check`;
+- `node src/cli.ts --help`;
+- `git diff --check`.
+
+Do not claim a real FFmpeg/story render unless actually observed with suitable local inputs.
+
+FINAL RESPONSE
+
+Report the new CLI forms, durable schema/input-contract versions, wrapper ordering/provenance behavior, validation actually run, and any real render evidence actually observed.
