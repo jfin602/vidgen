@@ -4,43 +4,43 @@ Status: CURRENT MVP DIRECTION / EARLY-STAGE
 
 ## Conceptual pipeline
 
-Initial development:
+StoryInput is the shared production boundary. VidGen has two downstream production paths:
 
-    manually selected
-    VidGen-shaped story fixture
-              |
-              v
-      boundary validation
-              |
-              v
-        CanonicalInput
-              |
-              v
-       select one story
-              |
-              v
-   initialize story package
-              |
-              v
-          ClipPlan
-   one validated template-fill step
-              |
-              v
-   generate required media
-      /       |       \
- presenter  content  voiceover
-      \       |       /
-              v
-  optional standardized wrappers
-     intro and/or outro
-              |
-              v
-        FFmpeg assembly
-              |
-              v
-         final clip.mp4
+    manually selected or live governed input
+                    |
+                    v
+            boundary validation
+                    |
+                    v
+              CanonicalInput
+                    |
+                    v
+                StoryInput
+                 /    \
+                /      \
+               v        v
+      simple headline   cinematic template
+           path             path
+      CURRENT PRIORITY     PRESERVED
+             |                 |
+             v                 v
+   bounded presenter copy   ClipPlan
+             |                 |
+             v                 v
+   one presenter video    generated media
+             |                 |
+             v                 v
+   deterministic lower    optional wrappers
+      third + finishing         |
+             |                 v
+             v            FFmpeg assembly
+      MP4 + JSON pair           |
+                               v
+                         final clip.mp4
 
-Live ngest acquisition remains a supported boundary from Phase 1. The current owner-approved `c5-config-fix` correction will make that development path consume ngest Distribution v1 through a transport adapter; live production story fan-out remains Phase 6 work.
+The simple path must not be forced through AssemblyTemplate, ClipPlan, cinematic GeneratedMediaUnit resolution, or cinematic AssemblyPlan. The existing cinematic `story -> plan -> media -> assemble` behavior remains supported and regression-protected.
+
+Live ngest acquisition remains a supported boundary from Phase 1. `c5-config-fix` remains owner-approved but deferred. Live production story fan-out is now Phase 7 work.
 
 ## Runtime and execution shape
 
@@ -107,9 +107,9 @@ A later live run may contain multiple feed Articles, but each Article becomes an
 
 Phase 2 implemented a strict StoryInput schema and deterministic storyFingerprint. StoryInput preserves the explicitly selected Article, profile/publication identity, CanonicalControl, and source CanonicalInput provenance without carrying unrelated feed Articles. The storyFingerprint excludes provenance-only and unrelated-feed changes.
 
-## Story package boundary
+## Artifact boundaries
 
-One story owns one self-contained production directory.
+The preserved cinematic path continues to use one self-contained production directory per story.
 
 Conceptually:
 
@@ -124,9 +124,11 @@ Conceptually:
 
 Shared engine code, provider credentials, and globally standardized intro/outro files are not copied into every story package. The package records identities only for standardized assets actually used, plus the template/version needed to understand the assembly.
 
-A story failure must not make another story appear failed or successful.
+A cinematic story failure must not make another story appear failed or successful.
 
-## ClipPlan grounding boundary
+The simple path has a separate publication-oriented output boundary: one final MP4 paired with one JSON sidecar. The sidecar must bind the output to the governed Article/story identity and record the presenter text, configured maximum duration, actual qualified duration, final file identity, and provider/engine provenance. Phase 6 planning owns the exact schema and output naming.
+
+## Cinematic ClipPlan grounding boundary
 
 The implemented ClipPlan workflow consumes the normalized StoryInput directly.
 
@@ -136,7 +138,7 @@ If StoryInput lacks a non-null summary, ClipPlan planning fails with a clear ins
 
 Publisher-page retrieval, HTML extraction, SSRF/network policy, and broader web research are deferred capabilities. If later added, they must be separately bounded and provenance-aware.
 
-## ClipPlan boundary
+## Cinematic ClipPlan boundary
 
 ClipPlan is the only model-assisted creative artifact in the implemented initial planning pipeline.
 
@@ -162,7 +164,7 @@ No downstream stage consumes raw model output. The implemented workflow uses pro
 
 If media generation or assembly must infer missing story meaning, ClipPlan is incomplete.
 
-## Template boundary
+## Cinematic template boundary
 
 Templates remove production reasoning.
 
@@ -208,7 +210,7 @@ Phase 4 now deterministically resolves one GeneratedMediaUnit for every template
 
 The repeated supporting-anchor role is intentionally realized as two segment-scoped units because the template references it in two different timing segments. No second creative planning artifact decides that split.
 
-## Default template
+## Preserved cinematic default template
 
 The locked default logical content structure is:
 
@@ -240,6 +242,27 @@ A supporting treatment must not become a separate generative subsystem unless ev
 
 Phase 2 established role-only standardized intro/outro positions without fabricating media facts because the real owner-supplied assets were not present. Phase 5 then implemented concrete binding and duration/codec qualification assuming both wrappers were supplied. The approved follow-up correction changes that assembly contract so intro and outro are independently optional: an omitted wrapper contributes no placeholder media, duration, identity, or provenance, while any supplied wrapper remains subject to the same local qualification.
 
+## Simple presenter-headline boundary
+
+The Phase 6 simple path consumes StoryInput directly.
+
+Its creative requirement is intentionally narrow: produce only the presenter dialogue needed to introduce the topic/headline while remaining grounded in supplied StoryInput facts. The lower third is deterministic and carries the Article headline plus source display name; those strings are not delegated to generated on-screen model text.
+
+The simple path:
+- produces one continuous presenter clip;
+- has no B-roll or separate TTS voiceover requirement;
+- has no standardized intro/outro requirement;
+- does not require the cinematic template or ClipPlan contracts;
+- uses a configurable `maxSeconds` hard ceiling from 4 through 20 seconds inclusive;
+- treats `maxSeconds` as a ceiling, never a target;
+- prefers the shortest useful provider-supported duration that fits within the ceiling;
+- must fail before or after provider work rather than publish an output whose qualified duration exceeds the ceiling;
+- keeps provider-specific duration granularity behind the provider adapter;
+- finishes the clip deterministically with FFmpeg and qualifies it with FFprobe before publication;
+- publishes an MP4 plus coupled Article/provenance JSON sidecar.
+
+The exact presenter-copy artifact shape, CLI spelling, runtime asset configuration, and durable sidecar schema remain Phase 6 implementation-planning decisions.
+
 ## Provider boundary
 
 The MVP is Google-first, not Google-coupled.
@@ -266,7 +289,7 @@ Generated media, approved stock/library media, and standardized VidGen-owned ass
 
 Provider output, publisher content, URLs, and administrator text remain untrusted inputs.
 
-## FFmpeg assembly boundary
+## FFmpeg finishing and assembly boundary
 
 Remotion is not part of the current MVP.
 
