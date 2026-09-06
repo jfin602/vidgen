@@ -1,0 +1,40 @@
+TASK: Correction 5 / P2 — Article URL sample-story builder
+
+- Recommended configuration: `Terra Medium`.
+- Required unchanged project version: `0.5.3`.
+
+## Goal
+
+Add a developer script that accepts one publisher Article URL, finds that exact governed Article through the P1 live ngest adapter, and writes a single-Article local VidGen sample fixture for repeatable story/plan testing.
+
+## Required behavior
+
+- Add a package script callable as:
+  `npm run sample:story -- <article-url>`
+- Use P1's live ngest acquisition/adapter. Do not duplicate HTTP, authentication, pagination, or Distribution-wire parsing logic.
+- Require one absolute HTTP(S) Article URL.
+- Match against governed `originalUrl` values without broad URL canonicalization. Exact stored URL is authoritative; allowing only an unambiguous terminal-slash equivalence is acceptable for developer convenience.
+- Require exactly one match; fail clearly on zero or ambiguous matches.
+- Write one ignored runtime artifact under `artifacts/samples/` using a deterministic filesystem-safe filename. Never trust raw URL/article text as an unsafe path.
+- The written JSON must be a valid local `NgestVidGenManifestPage` containing:
+  - the fetched Profile and Publication;
+  - exactly the selected Article;
+  - the P1 neutral/default control;
+  - preserved API/snapshot provenance;
+  - `nextCursor: null`.
+- Validate the constructed fixture through the existing local VidGen manifest validation boundary before atomic publication.
+- Print only safe useful facts: selected `articleId`, output path, and enough information to run the existing `story` or `plan` command. Never print bearer/config secrets.
+- The helper must perform no publisher-page retrieval, Gemini/Veo/TTS call, ClipPlan generation, media generation, or FFmpeg work.
+- Keep the existing `story` and `plan` interfaces unchanged.
+
+## Focused proof
+
+Tests must cover valid URL selection, zero/ambiguous matches, malformed URL input, safe deterministic output naming, terminal-slash behavior if supported, secret-free output/errors, and atomic fixture publication.
+
+Prove the generated fixture can be loaded by `loadNgestVidGenManifestFile()` and consumed by the existing story-workspace path for the selected `articleId` without live configuration or provider calls.
+
+Ensure any new test file is included in the repository's explicit `test:app` command. Run focused tests, `npm run test:app`, and `git diff --check`.
+
+## Non-goals
+
+Do not create a second story pipeline, create a ClipPlan, fetch publisher content, persist bearer credentials, modify ngest, change canonical/story schemas, or perform live provider/video work.
