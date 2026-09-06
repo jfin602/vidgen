@@ -22,7 +22,7 @@ The roadmap assumes:
 - one story = one independent artifact/package boundary;
 - one validated ClipPlan creative stage;
 - declarative assembly templates own structure/timing/media-slot requirements;
-- standardized premade intro/outro assets;
+- independently optional standardized premade intro/outro wrapper assets under the approved post-Phase-5 correction; omission inserts no placeholder media;
 - Google-first generated media behind thin replaceable adapters;
 - Veo as the initial presenter/video direction;
 - FFmpeg for MVP assembly and finishing;
@@ -249,9 +249,18 @@ Phase 5 non-goals remained:
 - alternate aspect ratios;
 - Remotion.
 
+## Approved post-Phase-5 corrections
+
+Before Phase 6, the owner approved two bounded Phase 5 corrections in order:
+
+1. `c5-mvp-refactor` — behavior-preserving simplification only. It must not change observable product behavior, durable artifact meanings, trust boundaries, retry/failure semantics, or provider/render behavior.
+2. `c5-optional-standardized-assets` — deliberate assembly-contract correction. Intro and outro become independently optional deterministic wrapper assets. Omission inserts no placeholder media or silence; only supplied wrappers are probed/qualified, included in expected duration and assembly identity, and recorded in durable provenance. Social-first output may begin directly with the story hook.
+
+The second correction is not part of the behavior-preserving refactor and must receive its own implementation planning, focused tests, schema/artifact compatibility decision, and closeout evidence.
+
 ## Phase 6 — Live ngest fan-out and operational hardening
 
-Status: NEXT ROADMAP PHASE / AFTER C5 MVP REFACTOR
+Status: NEXT ROADMAP PHASE / AFTER C5 CORRECTIONS
 
 Goal:
 Connect the proven story pipeline back to live curated ngest input and process supplied stories independently.
@@ -310,6 +319,12 @@ Run the owner-directed behavior-preserving correction stack:
     -> /prompt-plan
     -> /prompt-write c5-mvp-refactor
 
-The correction should simplify the existing MVP implementation after rapid Phase 1-5 construction. It must not add product capability, alter durable schemas/artifact meanings, weaken validation/trust boundaries, change provider/render semantics, or turn the previously unperformed real FFmpeg/story-render qualification into a claimed success.
+That correction should simplify the existing MVP implementation after rapid Phase 1-5 construction. It must not add product capability, alter durable schemas/artifact meanings, weaken validation/trust boundaries, change provider/render semantics, or turn the previously unperformed real FFmpeg/story-render qualification into a claimed success.
 
-After the correction closes, proceed to Phase 6 planning. The deferred real-host/owner-media assembly qualification remains an explicit Phase 6 operational-hardening prerequisite.
+After that correction closes, plan the approved assembly behavior correction:
+
+    /prompt-ass
+    -> /prompt-plan
+    -> /prompt-write c5-optional-standardized-assets
+
+Only after both corrections close should ordinary Phase 6 planning proceed. The deferred real-host/owner-media assembly qualification remains an explicit operational-hardening prerequisite; once optional wrappers are implemented, a real story render may qualify the assembly path with an outro only or with no standardized wrapper assets at all.
