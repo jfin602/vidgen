@@ -1,0 +1,46 @@
+TASK: Correction 5 / P3 — Optional assets closeout
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.5.3`.
+
+GOAL
+
+Review P1-P2 as the complete implementation of the approved optional standardized-wrapper correction. Inspect actual diffs and resulting behavior; do not approve solely because tests pass.
+
+ACCEPTANCE
+
+Confirm:
+- intro and outro are independently optional from CLI through qualification, render graph, duration, fingerprint, and durable provenance;
+- story-only, story+outro, intro+story, and intro+story+outro are all protected by focused deterministic tests;
+- omitted wrappers trigger no file/probe/render input and no placeholder frames/audio;
+- supplied wrappers retain local-file, media-qualification, identity, and distinct-path safety;
+- generated-media verification and all Phase 5 FFprobe/FFmpeg/render/publication safety remain intact;
+- standardizedAssets durable provenance contains exactly used wrappers with canonical ordering and strict duplicate/placement rejection;
+- new durable assembly artifacts use schema v2 and assembly fingerprint input contract v2, with matching JSON schema;
+- template schema/data/identity and story-run declared standardized roles did not change;
+- CLI help accurately describes optional wrapper flags and font behavior;
+- package/engine version remains 0.5.3;
+- no provider/research/Remotion/Phase 6 scope leaked in.
+
+VALIDATION
+
+Run:
+- `npm run codex:phase:validate -- c5-optional-assets`;
+- focused assembly-input, assembly-workflow, CLI, and FFmpeg-renderer tests;
+- `npm test`;
+- `npm run check`;
+- `node src/cli.ts --help`;
+- `git diff --check`.
+
+If ffmpeg/ffprobe and a suitable media-ready story workspace are genuinely available, a real wrapper-optional render may be observed and reported. Otherwise keep the existing real-render qualification gap explicitly unclaimed; absence is not a correction failure.
+
+BOUNDED REPAIRS
+
+Repair only defects or regressions in this correction and tests needed to protect them. Do not broaden template semantics, add mandatory-role machinery, change providers, or begin Phase 6.
+
+FINAL RESPONSE
+
+Report review findings, any repairs, exact validation/results, schema/input-contract versions, confirmation of unchanged package version and template identity, and whether `c5-optional-assets` is ready for human review.
