@@ -31,7 +31,8 @@ Initial development:
  presenter  content  voiceover
       \       |       /
               v
-      standardized intro/outro
+  optional standardized wrappers
+     intro and/or outro
               |
               v
         FFmpeg assembly
@@ -101,7 +102,7 @@ Conceptually:
       +-- generation/provenance metadata
       +-- final clip
 
-Shared engine code, provider credentials, and globally standardized intro/outro files are not copied into every story package. The package records the identities/versions needed to understand what was used.
+Shared engine code, provider credentials, and globally standardized intro/outro files are not copied into every story package. The package records identities only for standardized assets actually used, plus the template/version needed to understand the assembly.
 
 A story failure must not make another story appear failed or successful.
 
@@ -150,7 +151,7 @@ A template defines deterministic assembly requirements:
 - expected timing;
 - declared content slots;
 - brief slot authoring semantics;
-- standardized intro/outro positions;
+- supported standardized intro/outro wrapper positions;
 - which generated asset roles consume each segment;
 - output requirements needed for assembly.
 
@@ -213,11 +214,11 @@ Current simplification target:
 - presenter/anchor clip(s);
 - one generated content clip;
 - voiceover for the content clip;
-- standardized premade intro/outro assets.
+- independently optional standardized premade intro/outro wrapper assets.
 
 A supporting treatment must not become a separate generative subsystem unless evidence requires it. It may be part of presenter media, a fixed treatment, or simple deterministic FFmpeg-level presentation.
 
-Phase 2 established role-only standardized intro/outro requirements without fabricating media facts because the real owner-supplied assets were not present. Concrete binding plus duration/codec qualification remains deferred until those assets are available, before final assembly.
+Phase 2 established role-only standardized intro/outro positions without fabricating media facts because the real owner-supplied assets were not present. Phase 5 then implemented concrete binding and duration/codec qualification assuming both wrappers were supplied. The approved follow-up correction changes that assembly contract so intro and outro are independently optional: an omitted wrapper contributes no placeholder media, duration, identity, or provenance, while any supplied wrapper remains subject to the same local qualification.
 
 ## Provider boundary
 
@@ -259,7 +260,7 @@ FFmpeg owns deterministic assembly and finishing needed by the fixed templates, 
 - burned captions if enabled;
 - final H.264 MP4 encoding.
 
-The assembly layer consumes the selected template, validated ClipPlan, strict generated-media.json handoff, local generated assets, and standardized assets. It must not reinterpret story meaning or call media-generation providers.
+The assembly layer consumes the selected template, validated ClipPlan, strict generated-media.json handoff, local generated assets, and any standardized wrapper assets actually supplied. It must not reinterpret story meaning or call media-generation providers.
 
 Phase 5 implemented this boundary with bounded local FFprobe qualification, deterministic AssemblyPlan creation, a no-shell FFmpeg renderer, manual `vidgen assemble`, post-render technical validation, `assembly-run.json`, strict `final-clip.json`, and atomic `final/clip.mp4` publication. The closeout environment did not contain ffmpeg/ffprobe or the required owner-supplied real media inputs, so the implementation is not yet claimed as real-host/story-render qualified.
 
