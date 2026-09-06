@@ -121,7 +121,7 @@ The intended assembly is conceptually:
           +
     standardized outro
 
-Phase 2 intentionally kept intro/outro references role-only because the real standardized media files were not present. Phase 5 now owns qualification of the actual owner-supplied files: concrete filenames/identity, duration, codec/media properties, and their relationship to the locked story timing must be measured rather than guessed or delegated to the creative model.
+Phase 2 intentionally kept intro/outro references role-only because the real standardized media files were not present. Phase 5 implemented qualification of explicit owner-supplied local intro/outro files: file identity, duration, stream/media properties, and their relationship to the locked story timing are measured rather than guessed or delegated to the creative model. The Phase 5 closeout did not have the real owner assets or ffmpeg/ffprobe runtime available, so no real-media qualification result is claimed.
 
 ## Default generated-media expectation
 
