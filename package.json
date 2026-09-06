@@ -1,6 +1,6 @@
 {
   "name": "vidgen",
-  "version": "0.4.4",
+  "version": "0.5.0",
   "type": "module",
   "engines": {
     "node": ">=24.10.0 <25"
