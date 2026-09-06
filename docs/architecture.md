@@ -167,21 +167,25 @@ Adding a new template should normally require adding a template definition and a
 
 See docs/template-system.md.
 
-Phase 4 can then deterministically resolve generated-asset inputs from the template graph and filled slots. For the default template, the intended relationship is conceptually:
+Phase 4 now deterministically resolves one GeneratedMediaUnit for every template segment/generated-role reference. For the default template this yields:
 
-    opening-anchor
+    u01 hook / opening-anchor
       <- hook + headline
+      spoken <- hook only
 
-    content-video
+    u02 content / content-video
       <- narration
 
-    content-voiceover
+    u03 content / content-voiceover
       <- narration
 
-    supporting-anchor
-      <- supporting-information + closing
+    u04 support / supporting-anchor
+      <- supporting-information
 
-That mapping comes from template segment/role relationships rather than a second creative planning artifact.
+    u05 closing / supporting-anchor
+      <- closing
+
+The repeated supporting-anchor role is intentionally realized as two segment-scoped units because the template references it in two different timing segments. No second creative planning artifact decides that split.
 
 ## Default template
 
@@ -221,12 +225,13 @@ The MVP is Google-first, not Google-coupled.
 
 Keep thin provider-neutral requests/results at the VidGen boundary so ClipPlan generation, media generation, and FFmpeg assembly do not depend directly on provider response shapes.
 
-Current direction:
-- Phase 3 implemented a thin provider-neutral structured-text boundary plus a Google Gemini Interactions REST adapter, with the exact model ID kept in runtime configuration;
-- the owner manually closed Phase 3 without claiming the unrun live Google qualification smoke;
-- Veo remains the initial presenter/video direction for Phase 4;
-- off-screen narration/voiceover mechanism remains unresolved;
-- provider jobs/assets should retain story-local provenance and effective-input identity where useful.
+Current implementation:
+- Phase 3 provides the provider-neutral structured-text boundary plus Google Gemini Interactions adapter;
+- Phase 4 provides provider-neutral video/speech generation boundaries;
+- Google Veo realizes presenter/content-video units from deterministic unit content and explicit approved local presenter references;
+- Google Gemini TTS realizes exact off-screen voiceover text into WAV audio;
+- provider jobs/assets retain story-local provenance, hashes, request/operation identity where safe, and effective-generation-input identity;
+- provider model/voice selections remain runtime configuration rather than template semantics.
 
 Do not build a large generalized provider framework before a second provider or real complexity requires it.
 
@@ -254,7 +259,7 @@ FFmpeg owns deterministic assembly and finishing needed by the fixed templates, 
 - burned captions if enabled;
 - final H.264 MP4 encoding.
 
-The assembly layer consumes the selected template, validated ClipPlan, local generated assets, and standardized assets. It must not reinterpret story meaning.
+The assembly layer consumes the selected template, validated ClipPlan, strict generated-media.json handoff, local generated assets, and standardized assets. It must not reinterpret story meaning or call media-generation providers.
 
 A separate persisted RenderManifest is not required as a conceptual pipeline stage. Emit render/debug metadata only if implementation evidence shows it is useful.
 
@@ -273,9 +278,9 @@ Initial first-class output:
 
 The initial execution boundary is one story.
 
-Persist enough completed story-local work to debug failures and avoid needlessly regenerating expensive media.
+Phase 4 persists media-run.json at durable per-unit boundaries plus generated-media.json only when all current generated-media units are ready.
 
-A sophisticated global cache is not required. Asset reuse can initially be local to the story package and keyed by effective generation inputs.
+Generated asset reuse is story-local. Reuse requires matching effective generation input plus current local file hash/size validation; file existence alone is insufficient. No global cache is required.
 
 External operations must be bounded and failures explicit.
 
