@@ -1,0 +1,58 @@
+TASK: Correction 5 / P1 — Simplify input story and planning foundation
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra Medium`.
+
+VERSIONING
+- Required unchanged project version: `0.5.3`.
+
+GOAL
+
+Simplify the existing Phase 1-3 foundation without changing behavior.
+
+Read BOOT.md and the current implementation/tests in scope before editing. Prefer deletion, direct code, and reuse of existing helpers over new abstractions. If a candidate is already simple, leave it alone and simplify elsewhere in scope. Do not optimize for a LOC target.
+
+SCOPE
+
+Primary scope:
+- `src/shared/**`;
+- `src/core/error.ts`;
+- `src/core/assembly-template.ts`;
+- `src/core/canonical-input.ts`;
+- `src/core/story-input.ts`;
+- `src/core/clip-plan.ts`;
+- `src/core/structured-text-model.ts`;
+- `src/core/template-registry.ts`;
+- `src/app/phase-1-input-run.ts`;
+- `src/app/story-workspace.ts`;
+- `src/app/clip-plan-workflow.ts`;
+- `src/integrations/ngest/**`.
+
+Keep current exports compatible with the CLI and downstream media workflow.
+
+MUST REMAIN TRUE
+
+- Ngest bearer auth, URL policy, timeout, redirect rejection, continuation failure, transport validation, and secret-safe errors remain unchanged.
+- CanonicalInput, StoryInput, AssemblyTemplate, and ClipPlan durable wire shapes and fingerprints remain unchanged.
+- Article selection stays explicit; no ranking, first-item fallback, or production-eligibility logic enters VidGen.
+- Default template behavior stays exact while generic non-40-second template validation remains supported.
+- ClipPlan still requires sufficient StoryInput context, performs one normal-path model call, validates model output, and publishes only validated durable output.
+- Story/run/plan artifact names, status meanings, atomic publication, and terminal-failure cleanup remain unchanged.
+- Existing JSON schemas and `templates/default-news-40s.json` are semantic baselines; do not change them in this refactor.
+- Do not add dependencies, product capability, compatibility layers, generic repositories/services, or speculative extension points.
+- `package.json` and `src/version.ts` stay at 0.5.3.
+
+PROOF
+
+Run the focused input/story/template/ClipPlan/ngest/workflow tests, then:
+- `npm run check`;
+- `node src/cli.ts --help`;
+- `git diff --check`.
+
+Downstream-required capability -> owning implementation/export -> focused proof:
+
+validated planned story workspace semantics -> current StoryInput/ClipPlan/workspace exports -> existing media-workflow plus ClipPlan/story regression tests.
+
+FINAL RESPONSE
+
+State what became simpler, what behavior was deliberately preserved, tests actually run, and any candidate complexity intentionally retained because it protects a current contract.
