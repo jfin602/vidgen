@@ -13,7 +13,7 @@ Make VidGen's live input path consume the ngest Distribution v1 endpoint that ex
   - `NGEST_BASE_URL`;
   - `NGEST_PROFILE_KEY`;
   - `NGEST_BEARER_TOKEN`;
-  - one bounded optional timeout setting using the current millisecond semantics.
+  - optional `NGEST_TIMEOUT_MS`, preserving the current bounded millisecond timeout semantics.
 - Construct the request as `GET {baseUrl}/api/v1/distribution/{encodedProfileKey}` with `Accept: application/json` and bearer authentication.
 - Preserve the current HTTPS-except-loopback rule, manual redirect handling, timeout behavior, and secret-safe public errors.
 - Validate the Distribution v1 wire separately from the existing local VidGen-shaped fixture validator.
