@@ -34,6 +34,29 @@ test('a Phase 4 media-ready workspace becomes the default deterministic Assembly
   });
 });
 
+test('assembly independently qualifies supplied wrappers without probing or reading omitted wrappers', async () => {
+  await withMediaWorkspace(async (directory) => {
+    const intro = join(directory, 'intro.mp4'); const outro = join(directory, 'outro.mp4');
+    for (const [request, roles, duration] of [
+      [{ introPath: intro, outroPath: outro }, ['intro', 'outro'], 45],
+      [{ introPath: intro }, ['intro'], 42],
+      [{ outroPath: outro }, ['outro'], 43],
+      [{}, [], 40],
+    ] as const) {
+      await rm(intro, { force: true }); await rm(outro, { force: true });
+      if ('introPath' in request) await writeFile(intro, 'intro');
+      if ('outroPath' in request) await writeFile(outro, 'outro');
+      const probed: string[] = [];
+      const plan = await qualifyAssemblyInputs({ storyDirectory: directory, ...request, probe: async (path) => { probed.push(path); return fakeProbe(path); } });
+      assert.deepEqual(Object.keys(plan.standardizedAssets), roles);
+      assert.equal(plan.expectedFinalDurationSeconds, duration);
+      assert.deepEqual(probed.filter((path) => path.endsWith('intro.mp4') || path.endsWith('outro.mp4')).map((path) => path.replace(/.*[\\/]/, '').replace('.mp4', '')), roles);
+    }
+    await writeFile(intro, 'intro');
+    await assert.rejects(qualifyAssemblyInputs({ storyDirectory: directory, introPath: intro, outroPath: intro, probe: fakeProbe }), hasAssemblyCode);
+  });
+});
+
 test('non-ready and corrupt Phase 4 media state fail before any FFprobe call', async () => {
   await withMediaWorkspace(async (directory) => {
     const intro = join(directory, 'intro.mp4'); const outro = join(directory, 'outro.mp4'); await writeFile(intro, 'intro'); await writeFile(outro, 'outro');

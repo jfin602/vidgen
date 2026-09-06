@@ -21,8 +21,8 @@ import {
 export const MEDIA_DURATION_TOLERANCE_SECONDS = 1 / 30;
 
 export interface StandardizedAssetRequest {
-  readonly introPath: string;
-  readonly outroPath: string;
+  readonly introPath?: string;
+  readonly outroPath?: string;
 }
 
 export interface QualifiedMediaFile {
@@ -57,8 +57,8 @@ export interface AssemblyPlan {
   readonly template: { readonly id: string; readonly version: string };
   readonly output: AssemblyTemplateOutput;
   readonly standardizedAssets: {
-    readonly intro: QualifiedMediaFile;
-    readonly outro: QualifiedMediaFile;
+    readonly intro?: QualifiedMediaFile;
+    readonly outro?: QualifiedMediaFile;
   };
   readonly storyDurationSeconds: number;
   readonly expectedFinalDurationSeconds: number;
@@ -101,16 +101,20 @@ export async function qualifyAssemblyInputs(dependencies: AssemblyInputDependenc
       targetDurationSeconds: item.unit.targetDurationSeconds,
     });
   }
-  const introProbe = await probe(standardized.intro.path, dependencies.ffprobe);
-  const outroProbe = await probe(standardized.outro.path, dependencies.ffprobe);
-  requireVideoStreamShape(introProbe, 'Standardized media');
-  requireVideoStreamShape(outroProbe, 'Standardized media');
-  requirePositiveDuration(introProbe, 'Standardized media');
-  requirePositiveDuration(outroProbe, 'Standardized media');
-  return buildAssemblyPlan(workspace, qualifiedGenerated, {
-    intro: { identity: standardized.intro, probe: introProbe },
-    outro: { identity: standardized.outro, probe: outroProbe },
-  });
+  const qualifiedStandardized: AssemblyPlan['standardizedAssets'] = {};
+  if (standardized.intro !== undefined) {
+    const facts = await probe(standardized.intro.path, dependencies.ffprobe);
+    requireVideoStreamShape(facts, 'Standardized media');
+    requirePositiveDuration(facts, 'Standardized media');
+    qualifiedStandardized.intro = { identity: standardized.intro, probe: facts };
+  }
+  if (standardized.outro !== undefined) {
+    const facts = await probe(standardized.outro.path, dependencies.ffprobe);
+    requireVideoStreamShape(facts, 'Standardized media');
+    requirePositiveDuration(facts, 'Standardized media');
+    qualifiedStandardized.outro = { identity: standardized.outro, probe: facts };
+  }
+  return buildAssemblyPlan(workspace, qualifiedGenerated, qualifiedStandardized);
 }
 
 /** Pure subset resolver, exported for focused non-default template coverage. */
@@ -159,7 +163,7 @@ export function buildAssemblyPlan(
     output: workspace.template.output,
     standardizedAssets,
     storyDurationSeconds,
-    expectedFinalDurationSeconds: standardizedAssets.intro.probe.durationSeconds + storyDurationSeconds + standardizedAssets.outro.probe.durationSeconds,
+    expectedFinalDurationSeconds: storyDurationSeconds + (standardizedAssets.intro?.probe.durationSeconds ?? 0) + (standardizedAssets.outro?.probe.durationSeconds ?? 0),
     storySegments,
   };
 }
@@ -178,15 +182,15 @@ async function identifyGeneratedAssets(workspace: ValidatedMediaReadyWorkspace, 
   return found;
 }
 
-async function identifyStandardizedAssets(template: AssemblyTemplate, request: StandardizedAssetRequest, maxBytes: number | undefined): Promise<{ readonly intro: LocalFileIdentity; readonly outro: LocalFileIdentity }> {
+async function identifyStandardizedAssets(template: AssemblyTemplate, request: StandardizedAssetRequest, maxBytes: number | undefined): Promise<Partial<Record<'intro' | 'outro', LocalFileIdentity>>> {
   const roles = new Map(template.standardizedAssetRoles.map((role) => [role.id, role.placement]));
   if (roles.size !== 2 || roles.get('intro') !== 'before-story' || roles.get('outro') !== 'after-story') {
     throw invalidAssembly('Template standardized asset roles are unsupported for assembly.');
   }
-  const intro = await identifyLocalFile(request.introPath, { maxBytes });
-  const outro = await identifyLocalFile(request.outroPath, { maxBytes });
-  if (samePath(intro.path, outro.path)) throw invalidAssembly('Standardized intro and outro must be distinct local media files.');
-  return { intro, outro };
+  const intro = request.introPath === undefined ? undefined : await identifyLocalFile(request.introPath, { maxBytes });
+  const outro = request.outroPath === undefined ? undefined : await identifyLocalFile(request.outroPath, { maxBytes });
+  if (intro !== undefined && outro !== undefined && samePath(intro.path, outro.path)) throw invalidAssembly('Standardized intro and outro must be distinct local media files.');
+  return { ...(intro === undefined ? {} : { intro }), ...(outro === undefined ? {} : { outro }) };
 }
 
 function requireGeneratedStreamShape(unit: GeneratedMediaUnit, facts: LocalMediaProbe): void {
