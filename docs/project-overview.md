@@ -12,7 +12,7 @@ The initial development goal is narrower than the eventual live integration: man
 
 ## Implementation status
 
-Phases 1 and 2 are complete and closed at versions 0.1.5 and 0.2.5. Phase 3 was manually owner-closed at version 0.3.4. Phase 4 was manually owner-closed at version 0.4.4 after its P5 review/repair pass. The repository is now on the 0.5.0 Phase 5 baseline.
+Phases 1 and 2 are complete and closed at versions 0.1.5 and 0.2.5. Phase 3 was manually owner-closed at version 0.3.4. Phase 4 was manually owner-closed at version 0.4.4. Phase 5 was manually owner-closed at version 0.5.3 after its closeout review/repair. The deterministic assembly path is implemented; real FFmpeg/story-render qualification remains explicitly unclaimed because the closeout host and owner-supplied media were unavailable.
 
 Implemented foundation:
 - Node.js + TypeScript CLI foundation;
@@ -30,9 +30,12 @@ Implemented foundation:
 - a manual media command that consumes an existing planned workspace, writes raw story-local assets, and persists resumable media metadata plus a strict generated-media handoff manifest;
 - story-local generated-asset reuse keyed by effective generation input and current file identity;
 - filesystem-backed run/story/planning/media metadata and shared atomic persistence;
+- bounded local FFprobe qualification and deterministic AssemblyPlan creation;
+- a no-shell FFmpeg renderer plus manual `vidgen assemble` workflow;
+- `assembly-run.json`, strict `final-clip.json`, post-render technical validation, and atomic `final/clip.mp4` publication;
 - fail-closed handling for unsupported ngest continuation.
 
-Phase 3 implemented the single creative-planning stage. Phase 4 implemented deterministic generated-media realization and story-local raw media/provenance. Phase 5 now owns standardized asset qualification plus FFmpeg assembly into the first complete clip. Publisher retrieval and live fan-out remain later work.
+Phase 3 implemented the single creative-planning stage. Phase 4 implemented deterministic generated-media realization and story-local raw media/provenance. Phase 5 implemented standardized asset qualification plus deterministic FFmpeg assembly and final-clip provenance. Its real host/media qualification remains deferred until the necessary runtime and owner inputs are available. Publisher retrieval and live fan-out remain later work.
 
 ## Core architectural standards
 
@@ -184,7 +187,7 @@ Current implementation:
 - Veo-backed content video uses deterministic unit context;
 - Gemini TTS produces exact off-screen voiceover from template-declared voiceover text;
 - raw generated assets remain story-local and are tracked by hash/provenance/effective generation input;
-- standardized premade intro/outro clips remain outside generated-media production and are qualified during Phase 5;
+- standardized premade intro/outro clips remain outside generated-media production and are qualified by the Phase 5 assembly path;
 - supporting text/graphics, if needed outside generated media, remain deterministic rather than another creative reasoning stage.
 
 Provider model and voice selections remain runtime configuration rather than durable template semantics.
@@ -200,7 +203,7 @@ The initial first-class target is:
 
 16:9 and 1:1 outputs are deferred until the vertical single-story pipeline works.
 
-Caption, audio-codec, bitrate, and loudness details remain implementation-level decisions to qualify during FFmpeg assembly work.
+Caption/display treatment, audio codec, bitrate, and loudness behavior are engine-owned Phase 5 assembly policy rather than template or creative-model decisions.
 
 ## Recovery and reuse
 
