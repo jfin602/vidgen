@@ -104,6 +104,10 @@ If downstream work would have to invent upstream semantics, return Planning need
 
 Requires an unblocked /prompt-plan. Revalidate repository state and write ordered prompt files under docs/tasks/<folder>/.
 
+Plan richly; prompt sparsely; validate rigorously. `/prompt-ass` and `/prompt-plan` own detailed reasoning and implementation analysis. `/prompt-write` distills that work into the smallest precise execution brief that preserves the objective, required behavior and boundaries, validation/evidence requirements, non-goals, and meaningful producer/consumer proof without prescribing unnecessary implementation details.
+
+Concise does not mean vague. Codex must still inspect the current implementation and trace the affected flow before editing. Avoid copying planning transcripts, speculative abstractions, predicted helper/class names, step-by-step implementation recipes, or broad file inventories unless they are necessary constraints for the task.
+
 Before declaring a stack ready:
 
     npm run codex:phase:validate -- <folder>
@@ -153,6 +157,8 @@ Run artifacts are written under .codex-runs/ and ignored by Git.
 ## Engineering posture
 
 - Analyze before implementation.
+- Plan richly; prompt sparsely; validate rigorously. Detailed reasoning belongs in `/prompt-ass` and `/prompt-plan`; `/prompt-write` should carry only the precise execution constraints Codex needs.
+- A concise prompt never relaxes comprehension: inspect the current code and trace the affected flow before choosing the smallest correct implementation.
 - Prefer small independently reviewable prompts.
 - Codex model policy: Luna Medium is the minimum allowed configuration; prefer Terra for almost all implementation work; use Luna only for tightly bounded mechanical work; escalate to Sol rarely and only when substantial reasoning ambiguity remains after planning.
 - Preserve the ngest/VidGen boundary.

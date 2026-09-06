@@ -30,6 +30,15 @@ Default posture:
 - Escalate to Sol rarely and only when the implementation task itself still contains substantial unresolved reasoning, broad interaction risk, or difficult debugging that cannot be removed through better planning or task decomposition.
 - Do not select Sol merely because a task is important, security-sensitive, contract-defining, or a closeout. Increase validation rigor first.
 - Do not compensate for an oversized or ambiguous prompt by choosing a stronger model. Split or improve the prompt first.
+- Prefer concise execution briefs after rich upstream planning, but do not treat prompt brevity as evidence that the implementation itself is easy.
+
+## Prompt style and model tier
+
+The `/prompt-ass` and `/prompt-plan` stages should remove avoidable ambiguity before Codex runs. `/prompt-write` then distills that work into a concise execution brief rather than repeating the full reasoning process.
+
+Model selection is based on the residual implementation difficulty after planning: branching complexity, contract sensitivity, interaction surface, debugging uncertainty, and the amount of reasoning Codex still has to perform while tracing the real code. A shorter prompt, or use of a minimalist implementation aid such as Ponytail, does not automatically justify a lower configuration.
+
+VidGen does not depend on Ponytail or any equivalent plugin. Such tools may reinforce the project's reuse-first, smallest-correct-implementation posture when available, but the model policy and validation requirements must remain correct without them.
 
 ## Minimum capable matrix
 

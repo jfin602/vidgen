@@ -30,6 +30,22 @@ The docs prompt lives at .codex/docs-prompt.txt and is separate from phase task 
 
 Do not skip from an idea directly to implementation prompts when the task is substantial.
 
+## Planning and execution-brief philosophy
+
+Plan richly; prompt sparsely; validate rigorously.
+
+`/prompt-ass` owns task decomposition: target behavior, constraints, preserved behavior, dependencies, prompt order, deferred work, closeout, and model recommendations.
+
+`/prompt-plan` owns detailed implementation analysis: inspect current source and tests, trace affected producers/consumers and shared helpers, identify likely file scope, failure modes, regression risks, focused tests, broader validation, runtime/provider/render evidence, and non-goals.
+
+`/prompt-write` must not copy that analysis wholesale. Revalidate the repository, then distill the accepted plan into the smallest precise execution brief Codex needs. A good brief states the objective, behavior/contracts that must remain true, meaningful scope boundaries, required validation/evidence, non-goals, and producer/consumer proof when it materially constrains the task.
+
+Concise does not mean vague. The implementation agent is still expected to inspect the current code and understand the affected flow before editing. Prompt brevity must not remove trust-boundary validation, security requirements, error handling, durability semantics, or other explicit contracts.
+
+Normally omit step-by-step implementation recipes, predicted internal designs, speculative abstractions, suggested helper/class names, pseudocode unless the algorithm itself is contractual, repeated architecture explanations already available in repository docs, and broad file inventories included only because planning inspected them.
+
+VidGen's workflow is tool-independent. Minimalist implementation aids such as Ponytail may reinforce this posture when installed, but they are not repository requirements and must not become architectural dependencies.
+
 ## Early phase folders
 
 For the current pre-1.0 family:
@@ -69,6 +85,8 @@ Each task folder contains contiguous files:
 Exactly one final prompt is the closeout.
 
 Each prompt includes one supported Recommended configuration line.
+
+Implementation prompts should be concise execution briefs rather than planning transcripts. They may use headings such as GOAL, MUST REMAIN TRUE, VALIDATION/PROOF, NON-GOALS, and FINAL RESPONSE when useful, but those prose headings are not runner grammar. Include explicit file scope only when it is a real implementation boundary or safety constraint; otherwise let Codex trace the smallest correct surface from the repository.
 
 ## Runner
 
