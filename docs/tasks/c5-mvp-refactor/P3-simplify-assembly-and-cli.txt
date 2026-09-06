@@ -1,0 +1,50 @@
+TASK: Correction 5 / P3 — Simplify assembly and CLI
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.5.3`.
+
+GOAL
+
+Simplify the existing Phase 5 assembly path and product CLI while preserving exact observable behavior and render safety.
+
+Read BOOT.md plus the current P1-P2 result and current code/tests in scope. Prefer deletion, reuse, and direct code. Do not introduce an assembly framework or generalized command framework.
+
+SCOPE
+
+Primary scope:
+- `src/app/assembly-input.ts`;
+- `src/app/assembly-workflow.ts`;
+- `src/integrations/ffmpeg/local-file.ts`;
+- `src/integrations/ffmpeg/ffprobe.ts`;
+- `src/integrations/ffmpeg/ffmpeg-renderer.ts`;
+- `src/cli.ts`.
+
+Keep upstream Phase 1-4 contracts intact.
+
+MUST REMAIN TRUE
+
+- The CLI keeps the same commands, required options, validation, delegation, help behavior, safe output, and exit semantics.
+- Assembly still requires the current Phase 4 `media_ready` handoff and verifies generated asset path/hash/size before probing/rendering.
+- Standardized intro/outro/font remain explicit bounded local files; no URL or publisher retrieval is introduced.
+- FFprobe and FFmpeg remain argv-only/no-shell, bounded, local-file oriented, and safe against raw stderr/stdout/path leakage.
+- AssemblyPlan mapping, timing checks, voiceover rules, fixed render policy, display-text/font staging, explicit stream mapping, normalization, concat, loudnorm, and final technical contract remain unchanged.
+- `assembly-run.json`, `final-clip.json`, fingerprints/provenance, candidate isolation, atomic final publication, no-final-cache behavior, and failure cleanup remain unchanged.
+- Existing durable schemas, template data, render-policy semantics, and output target remain unchanged.
+- Do not add Remotion, alternate formats, new renderer/provider behavior, new dependencies, or Phase 6 functionality.
+- `package.json` and `src/version.ts` stay at 0.5.3.
+
+PROOF
+
+Run focused assembly-input, assembly-workflow, FFprobe, FFmpeg-renderer, and CLI tests, then:
+- `npm run check`;
+- `node src/cli.ts --help`;
+- `git diff --check`.
+
+The earlier Phase 5 real-host/story-render qualification is still unclaimed. Do not fabricate it or change behavior merely because ffmpeg/ffprobe may be absent on this host.
+
+FINAL RESPONSE
+
+State what became simpler, how assembly/CLI behavior stayed unchanged, tests actually run, and which safety checks were intentionally retained.
