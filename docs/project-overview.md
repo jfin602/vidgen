@@ -60,7 +60,7 @@ A supplied story is already content-worthy. VidGen does not add another eligibil
 
 ### One story is one production unit
 
-Each story produces one independent story package containing the final clip and the story-specific source/intermediate/generated files used to make it.
+Each governed story remains an independent production identity and failure boundary. The preserved cinematic path owns its self-contained story workspace/package; the simple path owns its paired final MP4 + metadata JSON output and may use bounded internal working state without inheriting the cinematic package contract.
 
 Failures, retries, or regeneration for one story should not contaminate another story.
 
@@ -109,11 +109,11 @@ One validated ClipPlan is a filled template form. It contains the story-specific
 
 No downstream step should need to reinterpret the story or redesign the template.
 
-### FFmpeg owns MVP assembly
+### FFmpeg owns deterministic finishing and assembly
 
 The current MVP does not use Remotion.
 
-The generated presenter/content media and any supplied standardized intro/outro clips are normalized and assembled deterministically with FFmpeg.
+The simple path uses FFmpeg for deterministic lower-third finishing/normalization, while the preserved cinematic path continues to normalize and assemble generated presenter/content media and any supplied standardized intro/outro clips with FFmpeg.
 
 Remotion or another programmable compositor is deferred unless real production requirements demonstrate a need for one.
 
@@ -134,11 +134,12 @@ Ngest owns:
 VidGen owns:
 - validation and normalization of received input;
 - story-level production identity;
-- story package lifecycle;
-- ClipPlan generation and validation;
+- production/artifact lifecycle for both paths;
+- simple presenter-headline production;
+- ClipPlan generation and validation for the preserved cinematic path;
 - generated presenter/content media;
-- narration/voiceover integration;
-- deterministic FFmpeg assembly;
+- narration/voiceover integration where the cinematic path requires it;
+- deterministic FFmpeg finishing/assembly;
 - final clip artifacts and provenance.
 
 VidGen must not query ngest persistence directly or reproduce ngest eligibility/filtering logic.
