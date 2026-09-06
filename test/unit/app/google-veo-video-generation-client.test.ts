@@ -124,6 +124,13 @@ test('presenter dialogue chunks reconstruct exactly after whitespace normalizati
   assert.equal(chunks.every((chunk) => !chunk.includes('\n')), true);
 });
 
+test('presenter dialogue uses the initial and extension duration weights', () => {
+  assert.deepEqual(
+    partitionPresenterSpeech('one two three four five six seven eight nine ten eleven', 3),
+    ['one two three four', 'five six seven', 'eight nine ten eleven'],
+  );
+});
+
 test('Google Veo enforces timeout and fails safely for provider/download failures', async (context) => {
   const cases: readonly [string, FetchImplementation, ClientOptions | undefined][] = [
     ['HTTP failure', async () => new Response(`${apiKey} ${storyText}`, { status: 503 }), undefined],

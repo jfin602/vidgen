@@ -191,10 +191,9 @@ function extractStructuredTextResult(
   if (!Array.isArray(interaction.steps)) {
     throw providerFailure('Google Gemini text-model response did not include model output.');
   }
-  const modelOutput = interaction.steps
-    .map(asRecord)
-    .filter((step): step is Record<string, unknown> => step?.type === 'model_output')
-    .at(-1);
+  const modelOutput = interaction.steps.findLast(
+    (step): step is Record<string, unknown> => asRecord(step)?.type === 'model_output',
+  );
   if (modelOutput === undefined || !Array.isArray(modelOutput.content) || modelOutput.content.length === 0) {
     throw providerFailure('Google Gemini text-model response did not include model output.');
   }

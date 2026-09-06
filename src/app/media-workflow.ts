@@ -31,7 +31,6 @@ export const GENERATED_MEDIA_INPUT_CONTRACT_VERSION = '1';
 export const DEFAULT_MAX_ANCHOR_REFERENCE_BYTES = 10_000_000;
 export const DEFAULT_MAX_GENERATED_ASSET_BYTES = 100_000_000;
 
-type MediaKind = GeneratedMediaUnit['role']['kind'];
 type UnitStatus = 'pending' | 'ready' | 'failed';
 
 export interface ReferenceImageIdentity {
@@ -152,25 +151,27 @@ export async function generateStoryMedia(dependencies: MediaWorkflowDependencies
   const writeJson = dependencies.writeJson ?? writeJsonAtomically;
   const workspace = await loadValidatedPlannedWorkspace(dependencies.storyDirectory, dependencies.getTemplate ?? getAssemblyTemplate);
   const units = resolveGeneratedMediaUnits(workspace.template, workspace.clipPlan);
-  const presenterUnits = units.filter((unit) => unit.role.kind === 'presenter');
+  const hasPresenter = units.some((unit) => unit.role.kind === 'presenter');
   const references = await loadReferences(dependencies.anchorReferencePaths ?? [], maxReferenceBytes);
-  if (presenterUnits.length > 0 && (references.length < 1 || references.length > 3)) {
+  if (hasPresenter && (references.length < 1 || references.length > 3)) {
     throw new VidGenError('invalid_argument', 'Presenter media requires one to three approved local anchor references.');
   }
-  if (presenterUnits.length === 0 && references.length > 0) {
+  if (!hasPresenter && references.length > 0) {
     throw new VidGenError('invalid_argument', 'Anchor references were supplied but this template has no presenter media units.');
   }
 
   // All proof of durable state and local input has completed above. No default
   // provider client is constructed until this point.
-  const videoUnits = units.filter((unit) => unit.role.kind === 'presenter' || unit.role.kind === 'video');
-  const speechUnits = units.filter((unit) => unit.role.kind === 'voiceover');
-  const video = videoUnits.length === 0 ? undefined : (dependencies.createVideoClient ?? (() => new GoogleVeoVideoGenerationClient()))();
-  const speech = speechUnits.length === 0 ? undefined : (dependencies.createSpeechClient ?? (() => new GoogleGeminiSpeechGenerationClient()))();
-  if (video === undefined && videoUnits.length > 0) throw new VidGenError('configuration', 'Video generation client is unavailable.');
-  if (speech === undefined && speechUnits.length > 0) throw new VidGenError('configuration', 'Speech generation client is unavailable.');
+  const hasVideo = units.some((unit) => unit.role.kind !== 'voiceover');
+  const hasSpeech = units.some((unit) => unit.role.kind === 'voiceover');
+  const video = hasVideo ? (dependencies.createVideoClient ?? (() => new GoogleVeoVideoGenerationClient()))() : undefined;
+  const speech = hasSpeech ? (dependencies.createSpeechClient ?? (() => new GoogleGeminiSpeechGenerationClient()))() : undefined;
+  if (video === undefined && hasVideo) throw new VidGenError('configuration', 'Video generation client is unavailable.');
+  if (speech === undefined && hasSpeech) throw new VidGenError('configuration', 'Speech generation client is unavailable.');
 
-  const inputs = units.map((unit) => ({ unit, fingerprint: effectiveFingerprint(workspace, unit, references.map((reference) => reference.identity), video, speech) }));
+  const referenceIdentities = references.map((reference) => reference.identity);
+  const referenceImages = references.map((reference) => reference.image);
+  const inputs = units.map((unit) => ({ unit, fingerprint: effectiveFingerprint(workspace, unit, referenceIdentities, video, speech) }));
   const prior = await readOptionalJson(join(workspace.directory, MEDIA_RUN_ARTIFACT_NAME));
   const startedAt = timestamp(now());
   let records = inputs.map(({ unit, fingerprint }) => pendingRecord(unit, fingerprint));
@@ -190,7 +191,7 @@ export async function generateStoryMedia(dependencies: MediaWorkflowDependencies
       storyFingerprint: workspace.storyFingerprint,
       clipPlanFingerprint: workspace.clipPlanFingerprint,
       template: { id: workspace.template.id, version: workspace.template.version },
-      referenceImages: references.map((reference) => reference.identity),
+      referenceImages: referenceIdentities,
       units: records,
       generatedUnitCount: generated,
       reusedUnitCount: reused,
@@ -205,19 +206,18 @@ export async function generateStoryMedia(dependencies: MediaWorkflowDependencies
       const { unit, fingerprint } = inputs[index]!;
       const priorRecord = reusablePriorRecord(prior, workspace, unit, fingerprint);
       if (priorRecord !== undefined && await isReusableFile(workspace.directory, priorRecord, unit)) {
-        records = replaceRecord(records, index, { ...priorRecord, provenance: 'reused', status: 'ready' });
+        records[index] = { ...priorRecord, provenance: 'reused', status: 'ready' };
         reused += 1;
         await persist('running');
         continue;
       }
       const result = unit.role.kind === 'voiceover'
         ? await speech!.generateSpeech({ unit })
-        : await video!.generateVideo(unit.role.kind === 'presenter' ? { unit, referenceImages: references.map((reference) => reference.image) } : { unit });
+        : await video!.generateVideo(unit.role.kind === 'presenter' ? { unit, referenceImages } : { unit });
       const ready = await persistGeneratedResult(workspace.directory, unit, fingerprint, result, maxAssetBytes, video, speech);
-      records = replaceRecord(records, index, ready);
+      records[index] = ready;
       generated += 1;
-      operations += result.operationId === undefined && result.requestId === undefined
-        ? (result.generationOperationCount ?? 1) : (result.generationOperationCount ?? 1);
+      operations += result.generationOperationCount ?? 1;
       await persist('running');
     }
     const manifest: GeneratedMediaManifest = {
@@ -226,7 +226,7 @@ export async function generateStoryMedia(dependencies: MediaWorkflowDependencies
       storyFingerprint: workspace.storyFingerprint,
       clipPlanFingerprint: workspace.clipPlanFingerprint,
       template: { id: workspace.template.id, version: workspace.template.version },
-      referenceImages: references.map((reference) => reference.identity),
+      referenceImages: referenceIdentities,
       assets: records,
     };
     validateGeneratedMediaManifest(manifest, workspace, units);
@@ -376,8 +376,6 @@ function effectiveFingerprint(workspace: ValidatedPlannedWorkspace, unit: Genera
 }
 
 function pendingRecord(unit: GeneratedMediaUnit, fingerprint: string): MediaUnitRecord { return { unitId: unit.unitId, segment: unit.segment, role: unit.role, effectiveGenerationInputFingerprint: fingerprint, status: 'pending' }; }
-function replaceRecord(records: readonly MediaUnitRecord[], index: number, record: MediaUnitRecord): MediaUnitRecord[] { return records.map((current, currentIndex) => currentIndex === index ? record : current); }
-
 async function persistGeneratedResult(directory: string, unit: GeneratedMediaUnit, fingerprint: string, result: VideoGenerationResult | SpeechGenerationResult, maxBytes: number, video?: VideoGenerationClient, speech?: SpeechGenerationClient): Promise<MediaUnitRecord> {
   const expected = expectedAsset(unit);
   if (result.bytes.byteLength < 1 || result.bytes.byteLength > maxBytes || result.mimeType !== expected.mimeType) throw invalidMedia('Generated provider output has an unsupported media type or size.');
@@ -397,7 +395,8 @@ function reusablePriorRecord(prior: unknown, workspace: ValidatedPlannedWorkspac
   try { const ready = validateReadyRecord(match, unit); return ready.effectiveGenerationInputFingerprint === fingerprint ? ready : undefined; } catch { return undefined; }
 }
 async function isReusableFile(directory: string, record: MediaUnitRecord, unit: GeneratedMediaUnit): Promise<boolean> {
-  if (record.assetPath !== expectedAsset(unit).path || record.mimeType !== expectedAsset(unit).mimeType || record.sha256 === undefined || record.byteSize === undefined || !safeRelativePath(record.assetPath)) return false;
+  const expected = expectedAsset(unit);
+  if (record.assetPath !== expected.path || record.mimeType !== expected.mimeType || record.sha256 === undefined || record.byteSize === undefined || !safeRelativePath(record.assetPath)) return false;
   try { const bytes = new Uint8Array(await readFile(join(directory, ...record.assetPath.split('/')))); return bytes.byteLength === record.byteSize && sha256(bytes) === record.sha256; } catch { return false; }
 }
 

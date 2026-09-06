@@ -286,21 +286,17 @@ export function partitionPresenterSpeech(spokenText: string, chunkCount: number)
     throw new VidGenError('generated_media', 'A presenter video generation request requires spoken text.');
   }
   const words = normalized.split(' ');
-  const weights = Array.from({ length: chunkCount }, (_unused, index) =>
-    index === 0 ? INITIAL_DURATION_SECONDS : EXTENSION_DURATION_SECONDS,
-  );
-  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  const totalWeight = INITIAL_DURATION_SECONDS + ((chunkCount - 1) * EXTENSION_DURATION_SECONDS);
   const chunks: string[] = [];
   let cursor = 0;
-  let priorTarget = 0;
+  let coveredWeight = 0;
   for (let index = 0; index < chunkCount; index += 1) {
+    coveredWeight += index === 0 ? INITIAL_DURATION_SECONDS : EXTENSION_DURATION_SECONDS;
     const target = index === chunkCount - 1
       ? words.length
-      : Math.floor((words.length * weights.slice(0, index + 1).reduce((sum, weight) => sum + weight, 0)) / totalWeight);
-    const count = Math.max(0, target - priorTarget);
-    chunks.push(words.slice(cursor, cursor + count).join(' '));
-    cursor += count;
-    priorTarget = target;
+      : Math.floor((words.length * coveredWeight) / totalWeight);
+    chunks.push(words.slice(cursor, target).join(' '));
+    cursor = target;
   }
   return chunks;
 }

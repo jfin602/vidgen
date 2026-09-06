@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import type { AssemblyTemplate, AssemblyTemplateGeneratedAssetRole, AssemblyTemplateSegment } from './assembly-template.ts';
+import type { AssemblyTemplate, AssemblyTemplateSegment } from './assembly-template.ts';
 import { validateClipPlanForStoryFingerprint, type ClipPlan } from './clip-plan.ts';
 import { VidGenError } from './error.ts';
 import { canonicalJson } from '../shared/canonical-json.ts';
@@ -68,8 +68,8 @@ export function resolveGeneratedMediaUnits(
       }
       units.push({
         unitId: formatUnitId(units.length + 1),
-        segment: toUnitSegment(segment),
-        role: toUnitRole(role),
+        segment: { id: segment.id, startSeconds: segment.startSeconds, endSeconds: segment.endSeconds },
+        role: { id: role.id, kind: role.kind },
         targetDurationSeconds: segment.endSeconds - segment.startSeconds,
         content,
         spokenText,
@@ -185,14 +185,6 @@ function resolveSegmentContent(
     }
     return { slotId: definition.id, usage: definition.usage, text };
   });
-}
-
-function toUnitSegment(segment: AssemblyTemplateSegment): GeneratedMediaUnit['segment'] {
-  return { id: segment.id, startSeconds: segment.startSeconds, endSeconds: segment.endSeconds };
-}
-
-function toUnitRole(role: AssemblyTemplateGeneratedAssetRole): GeneratedMediaUnit['role'] {
-  return { id: role.id, kind: role.kind };
 }
 
 function formatUnitId(ordinal: number): string {

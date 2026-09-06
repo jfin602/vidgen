@@ -128,8 +128,10 @@ function extractSpeechResult(payload: unknown, provider: string, configuredModel
   if (pcm.length === 0 || pcm.length % 2 !== 0) throw providerFailure('Google Gemini TTS response had invalid PCM audio.');
   const bytes = pcmToWav(pcm);
   const durationSeconds = pcm.length / (PCM_SAMPLE_RATE * PCM_CHANNELS * (PCM_BITS_PER_SAMPLE / 8));
-  const result: SpeechGenerationResult = { provider, model: actualModel ?? configuredModel, voice, mimeType: 'audio/wav', bytes, durationSeconds };
-  return requestId === undefined ? result : { ...result, requestId };
+  return {
+    provider, model: actualModel ?? configuredModel, voice, mimeType: 'audio/wav', bytes, durationSeconds,
+    ...(requestId === undefined ? {} : { requestId }),
+  };
 }
 
 function decodeBase64(value: string, maxBytes: number): Uint8Array {
