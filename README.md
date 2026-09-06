@@ -38,7 +38,7 @@ Current standards:
 - one validated ClipPlan per story;
 - fixed assembly templates own timing and media-slot structure;
 - default template uses presenter, generated content/voiceover, presenter, and closing beats;
-- standardized premade intro/outro assets;
+- independently optional standardized premade intro/outro wrapper assets; social-first renders may begin directly with the story hook;
 - Google-first generated media with Veo as the initial presenter/video direction;
 - FFmpeg for deterministic clip assembly and finishing;
 - no Remotion in the MVP;
@@ -82,7 +82,7 @@ Phases 1 and 2 are complete and closed at versions 0.1.5 and 0.2.5. Phase 3 was 
 
 The project was simplified after Phase 1. FeedAnalysis, EditorialPlan, separate Script and ProductionPlan stages, Remotion composition, edition-level planning, and story-selection logic are no longer part of the current MVP.
 
-The repository baseline is 0.5.3. Phase 5's deterministic assembly path is implemented, but the Phase 5 closeout host lacked ffmpeg/ffprobe and the required owner-supplied media-ready workspace, intro, outro, and font. Therefore no real FFmpeg integration smoke, real story render, or human playback qualification is claimed. The current owner-directed work is a behavior-preserving MVP refactor correction before Phase 6 live feed fan-out and operational hardening.
+The repository baseline is 0.5.3. Phase 5's deterministic assembly path is implemented, but the Phase 5 closeout host lacked ffmpeg/ffprobe and the then-required owner-supplied media-ready workspace, intro, outro, and font. Therefore no real FFmpeg integration smoke, real story render, or human playback qualification is claimed. The current implementation still requires both intro and outro. The owner-approved follow-up correction after the behavior-preserving MVP refactor will make intro and outro independently optional; omitted wrappers contribute no placeholder media, duration, identity, or provenance. Phase 6 live feed fan-out and operational hardening follows those corrections.
 
 ## Start here
 
