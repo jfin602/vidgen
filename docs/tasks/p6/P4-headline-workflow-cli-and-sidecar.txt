@@ -1,0 +1,55 @@
+TASK: Phase 6 / P4 — Headline workflow CLI and metadata sidecar
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra Medium`.
+
+VERSIONING
+- This prompt's assigned project version is `0.6.4`.
+
+GOAL
+
+Wire P1-P3 into one manually invoked simple-production command that publishes exactly one final MP4 plus its coupled Article metadata JSON.
+
+Read BOOT.md, P1-P3, current CLI, local-manifest/CanonicalInput/StoryInput path, atomic JSON helpers, and relevant tests before editing.
+
+CLI CONTRACT
+
+Add:
+
+    vidgen headline --input-file <manifest.json> --article-id <articleId>
+      [--max-seconds <4-20>]
+      --anchor-reference <image-path> [--anchor-reference <image-path> ...]
+      --font-file <font-path>
+      [--artifacts-root <directory>]
+
+- Default `maxSeconds`: 20.
+- One to three anchor references.
+- Default output root: `artifacts/headline-clips`.
+- Keep all existing commands and their behavior unchanged.
+
+MUST REMAIN TRUE
+
+- Load/validate the local manifest and build CanonicalInput -> StoryInput directly. Do not create a cinematic story workspace, template, ClipPlan, GeneratedMediaUnit, or AssemblyPlan.
+- Validate arguments, Article selection, lower-third feasibility, anchor/font files, provider duration capability, and local FFmpeg prerequisites before the expensive video call where practical.
+- Generate one validated presenter copy, one presenter video, then one deterministic finished clip.
+- Use a safe engine-generated clip ID; never derive filesystem paths from raw Article/headline/source/URL text.
+- Publish a flat pair `<clip-id>.mp4` + `<clip-id>.json`. The JSON sidecar is the success authority and is written last; terminal sidecar failure must remove any newly published MP4 best-effort and must never leave false success metadata.
+- Sidecar schema/version must be strict and include: clip ID; full normalized Article metadata; profile/publication; StoryInput fingerprint/provenance; exact presenter text; requested max seconds; planned/final duration; final filename/hash/byte size/technical facts; safe provider/model/request-operation provenance; safe reference/font identities; FFmpeg/finishing-policy identity; engine version.
+- Do not persist CanonicalControl, secrets, raw provider responses, media bytes, raw FFmpeg/FFprobe output, or absolute local paths in the sidecar.
+- Clean temporary/raw/candidate files on success and failure. Do not add global caching, resume, database, queue, live fan-out, publisher retrieval, automated publishing, or Remotion.
+- CLI output is concise and secret-safe: clip ID, final path, metadata path, hash, duration.
+- Add new tests to the explicit `test:app` list if required by the repository test runner.
+
+PROOF
+
+Use fake text/video providers and fake/probed local media to prove the complete orchestration without spending provider money. Cover CLI parsing/delegation, 4/20 bounds/default, unsafe IDs/text, failure cleanup, terminal publication failure, sidecar schema/provenance, no absolute-path/secret leakage, and preservation of existing CLI commands. Run focused tests, `npm run check`, `node src/cli.ts --help`, and `git diff --check`.
+
+Downstream-required capability -> owning implementation/export -> focused proof:
+
+StoryInput + runtime assets -> simple headline workflow -> end-to-end mocked workflow tests.
+
+finished candidate -> authoritative MP4/JSON pair -> publication/failure-honesty tests.
+
+FINAL RESPONSE
+
+Report the final command, output shape, validation run, and confirmation that the cinematic CLI/pipeline remains unchanged.
