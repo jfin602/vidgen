@@ -8,7 +8,7 @@ import { assertJsonValue, type JsonObject } from '../../shared/json.ts';
 
 export const GEMINI_API_KEY_ENV = 'GEMINI_API_KEY';
 export const VIDGEN_TEXT_MODEL_ENV = 'VIDGEN_TEXT_MODEL';
-export const GOOGLE_GEMINI_INTERACTIONS_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta2/interactions';
+export const GOOGLE_GEMINI_INTERACTIONS_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/interactions';
 export const DEFAULT_GOOGLE_GEMINI_TIMEOUT_MS = 10_000;
 export const DEFAULT_GOOGLE_GEMINI_MAX_RESPONSE_BYTES = 1_000_000;
 
@@ -109,7 +109,7 @@ function buildRequestBody(model: string, request: StructuredTextModelRequest): J
   }
   assertJsonValue(request.responseSchema);
 
-  // Google currently documents v1beta2 Interactions structured output as a
+  // Google currently documents v1beta Interactions structured output as a
   // top-level response_format array. Keep this provider-specific wire shape
   // confined to the adapter.
   return {

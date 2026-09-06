@@ -33,6 +33,7 @@ test('Google Gemini adapter sends one current stateless Interactions structured-
   });
 
   assert.equal(called, 1);
+  assert.equal(GOOGLE_GEMINI_INTERACTIONS_ENDPOINT, 'https://generativelanguage.googleapis.com/v1beta/interactions');
   assert.equal(String(requestUrl), GOOGLE_GEMINI_INTERACTIONS_ENDPOINT);
   assert.equal(init?.method, 'POST');
   assert.equal(init?.redirect, 'error');
