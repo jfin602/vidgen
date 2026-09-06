@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, join, normalize } from 'node:path';
+import { mkdir, readFile, rename, rm, unlink, writeFile } from 'node:fs/promises';
+import { dirname, isAbsolute, join, normalize } from 'node:path';
 
 import { CLIP_PLAN_ARTIFACT_NAME, CLIP_PLAN_RUN_ARTIFACT_NAME } from './clip-plan-workflow.ts';
 import { STORY_RUN_ARTIFACT_NAME } from './story-workspace.ts';
@@ -8,15 +8,19 @@ import { type AssemblyTemplate } from '../core/assembly-template.ts';
 import { validateClipPlanForStoryFingerprint, type ClipPlan } from '../core/clip-plan.ts';
 import { VidGenError, isVidGenError, type VidGenErrorCode } from '../core/error.ts';
 import {
-  createApprovedReferenceImage,
   resolveGeneratedMediaUnits,
-  type ApprovedReferenceImage,
   type GeneratedMediaUnit,
   type SpeechGenerationClient,
   type SpeechGenerationResult,
   type VideoGenerationClient,
   type VideoGenerationResult,
 } from '../core/generated-media.ts';
+import {
+  DEFAULT_MAX_ANCHOR_REFERENCE_BYTES,
+  assertApprovedAnchorReferenceCount,
+  loadApprovedAnchorReferences,
+  type ReferenceImageIdentity,
+} from '../core/anchor-reference.ts';
 import { getAssemblyTemplate } from '../core/template-registry.ts';
 import { GoogleGeminiSpeechGenerationClient } from '../integrations/google/gemini-speech-generation.ts';
 import { GoogleVeoVideoGenerationClient } from '../integrations/google/veo-video-generation.ts';
@@ -28,18 +32,12 @@ export const MEDIA_RUN_ARTIFACT_NAME = 'media-run.json';
 export const GENERATED_MEDIA_ARTIFACT_NAME = 'generated-media.json';
 export const GENERATED_MEDIA_SCHEMA_VERSION = '1';
 export const GENERATED_MEDIA_INPUT_CONTRACT_VERSION = '1';
-export const DEFAULT_MAX_ANCHOR_REFERENCE_BYTES = 10_000_000;
+export { DEFAULT_MAX_ANCHOR_REFERENCE_BYTES } from '../core/anchor-reference.ts';
 export const DEFAULT_MAX_GENERATED_ASSET_BYTES = 100_000_000;
 
 type UnitStatus = 'pending' | 'ready' | 'failed';
 
-export interface ReferenceImageIdentity {
-  readonly ordinal: number;
-  readonly basename: string;
-  readonly mimeType: string;
-  readonly sha256: string;
-  readonly byteSize: number;
-}
+export type { ReferenceImageIdentity } from '../core/anchor-reference.ts';
 
 export interface MediaUnitRecord {
   readonly unitId: string;
@@ -134,11 +132,6 @@ export interface ValidatedMediaReadyWorkspace extends ValidatedPlannedWorkspace 
   readonly generatedMediaFingerprint: string;
 }
 
-interface LoadedReference {
-  readonly image: ApprovedReferenceImage;
-  readonly identity: ReferenceImageIdentity;
-}
-
 /**
  * Realizes raw, story-local generated assets from an already successful
  * workspace. It intentionally neither creates a workspace nor plans text.
@@ -152,10 +145,8 @@ export async function generateStoryMedia(dependencies: MediaWorkflowDependencies
   const workspace = await loadValidatedPlannedWorkspace(dependencies.storyDirectory, dependencies.getTemplate ?? getAssemblyTemplate);
   const units = resolveGeneratedMediaUnits(workspace.template, workspace.clipPlan);
   const hasPresenter = units.some((unit) => unit.role.kind === 'presenter');
-  const references = await loadReferences(dependencies.anchorReferencePaths ?? [], maxReferenceBytes);
-  if (hasPresenter && (references.length < 1 || references.length > 3)) {
-    throw new VidGenError('invalid_argument', 'Presenter media requires one to three approved local anchor references.');
-  }
+  const references = await loadApprovedAnchorReferences(dependencies.anchorReferencePaths ?? [], maxReferenceBytes);
+  if (hasPresenter) assertApprovedAnchorReferenceCount(references);
   if (!hasPresenter && references.length > 0) {
     throw new VidGenError('invalid_argument', 'Anchor references were supplied but this template has no presenter media units.');
   }
@@ -348,26 +339,6 @@ function validateMediaRunMetadata(value: Record<string, unknown>): MediaRunMetad
   return value as MediaRunMetadata;
 }
 
-async function loadReferences(paths: readonly string[], maxBytes: number): Promise<readonly LoadedReference[]> {
-  const loaded: LoadedReference[] = [];
-  for (const [index, path] of paths.entries()) {
-    if (typeof path !== 'string' || path.trim().length === 0 || /^\w+:\/\//.test(path)) throw new VidGenError('invalid_argument', 'Anchor references must be explicit local files.');
-    const name = basename(path);
-    if (!/^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$/.test(name)) throw new VidGenError('invalid_argument', 'Anchor-reference basename is unsafe.');
-    const info = await stat(path);
-    if (!info.isFile() || info.size < 1 || info.size > maxBytes) throw new VidGenError('invalid_argument', 'Anchor-reference file is empty or exceeds the supported size.');
-    const bytes = new Uint8Array(await readFile(path));
-    // The file can change between stat() and readFile(). Recheck the exact
-    // provider-bound bytes so a replacement cannot bypass the input bound.
-    if (bytes.byteLength < 1 || bytes.byteLength > maxBytes) throw new VidGenError('invalid_argument', 'Anchor-reference file is empty or exceeds the supported size.');
-    const mimeType = imageMime(bytes);
-    if (mimeType === undefined) throw new VidGenError('invalid_argument', 'Anchor-reference file type is unsupported.');
-    const image = createApprovedReferenceImage(mimeType, bytes);
-    loaded.push({ image, identity: { ordinal: index + 1, basename: name, mimeType, sha256: image.sha256, byteSize: bytes.byteLength } });
-  }
-  return loaded;
-}
-
 function effectiveFingerprint(workspace: ValidatedPlannedWorkspace, unit: GeneratedMediaUnit, references: readonly ReferenceImageIdentity[], video?: VideoGenerationClient, speech?: SpeechGenerationClient): string {
   const isSpeech = unit.role.kind === 'voiceover';
   const client = isSpeech ? speech : video;
@@ -408,7 +379,6 @@ async function removeIfExists(path: string): Promise<void> { try { await rm(path
 
 function validateReadyRecord(value: unknown, unit: GeneratedMediaUnit): MediaUnitRecord { const record = object(value, 'Generated-media asset'); rejectExtra(record, ['unitId', 'segment', 'role', 'effectiveGenerationInputFingerprint', 'status', 'provenance', 'assetPath', 'sha256', 'byteSize', 'mimeType', 'provider', 'configuredModel', 'returnedModel', 'voice', 'requestId', 'operationId', 'operationIds', 'generationOperationCount', 'durationSeconds', 'failure'], 'Generated-media asset'); if (record.status !== 'ready' || record.unitId !== unit.unitId || !sameSegment(record.segment, unit.segment) || !sameRole(record.role, unit.role) || !isHash(record.effectiveGenerationInputFingerprint) || typeof record.assetPath !== 'string' || !safeRelativePath(record.assetPath) || !isHash(record.sha256) || !Number.isSafeInteger(record.byteSize) || record.byteSize < 1 || typeof record.mimeType !== 'string' || typeof record.provider !== 'string' || typeof record.configuredModel !== 'string' || typeof record.returnedModel !== 'string') throw invalidMedia('Generated-media manifest contains an invalid asset.'); if (record.assetPath !== expectedAsset(unit).path || record.mimeType !== expectedAsset(unit).mimeType) throw invalidMedia('Generated-media manifest asset path or media type is incompatible.'); return record as MediaUnitRecord; }
 function validateReferenceIdentity(value: unknown, ordinal: number): ReferenceImageIdentity { const reference = object(value, 'Generated-media reference'); rejectExtra(reference, ['ordinal', 'basename', 'mimeType', 'sha256', 'byteSize'], 'Generated-media reference'); if (reference.ordinal !== ordinal || typeof reference.basename !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$/.test(reference.basename) || !['image/png', 'image/jpeg', 'image/webp'].includes(reference.mimeType as string) || !isHash(reference.sha256) || !Number.isSafeInteger(reference.byteSize) || (reference.byteSize as number) < 1) throw invalidMedia('Generated-media manifest contains an invalid reference identity.'); return reference as ReferenceImageIdentity; }
-function imageMime(bytes: Uint8Array): string | undefined { if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 && bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a) return 'image/png'; if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg'; if (bytes.length >= 12 && String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF' && String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP') return 'image/webp'; return undefined; }
 function sha256(value: string | Uint8Array): string { return createHash('sha256').update(value).digest('hex'); }
 function timestamp(date: Date): string { if (Number.isNaN(date.valueOf())) throw new VidGenError('invalid_argument', 'Media clock produced an invalid timestamp.'); return date.toISOString(); }
 function sanitizeMediaError(error: unknown): VidGenError { if (!isVidGenError(error)) return new VidGenError('unexpected', 'Generated-media workflow failed unexpectedly.'); return error.code === 'generated_media' || error.code === 'artifact' || error.code === 'configuration' || error.code === 'invalid_argument' ? error : new VidGenError(error.code, 'Generated-media workflow failed.'); }

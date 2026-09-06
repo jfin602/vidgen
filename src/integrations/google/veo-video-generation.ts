@@ -5,6 +5,13 @@ import type {
   VideoGenerationRequest,
   VideoGenerationResult,
 } from '../../core/generated-media.ts';
+import {
+  assertPresenterVideoGenerationRequest,
+  planPresenterVideoDuration,
+  type PresenterVideoGenerationClient,
+  type PresenterVideoGenerationRequest,
+  type PresenterVideoGenerationResult,
+} from '../../core/presenter-video.ts';
 
 export const GEMINI_API_KEY_ENV = 'GEMINI_API_KEY';
 export const VIDGEN_VIDEO_MODEL_ENV = 'VIDGEN_VIDEO_MODEL';
@@ -69,7 +76,7 @@ export function loadGoogleVeoRuntimeConfig(
  * Thin Gemini API Veo adapter. It returns only raw provider media and safe
  * provenance; trimming, normalization, and final assembly remain downstream.
  */
-export class GoogleVeoVideoGenerationClient implements VideoGenerationClient {
+export class GoogleVeoVideoGenerationClient implements VideoGenerationClient, PresenterVideoGenerationClient {
   readonly provider = 'google-veo';
   readonly model: string;
 
@@ -116,42 +123,77 @@ export class GoogleVeoVideoGenerationClient implements VideoGenerationClient {
       throw providerFailure('Google Veo video request exceeds the configured extension limit.');
     }
 
-    const deadline = this.now() + this.totalTimeoutMs;
     const dialogueChunks = request.unit.role.kind === 'presenter'
       ? partitionPresenterSpeech(request.unit.spokenText, extensionCount + 1)
       : [];
-    const operationIds: string[] = [];
-    let completed = await this.startAndWait(
+    const generated = await this.generateSequence(
       buildInitialRequest(request, dialogueChunks[0]),
-      deadline,
+      extensionCount,
+      (previous, extensionIndex) => buildExtensionRequest(request, previous, dialogueChunks[extensionIndex + 1]),
     );
+    const durationSeconds = INITIAL_DURATION_SECONDS + (extensionCount * EXTENSION_DURATION_SECONDS);
+    return {
+      provider: this.provider,
+      model: generated.model ?? this.model,
+      requestId: generated.operationIds[0],
+      operationId: generated.operationIds.at(-1),
+      operationIds: generated.operationIds,
+      generationOperationCount: generated.operationIds.length,
+      mimeType: generated.downloaded.mimeType,
+      bytes: generated.downloaded.bytes,
+      durationSeconds,
+    };
+  }
+
+  /** Simple-path adapter entry point; no cinematic media unit crosses this boundary. */
+  async generatePresenterVideo(request: PresenterVideoGenerationRequest): Promise<PresenterVideoGenerationResult> {
+    assertPresenterVideoGenerationRequest(request);
+    const durationPlan = planPresenterVideoDuration(request.maxSeconds);
+    if (durationPlan.extensionCount > 0 && !this.extensionEnabled) {
+      throw providerFailure('Google Veo video extension is required but is not enabled for the configured model.');
+    }
+    if (durationPlan.extensionCount > this.maxExtensionCount) {
+      throw providerFailure('Google Veo video request exceeds the configured extension limit.');
+    }
+    const dialogueChunks = partitionPresenterSpeech(request.spokenText, durationPlan.extensionCount + 1);
+    const generated = await this.generateSequence(
+      buildSimplePresenterInitialRequest(request, dialogueChunks[0]!),
+      durationPlan.extensionCount,
+      (previous, extensionIndex) => buildSimplePresenterExtensionRequest(previous, dialogueChunks[extensionIndex + 1] ?? ''),
+    );
+    return {
+      provider: this.provider,
+      model: generated.model ?? this.model,
+      requestId: generated.operationIds[0],
+      operationId: generated.operationIds.at(-1),
+      operationIds: generated.operationIds,
+      generationOperationCount: generated.operationIds.length,
+      mimeType: generated.downloaded.mimeType,
+      bytes: generated.downloaded.bytes,
+      rawDurationSeconds: durationPlan.rawProviderDurationSeconds,
+      durationPlan,
+    };
+  }
+
+  private async generateSequence(
+    initialBody: Record<string, unknown>,
+    extensionCount: number,
+    extensionBody: (previous: DownloadedVideo, extensionIndex: number) => Record<string, unknown>,
+  ): Promise<{ readonly operationIds: readonly string[]; readonly downloaded: DownloadedVideo; readonly model?: string }> {
+    const deadline = this.now() + this.totalTimeoutMs;
+    const operationIds: string[] = [];
+    let completed = await this.startAndWait(initialBody, deadline);
     operationIds.push(completed.operationName);
     let downloaded = await this.downloadVideo(completed.downloadUri);
-
     for (let extensionIndex = 0; extensionIndex < extensionCount; extensionIndex += 1) {
       if (downloaded.bytes.byteLength > this.maxDownloadBytes) {
         throw providerFailure('Google Veo extension input exceeded the maximum supported size.');
       }
-      completed = await this.startAndWait(
-        buildExtensionRequest(request, downloaded, dialogueChunks[extensionIndex + 1]),
-        deadline,
-      );
+      completed = await this.startAndWait(extensionBody(downloaded, extensionIndex), deadline);
       operationIds.push(completed.operationName);
       downloaded = await this.downloadVideo(completed.downloadUri);
     }
-
-    const durationSeconds = INITIAL_DURATION_SECONDS + (extensionCount * EXTENSION_DURATION_SECONDS);
-    return {
-      provider: this.provider,
-      model: completed.model ?? this.model,
-      requestId: operationIds[0],
-      operationId: operationIds.at(-1),
-      operationIds,
-      generationOperationCount: operationIds.length,
-      mimeType: downloaded.mimeType,
-      bytes: downloaded.bytes,
-      durationSeconds,
-    };
+    return { operationIds, downloaded, model: completed.model };
   }
 
   private async startAndWait(body: Record<string, unknown>, deadline: number): Promise<CompletedOperation> {
@@ -337,6 +379,34 @@ function buildExtensionRequest(
   };
 }
 
+function buildSimplePresenterInitialRequest(
+  request: PresenterVideoGenerationRequest,
+  dialogue: string,
+): Record<string, unknown> {
+  return {
+    instances: [{
+      prompt: simplePresenterPrompt(dialogue, false),
+      referenceImages: request.referenceImages.map(toReferenceImage),
+    }],
+    parameters: {
+      aspectRatio: '9:16', durationSeconds: String(INITIAL_DURATION_SECONDS), numberOfVideos: 1, resolution: '720p',
+    },
+  };
+}
+
+function buildSimplePresenterExtensionRequest(
+  previous: DownloadedVideo,
+  dialogue: string,
+): Record<string, unknown> {
+  return {
+    instances: [{
+      prompt: simplePresenterPrompt(dialogue, true),
+      video: { inlineData: { mimeType: previous.mimeType, data: Buffer.from(previous.bytes).toString('base64') } },
+    }],
+    parameters: { aspectRatio: '9:16', numberOfVideos: 1, resolution: '720p' },
+  };
+}
+
 function presenterPrompt(request: VideoGenerationRequest, dialogue: string, isExtension: boolean): string {
   const context = unitContext(request);
   const continuity = isExtension
@@ -345,6 +415,17 @@ function presenterPrompt(request: VideoGenerationRequest, dialogue: string, isEx
   return [
     'Create a portrait news-presenter video.', continuity,
     `Use only this supplied ClipPlan visual/news context: ${context}.`,
+    `The presenter must speak only this exact assigned dialogue: "${dialogue}".`,
+    'Do not add dialogue. Do not create readable or generated on-screen text. Do not add unsupported story facts.',
+  ].join(' ');
+}
+
+function simplePresenterPrompt(dialogue: string, isExtension: boolean): string {
+  const continuity = isExtension
+    ? 'Continue the same presenter, appearance, setting, and scene continuity from the supplied prior Veo video.'
+    : 'Preserve the intended anchor appearance from the supplied reference images.';
+  return [
+    'Create a portrait news-presenter video.', continuity,
     `The presenter must speak only this exact assigned dialogue: "${dialogue}".`,
     'Do not add dialogue. Do not create readable or generated on-screen text. Do not add unsupported story facts.',
   ].join(' ');

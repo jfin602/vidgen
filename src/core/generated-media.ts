@@ -4,6 +4,9 @@ import type { AssemblyTemplate, AssemblyTemplateSegment } from './assembly-templ
 import { validateClipPlanForStoryFingerprint, type ClipPlan } from './clip-plan.ts';
 import { VidGenError } from './error.ts';
 import { canonicalJson } from '../shared/canonical-json.ts';
+import type { ApprovedReferenceImage } from './anchor-reference.ts';
+
+export { createApprovedReferenceImage, type ApprovedReferenceImage } from './anchor-reference.ts';
 
 /** One template-declared content value required to realize a generated-media unit. */
 export interface GeneratedMediaContentValue {
@@ -95,28 +98,6 @@ export function fingerprintGeneratedMediaUnit(unit: GeneratedMediaUnit): string 
     content: unit.content,
     spokenText: unit.spokenText,
   })).digest('hex');
-}
-
-/** A VidGen-approved, in-memory presenter reference image; no remote URL crosses this boundary. */
-export interface ApprovedReferenceImage {
-  readonly mimeType: string;
-  readonly bytes: Uint8Array;
-  readonly sha256: string;
-}
-
-/** Creates a reference-image value with a VidGen-computed byte identity. */
-export function createApprovedReferenceImage(
-  mimeType: string,
-  bytes: Uint8Array,
-): ApprovedReferenceImage {
-  if (mimeType.trim().length === 0 || bytes.length === 0) {
-    throw invalidGeneratedMedia('An approved reference image requires MIME type and bytes.');
-  }
-  return {
-    mimeType,
-    bytes,
-    sha256: createHash('sha256').update(bytes).digest('hex'),
-  };
 }
 
 /** Provider-neutral video generation configuration and call boundary. */

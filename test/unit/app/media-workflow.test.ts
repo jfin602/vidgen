@@ -9,6 +9,7 @@ import {
   MEDIA_RUN_ARTIFACT_NAME,
   generateStoryMedia,
 } from '../../../src/app/media-workflow.ts';
+import { assertApprovedAnchorReferenceCount, loadApprovedAnchorReferences } from '../../../src/core/anchor-reference.ts';
 import type { SpeechGenerationClient, VideoGenerationClient } from '../../../src/core/generated-media.ts';
 import { getAssemblyTemplate } from '../../../src/core/template-registry.ts';
 import { writeJsonAtomically } from '../../../src/shared/atomic-json.ts';
@@ -135,6 +136,21 @@ test('media workflow rejects an invalid local anchor reference before constructi
 
     assert.equal(videoConstructed, false);
     assert.equal(speechConstructed, false);
+  });
+});
+
+test('shared approved anchor references retain local MIME, byte, and hash validation for cinematic and simple clients', async () => {
+  await withWorkspace(async (directory) => {
+    const reference = join(directory, 'anchor.png');
+    await writeFile(reference, png(7));
+    const loaded = await loadApprovedAnchorReferences([reference], 100);
+    assert.equal(loaded.length, 1);
+    assert.equal(loaded[0]!.identity.basename, 'anchor.png');
+    assert.equal(loaded[0]!.identity.mimeType, 'image/png');
+    assert.equal(loaded[0]!.identity.byteSize, png(7).byteLength);
+    assert.match(loaded[0]!.identity.sha256, /^[a-f0-9]{64}$/);
+    assert.throws(() => assertApprovedAnchorReferenceCount([]), /one to three/);
+    assert.throws(() => assertApprovedAnchorReferenceCount([loaded[0], loaded[0], loaded[0], loaded[0]]), /one to three/);
   });
 });
 

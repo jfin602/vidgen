@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import type { ApprovedReferenceImage, GeneratedMediaUnit } from '../../../src/core/generated-media.ts';
+import { createApprovedReferenceImage, type ApprovedReferenceImage, type GeneratedMediaUnit } from '../../../src/core/generated-media.ts';
+import { planPresenterVideoDuration } from '../../../src/core/presenter-video.ts';
 import { VidGenError } from '../../../src/core/error.ts';
 import {
   GOOGLE_VEO_API_BASE,
@@ -55,6 +56,60 @@ test('Google Veo presenter sends only supplied reference images and assigned exa
   assert.equal(references.length, 2);
   assert.equal(JSON.stringify(references).includes(imageBase64), true);
   assert.equal(JSON.stringify(references).includes('http'), false);
+});
+
+test('simple presenter video uses the narrow request, current eight-second reference generation, and later trim provenance', async () => {
+  const calls: FetchCall[] = [];
+  const dialogue = 'Only this governed dialogue is spoken.';
+  const client = clientFor(sequenceFetch(calls, [operation('operations/simple', true), videoResponse([1])]));
+
+  const result = await client.generatePresenterVideo({
+    spokenText: dialogue,
+    referenceImages: [createApprovedReferenceImage('image/png', new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))],
+    maxSeconds: 4,
+  });
+
+  const body = parseBody(calls[0]!);
+  const instance = (body.instances as Array<Record<string, unknown>>)[0]!;
+  assert.deepEqual(Object.keys(instance).sort(), ['prompt', 'referenceImages']);
+  assert.equal(JSON.stringify(body).includes('unitId'), false);
+  assert.equal((body.parameters as Record<string, unknown>).durationSeconds, '8');
+  const prompt = String(instance.prompt);
+  assert.match(prompt, new RegExp(`assigned dialogue: "${dialogue}"`));
+  assert.match(prompt, /Do not add dialogue\. Do not create readable or generated on-screen text\. Do not add unsupported story facts\./);
+  assert.equal(prompt.includes('ClipPlan'), false);
+  assert.deepEqual(result.durationPlan, planPresenterVideoDuration(4));
+  assert.equal(result.rawDurationSeconds, 8);
+});
+
+test('simple presenter duration plans use at most one seven-second Veo extension across the 4-20 ceiling', async () => {
+  assert.deepEqual([4, 8, 9, 15, 16, 20].map((maxSeconds) => planPresenterVideoDuration(maxSeconds)), [
+    { finalDurationCeilingSeconds: 4, rawProviderDurationSeconds: 8, extensionCount: 0, requiresFinalTrim: true },
+    { finalDurationCeilingSeconds: 8, rawProviderDurationSeconds: 8, extensionCount: 0, requiresFinalTrim: false },
+    { finalDurationCeilingSeconds: 9, rawProviderDurationSeconds: 15, extensionCount: 1, requiresFinalTrim: true },
+    { finalDurationCeilingSeconds: 15, rawProviderDurationSeconds: 15, extensionCount: 1, requiresFinalTrim: false },
+    { finalDurationCeilingSeconds: 16, rawProviderDurationSeconds: 15, extensionCount: 1, requiresFinalTrim: false },
+    { finalDurationCeilingSeconds: 20, rawProviderDurationSeconds: 15, extensionCount: 1, requiresFinalTrim: false },
+  ]);
+
+  const calls: FetchCall[] = [];
+  const client = clientFor(sequenceFetch(calls, [
+    operation('operations/simple-initial', true), videoResponse([1]),
+    operation('operations/simple-extension', true), videoResponse([2]),
+  ]), { extensionEnabled: true });
+  const result = await client.generatePresenterVideo({
+    spokenText: 'One two three four five six.',
+    referenceImages: [createApprovedReferenceImage('image/png', new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))],
+    maxSeconds: 20,
+  });
+  assert.equal(result.generationOperationCount, 2);
+  assert.equal(result.rawDurationSeconds, 15);
+  assert.equal(calls.length, 4);
+  const assignedDialogue = [calls[0]!, calls[2]!].map((call) => {
+    const prompt = String((parseBody(call).instances as Array<Record<string, unknown>>)[0]!.prompt);
+    return /assigned dialogue: "([\s\S]*?)"\. Do not add dialogue\./.exec(prompt)![1]!;
+  });
+  assert.equal(assignedDialogue.join(' '), 'One two three four five six.');
 });
 
 test('Google Veo presenter rejects missing, excessive, or unsupported references before network', async (context) => {
