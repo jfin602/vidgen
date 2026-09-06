@@ -1,0 +1,36 @@
+TASK: Correction 5 / P1 — Optional wrapper assembly input
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra Medium`.
+
+VERSIONING
+- Required unchanged project version: `0.5.3`.
+
+GOAL
+
+Implement the approved optional standardized-wrapper contract at the qualified assembly-input boundary.
+
+This owner-requested `c5-optional-assets` stack implements the correction described in current docs as optional standardized assets. Read BOOT.md, current architecture/template docs, and the post-`c5-mvp-refactor` code/tests before editing. If that refactor is not complete on the current branch, stop and report the dependency instead of coding around an in-flight refactor.
+
+MUST REMAIN TRUE
+
+- The default template continues to declare the same intro/before-story and outro/after-story supported positions; do not add a `required` field, change template schema/version, or change `default-news-40s@2`.
+- Assembly qualification accepts intro only, outro only, both, or neither.
+- Omitted wrappers cause no file lookup, probe, placeholder media/audio, or duration contribution.
+- Supplied wrappers remain explicit bounded local files and receive the existing identity, stream-shape, duration, and distinct-file checks; the same path is invalid only when both wrappers are supplied.
+- Generated-media identity/hash/size verification still completes before executable probing.
+- AssemblyPlan preserves deterministic wrapper role/placement identity and computes expected final duration from the 40-second story body plus only wrappers actually supplied.
+- No provider, story-planning, publisher-retrieval, renderer, CLI, or Phase 6 behavior belongs in this task.
+- Package/engine version remains 0.5.3.
+
+PRODUCER PROOF
+
+optional wrapper set -> qualified AssemblyPlan -> focused tests proving all four wrapper combinations, no probe/read for omitted wrappers, correct expected duration, and unchanged generated-media qualification.
+
+VALIDATION
+
+Run the focused assembly-input tests plus relevant template/story-workspace regressions, then `npm run test:app` and `git diff --check`.
+
+FINAL RESPONSE
+
+State the AssemblyPlan/qualification behavior implemented, tests actually run, and confirmation that template identity/semantics and version 0.5.3 were not changed.
