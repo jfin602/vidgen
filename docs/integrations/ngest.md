@@ -117,7 +117,7 @@ The dedicated HTTP integration response is the cross-project boundary.
 
 Ngest supplies the original publisher destination for each story.
 
-Publisher retrieval is not part of the implemented ClipPlan path or the current Phase 4 media-generation path. The manually debugged pipeline uses a story whose normalized ngest headline and summary are sufficient for a grounded ClipPlan. If the summary is absent, ClipPlan planning fails clearly before provider activity rather than silently retrieving or inventing missing facts.
+Publisher retrieval is not part of the implemented ClipPlan/media-generation path or the current Phase 5 assembly path. The manually debugged pipeline uses a story whose normalized ngest headline and summary are sufficient for a grounded ClipPlan. If the summary is absent, ClipPlan planning fails clearly before provider activity rather than silently retrieving or inventing missing facts.
 
 Publisher-page retrieval may be added later as an explicit fallback capability before live production requires support for insufficient upstream context. Any such implementation must be bounded, provenance-aware, and safe against untrusted URLs, redirects, response sizes, and content types.
 
