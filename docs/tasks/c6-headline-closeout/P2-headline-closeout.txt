@@ -1,0 +1,46 @@
+TASK: Correction 6 / P2 — Headline closeout
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Review P1 as the bounded repair required to clear the Phase 6 headline closeout findings. Inspect the actual correction diff and resulting source; do not approve solely because tests pass.
+
+ACCEPTANCE
+
+Confirm:
+- `maxSeconds` remains a 4-20 user ceiling while copy budgeting never exceeds currently realizable presenter coverage;
+- actual validated copy determines the shortest useful planned final duration using the existing 150 WPM rule;
+- short default-20 stories do not pay for an unnecessary Veo extension, while >8-second planned stories use at most one extension;
+- provider-returned duration metadata cannot silently replace the engine plan;
+- the same planned duration governs video generation, FFmpeg finishing, and durable sidecar provenance;
+- sidecar construction/validation happens before final MP4 promotion, sidecar publication remains last, and every in-process terminal publication failure leaves no false-success pair;
+- the runtime sidecar validator and JSON schema describe the same strict durable shape, including technical output facts;
+- no secrets, absolute local paths, raw provider responses, or raw FFmpeg/FFprobe diagnostics enter durable output;
+- temporary/raw/candidate cleanup and lower-third/process safety remain intact;
+- existing cinematic commands, generated-media semantics, AssemblyPlan/render behavior, and durable artifacts remain regression-protected;
+- package/engine version is still 0.6.5 and no Phase 7 or unrelated scope entered the correction.
+
+VALIDATION
+
+Run:
+- `npm run codex:phase:validate -- c6-headline-closeout`;
+- focused simple-copy, headline-workflow, Veo, simple-finisher, sidecar/schema, and CLI tests;
+- `npm test`;
+- `npm run check`;
+- `node src/cli.ts --help`;
+- `git diff --check`.
+
+If FFmpeg/FFprobe are available, perform a bounded local synthetic simple-finisher smoke and post-probe the result. Do not claim live Veo/Gemini or human playback evidence unless actually observed.
+
+BOUNDED REPAIRS
+
+Repair only defects clearly inside this correction and tests needed to protect them. Do not redesign Phase 6, change the user CLI contract, alter cinematic durable semantics, or begin Phase 7.
+
+FINAL RESPONSE
+
+Report review findings, any bounded repairs, exact validation/evidence observed, duration/provider-operation behavior, publication/sidecar integrity, cinematic regression status, confirmation of unchanged 0.6.5, and whether `c6-headline-closeout` is ready for human review and then Phase 6 `/closeout`.
