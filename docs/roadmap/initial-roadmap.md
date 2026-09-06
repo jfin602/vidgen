@@ -5,7 +5,8 @@ Phase 1 completion: 0.1.5
 Phase 2 completion: 0.2.5
 Phase 3 owner closeout: 0.3.4
 Phase 4 owner closeout: 0.4.4
-Current baseline: 0.5.0
+Phase 5 owner closeout: 0.5.3
+Current baseline: 0.5.3
 
 This roadmap was rebased on 2026-09-05 after Phase 1. The original edition/newscast phases were intentionally removed in favor of the smallest useful single-story clip pipeline.
 
@@ -213,47 +214,44 @@ A separate generated-graphic subsystem is out of scope unless real clips demonst
 
 ## Phase 5 — FFmpeg assembly and first complete clip
 
-Status: CURRENT / PLANNING BASELINE 0.5.0
+Status: IMPLEMENTED / OWNER-CLOSED AT 0.5.3; REAL RENDER QUALIFICATION DEFERRED
 
 Goal:
 Produce the first complete, postable vertical story clip from standardized and generated assets.
 
-Conceptual assembly:
+Implemented capabilities:
+- strict reuse of the Phase 4 media-ready handoff and generated asset identity/hash/size verification;
+- bounded local-only FFprobe adapter and media qualification;
+- explicit standardized intro/outro and local font qualification;
+- deterministic AssemblyPlan mapping from template + generated-media identities;
+- duration/stream-layout validation before render;
+- deterministic no-shell FFmpeg rendering with engine-owned normalization/timing/audio/display policy;
+- safe staged text/font handling rather than interpolating untrusted display text into filter syntax;
+- manual `vidgen assemble` workflow;
+- candidate render isolation and post-render technical validation;
+- `assembly-run.json`, strict `final-clip.json`, final clip hash/size/probe provenance, and atomic `final/clip.mp4` publication;
+- failure-honest invalidation/cleanup semantics;
+- deterministic default-template and synthetic non-default template coverage.
 
-    standardized intro
-          +
-    presenter/content media
-          +
-    standardized outro
-          |
-          v
-       FFmpeg
-          |
-          v
-      final clip.mp4
+Owner closeout note:
+- P1-P3 landed at package versions 0.5.1, 0.5.2, and 0.5.3.
+- P4 closeout reviewed the implementation and repaired one bounded provenance issue while keeping package/engine version 0.5.3.
+- The closeout host had neither ffmpeg nor ffprobe and did not have an owner-supplied media-ready workspace, standardized intro/outro, or font.
+- Therefore no real FFmpeg capability smoke, real `vidgen assemble` story render, post-probe of an actual story clip, or human playback/aesthetic review is claimed.
+- The owner manually closed Phase 5 at 0.5.3 and deferred that runtime/media qualification rather than fabricating evidence.
 
-Likely concerns:
-- media probing/validation;
-- normalization to the template's required resolution/frame rate/codecs;
-- deterministic trimming;
-- concatenation;
-- voiceover mux/replacement;
-- audio-level normalization;
-- simple deterministic text/overlay support only where necessary;
-- burned captions if enabled;
-- H.264 MP4 final encoding;
-- honest failed-assembly semantics;
-- final clip identity/provenance;
-- story package completeness;
-- reusing valid story-local generated assets during repeated assembly;
-- end-to-end execution against a real manually selected sample story.
-
-Success criterion:
-A manually selected ngest-shaped story produces one usable 1080x1920 postable clip and a self-contained story package with the story-specific source/generated files used to make it.
-
-Remotion is not part of this phase.
+Phase 5 non-goals remained:
+- live multi-story ngest fan-out;
+- publisher retrieval;
+- database/queue orchestration;
+- global caching;
+- automated publishing;
+- alternate aspect ratios;
+- Remotion.
 
 ## Phase 6 — Live ngest fan-out and operational hardening
+
+Status: NEXT ROADMAP PHASE / AFTER C5 MVP REFACTOR
 
 Goal:
 Connect the proven story pipeline back to live curated ngest input and process supplied stories independently.
@@ -272,6 +270,7 @@ Conceptual contract:
         + independent story pipelines
 
 Likely concerns:
+- complete the previously blocked real ffmpeg/ffprobe capability smoke and one owner-media story render before treating the Phase 5 assembly path as operationally qualified;
 - add bounded publisher-page retrieval fallback before live operation if real ngest stories can lack sufficient normalized context; keep broader web research deferred;
 - live authentication/integration qualification;
 - explicit resolution of ngest continuation/pagination semantics before multi-page production use;
@@ -305,10 +304,12 @@ Likely concerns:
 
 ## Immediate next action
 
-Use:
+Run the owner-directed behavior-preserving correction stack:
 
     /prompt-ass
     -> /prompt-plan
-    -> /prompt-write p5
+    -> /prompt-write c5-mvp-refactor
 
-Phase 5 planning should consume the validated AssemblyTemplate, ClipPlan, generated-media.json, and story-local generated assets without reinterpreting story meaning. It should qualify the real standardized intro/outro assets, probe generated/standardized media, normalize/trim them to the template contract, mux/replace voiceover where declared, and perform the smallest deterministic FFmpeg assembly needed for the first complete 1080x1920 H.264 MP4 clip. Keep publisher retrieval, live ngest fan-out, databases/queues, and programmable composition out of scope.
+The correction should simplify the existing MVP implementation after rapid Phase 1-5 construction. It must not add product capability, alter durable schemas/artifact meanings, weaken validation/trust boundaries, change provider/render semantics, or turn the previously unperformed real FFmpeg/story-render qualification into a claimed success.
+
+After the correction closes, proceed to Phase 6 planning. The deferred real-host/owner-media assembly qualification remains an explicit Phase 6 operational-hardening prerequisite.
