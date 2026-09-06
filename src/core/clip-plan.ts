@@ -135,14 +135,30 @@ export function validateClipPlan(
   storyInput: StoryInput,
   template: AssemblyTemplate,
 ): ClipPlan {
+  return validateClipPlanForStoryFingerprint(value, storyInput.storyFingerprint, template);
+}
+
+/**
+ * Validates a persisted ClipPlan when its already-established story identity is
+ * available without reconstructing the full StoryInput. Durable slots must
+ * already be in declared template order.
+ */
+export function validateClipPlanForStoryFingerprint(
+  value: unknown,
+  expectedStoryFingerprint: string,
+  template: AssemblyTemplate,
+): ClipPlan {
+  if (typeof expectedStoryFingerprint !== 'string' || expectedStoryFingerprint.trim().length === 0) {
+    throw invalidClipPlan('Expected story identity must be a non-empty string.');
+  }
   const plan = requireObject(value, 'ClipPlan');
   rejectExtraKeys(plan, ['schemaVersion', 'storyFingerprint', 'template', 'slots'], 'ClipPlan');
 
   if (plan.schemaVersion !== CLIP_PLAN_SCHEMA_VERSION) {
     throw invalidClipPlan('ClipPlan schemaVersion is not supported.');
   }
-  if (plan.storyFingerprint !== storyInput.storyFingerprint) {
-    throw invalidClipPlan('ClipPlan storyFingerprint does not match the supplied StoryInput.');
+  if (plan.storyFingerprint !== expectedStoryFingerprint) {
+    throw invalidClipPlan('ClipPlan storyFingerprint does not match the expected story identity.');
   }
 
   const planTemplate = requireObject(plan.template, 'ClipPlan.template');
@@ -159,7 +175,7 @@ export function validateClipPlan(
   const validatedSlots = slots.map((value, index) => validateDurableSlot(value, index, template));
   return {
     schemaVersion: CLIP_PLAN_SCHEMA_VERSION,
-    storyFingerprint: storyInput.storyFingerprint,
+    storyFingerprint: expectedStoryFingerprint,
     template: { id: template.id, version: template.version },
     slots: validatedSlots,
   };
