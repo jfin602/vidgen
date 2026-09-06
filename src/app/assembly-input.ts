@@ -2,8 +2,6 @@ import { join, resolve } from 'node:path';
 
 import {
   loadValidatedMediaReadyWorkspace,
-  type GeneratedMediaManifest,
-  type MediaUnitRecord,
   type ValidatedMediaReadyWorkspace,
 } from './media-workflow.ts';
 import type { AssemblyTemplate, AssemblyTemplateOutput } from '../core/assembly-template.ts';
@@ -103,15 +101,15 @@ export async function qualifyAssemblyInputs(dependencies: AssemblyInputDependenc
       targetDurationSeconds: item.unit.targetDurationSeconds,
     });
   }
-  const introProbe = await probe(standardized.intro.identity.path, dependencies.ffprobe);
-  const outroProbe = await probe(standardized.outro.identity.path, dependencies.ffprobe);
+  const introProbe = await probe(standardized.intro.path, dependencies.ffprobe);
+  const outroProbe = await probe(standardized.outro.path, dependencies.ffprobe);
   requireVideoStreamShape(introProbe, 'Standardized media');
   requireVideoStreamShape(outroProbe, 'Standardized media');
   requirePositiveDuration(introProbe, 'Standardized media');
   requirePositiveDuration(outroProbe, 'Standardized media');
   return buildAssemblyPlan(workspace, qualifiedGenerated, {
-    intro: { identity: standardized.intro.identity, probe: introProbe },
-    outro: { identity: standardized.outro.identity, probe: outroProbe },
+    intro: { identity: standardized.intro, probe: introProbe },
+    outro: { identity: standardized.outro, probe: outroProbe },
   });
 }
 
@@ -166,8 +164,8 @@ export function buildAssemblyPlan(
   };
 }
 
-async function identifyGeneratedAssets(workspace: ValidatedMediaReadyWorkspace, maxBytes: number | undefined): Promise<readonly { readonly unit: GeneratedMediaUnit; readonly record: MediaUnitRecord; readonly identity: LocalFileIdentity }[]> {
-  const found: { unit: GeneratedMediaUnit; record: MediaUnitRecord; identity: LocalFileIdentity }[] = [];
+async function identifyGeneratedAssets(workspace: ValidatedMediaReadyWorkspace, maxBytes: number | undefined): Promise<readonly { readonly unit: GeneratedMediaUnit; readonly identity: LocalFileIdentity }[]> {
+  const found: { unit: GeneratedMediaUnit; identity: LocalFileIdentity }[] = [];
   for (const [index, unit] of workspace.generatedMediaUnits.entries()) {
     const record = workspace.generatedMedia.assets[index]!;
     const assetPath = record.assetPath!;
@@ -175,12 +173,12 @@ async function identifyGeneratedAssets(workspace: ValidatedMediaReadyWorkspace, 
     if (identity.byteSize !== record.byteSize || identity.sha256 !== record.sha256) {
       throw invalidAssembly('Generated media bytes no longer match the Phase 4 manifest.');
     }
-    found.push({ unit, record, identity });
+    found.push({ unit, identity });
   }
   return found;
 }
 
-async function identifyStandardizedAssets(template: AssemblyTemplate, request: StandardizedAssetRequest, maxBytes: number | undefined): Promise<{ readonly intro: { readonly identity: LocalFileIdentity }; readonly outro: { readonly identity: LocalFileIdentity } }> {
+async function identifyStandardizedAssets(template: AssemblyTemplate, request: StandardizedAssetRequest, maxBytes: number | undefined): Promise<{ readonly intro: LocalFileIdentity; readonly outro: LocalFileIdentity }> {
   const roles = new Map(template.standardizedAssetRoles.map((role) => [role.id, role.placement]));
   if (roles.size !== 2 || roles.get('intro') !== 'before-story' || roles.get('outro') !== 'after-story') {
     throw invalidAssembly('Template standardized asset roles are unsupported for assembly.');
@@ -188,7 +186,7 @@ async function identifyStandardizedAssets(template: AssemblyTemplate, request: S
   const intro = await identifyLocalFile(request.introPath, { maxBytes });
   const outro = await identifyLocalFile(request.outroPath, { maxBytes });
   if (samePath(intro.path, outro.path)) throw invalidAssembly('Standardized intro and outro must be distinct local media files.');
-  return { intro: { identity: intro }, outro: { identity: outro } };
+  return { intro, outro };
 }
 
 function requireGeneratedStreamShape(unit: GeneratedMediaUnit, facts: LocalMediaProbe): void {

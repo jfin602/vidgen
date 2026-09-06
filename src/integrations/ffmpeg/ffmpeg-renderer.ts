@@ -124,16 +124,13 @@ export class LocalFfmpegRenderer {
 
 /** Exported for deterministic tests and P3 provenance inspection. */
 export function buildRenderArgs(plan: AssemblyPlan, outputPath: string, stagedPaths: readonly string[] = []): readonly string[] {
-  const inputs: { readonly media: QualifiedMediaFile; readonly kind: 'intro' | 'visual' | 'voiceover' | 'outro'; readonly segmentIndex?: number }[] = [
-    { media: plan.standardizedAssets.intro, kind: 'intro' },
-  ];
-  for (const [segmentIndex, segment] of plan.storySegments.entries()) {
-    inputs.push({ media: segment.visual, kind: 'visual', segmentIndex });
-    if (segment.voiceover !== undefined) inputs.push({ media: segment.voiceover, kind: 'voiceover', segmentIndex });
-  }
-  inputs.push({ media: plan.standardizedAssets.outro, kind: 'outro' });
   const args: string[] = ['-hide_banner', '-y'];
-  for (const input of inputs) args.push('-i', input.media.identity.path);
+  args.push('-i', plan.standardizedAssets.intro.identity.path);
+  for (const segment of plan.storySegments) {
+    args.push('-i', segment.visual.identity.path);
+    if (segment.voiceover !== undefined) args.push('-i', segment.voiceover.identity.path);
+  }
+  args.push('-i', plan.standardizedAssets.outro.identity.path);
 
   let cursor = 0;
   const intro = { input: cursor++, media: plan.standardizedAssets.intro };

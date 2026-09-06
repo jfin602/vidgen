@@ -114,39 +114,23 @@ export function parseCliArgs(args: readonly string[]): CliCommand {
   }
 
   const [command, ...rest] = args;
-  if (command === 'help' || command === '--help' || command === '-h') {
-    if (rest.length === 0) {
-      return { kind: 'help' };
-    }
-
-    throw invalidArgument(`Help does not accept arguments: ${formatArgs(rest)}.`);
+  switch (command) {
+    case 'help':
+    case '--help':
+    case '-h':
+      if (rest.length === 0) return { kind: 'help' };
+      throw invalidArgument(`Help does not accept arguments: ${formatArgs(rest)}.`);
+    case 'run': return parseRunCommand(rest);
+    case 'story': return parseStoryCommand(rest);
+    case 'plan': return { ...parseStoryCommand(rest, 'Plan'), kind: 'plan' };
+    case 'media': return parseMediaCommand(rest);
+    case 'assemble': return parseAssembleCommand(rest);
+    default:
+      if (command.startsWith('-')) {
+        throw invalidArgument(`Unknown argument: ${JSON.stringify(command)}.`);
+      }
+      throw invalidArgument(`Unknown command: ${JSON.stringify(command)}.`);
   }
-
-  if (command.startsWith('-')) {
-    throw invalidArgument(`Unknown argument: ${JSON.stringify(command)}.`);
-  }
-
-  if (command === 'run') {
-    return parseRunCommand(rest);
-  }
-
-  if (command === 'story') {
-    return parseStoryCommand(rest);
-  }
-
-  if (command === 'plan') {
-    return { ...parseStoryCommand(rest, 'Plan'), kind: 'plan' };
-  }
-
-  if (command === 'media') {
-    return parseMediaCommand(rest);
-  }
-
-  if (command === 'assemble') {
-    return parseAssembleCommand(rest);
-  }
-
-  throw invalidArgument(`Unknown command: ${JSON.stringify(command)}.`);
 }
 
 export interface CliDependencies {
