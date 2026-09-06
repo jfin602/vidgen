@@ -1,12 +1,12 @@
 # VidGen
 
-VidGen is a standalone template-driven news clip generator.
+VidGen is a standalone news video generation engine.
 
 Ngest supplies a governed, pre-curated feed in which every delivered story is already intended for content production. VidGen does not rank, cluster, select, or reject those stories. Its job is to turn each supplied story into its own self-contained, postable video clip.
 
 ## Current MVP direction
 
-The smallest current pipeline is:
+VidGen now has two production paths sharing the same governed input and StoryInput boundary:
 
     ngest-shaped story input
             |
@@ -14,45 +14,44 @@ The smallest current pipeline is:
       validate/normalize
             |
             v
-      story package
-            |
-            v
-        ClipPlan
-     one creative step
-            |
-            v
-    generated media
-            |
-            v
-      FFmpeg assembly
-            |
-            v
-        final clip
+        StoryInput
+         /     \
+        /       \
+       v         v
+ simple path   cinematic path
+   CURRENT       PRESERVED
+  PRIORITY
+       |         |
+       v         v
+ presenter     AssemblyTemplate
+ copy/video      + ClipPlan
+       |         |
+       v         v
+ lower third   generated media
+       |         |
+       v         v
+ MP4 + JSON    FFmpeg assembly
 
-Current standards:
-- Node.js + TypeScript;
-- manually invoked CLI development flow;
-- one selected story at a time while the video pipeline is being qualified;
-- local VidGen-shaped sample input that exercises the same post-adapter validation/normalization semantics as live ngest input;
-- one story = one independent artifact directory;
-- one validated ClipPlan per story;
-- fixed assembly templates own timing and media-slot structure;
-- default template uses presenter, generated content/voiceover, presenter, and closing beats;
-- independently optional standardized premade intro/outro wrapper assets; social-first renders may begin directly with the story hook;
-- Google-first generated media with Veo as the initial presenter/video direction;
-- FFmpeg for deterministic clip assembly and finishing;
-- no Remotion in the MVP;
-- 1080x1920 9:16 H.264 MP4 at 30 fps as the initial output target;
-- ClipPlan planning works directly from sufficiently described ngest StoryInput; publisher retrieval is deferred as a later fallback;
-- no initial approval workflow, global cache, database, queue, or distributed orchestration.
+Current simple-path direction:
+- manually invoked CLI development flow, one selected story at a time;
+- one presenter and one continuous presenter clip;
+- headline and source display name rendered deterministically in the lower third;
+- configurable `maxSeconds` from 4 through 20 seconds inclusive;
+- `maxSeconds` is a hard ceiling, not a target duration;
+- the engine should prefer the shortest useful provider-supported duration that does not exceed the ceiling;
+- final output is a postable vertical MP4 paired with article/provenance metadata JSON;
+- 1080x1920 9:16 H.264 MP4 at 30 fps remains the initial output target;
+- no B-roll, separate voiceover, intro/outro, ClipPlan, AssemblyTemplate, cinematic GeneratedMediaUnit resolution, or cinematic AssemblyPlan is required by the simple path;
+- Google-first presenter generation remains behind thin provider-neutral boundaries;
+- FFmpeg/FFprobe remain the deterministic finishing and qualification tools.
 
-See docs/template-system.md for the assembly-template contract.
+The implemented cinematic `story -> plan -> media -> assemble` pipeline remains supported and must not regress. See docs/template-system.md for that preserved assembly-template contract.
 
 ## System boundary
 
 Ngest owns governed source trust, normalization, Article identity/provenance, duplicate/moderation behavior, Profile filtering/order, production eligibility, original publisher destinations, authentication, and delivery.
 
-VidGen owns boundary validation, story-level production identity, ClipPlan generation, source traceability, generated media, FFmpeg assembly, and final story packages.
+VidGen owns boundary validation, story-level production identity, simple presenter-headline generation, cinematic ClipPlan generation, source traceability, generated media, deterministic FFmpeg finishing/assembly, and final artifacts.
 
 VidGen does not connect directly to ngest persistence.
 
@@ -82,7 +81,7 @@ Phases 1 and 2 are complete and closed at versions 0.1.5 and 0.2.5. Phase 3 was 
 
 The project was simplified after Phase 1. FeedAnalysis, EditorialPlan, separate Script and ProductionPlan stages, Remotion composition, edition-level planning, and story-selection logic are no longer part of the current MVP.
 
-The repository baseline is 0.5.3. Phase 5's deterministic assembly path is implemented. The original Phase 5 closeout host lacked ffmpeg/ffprobe and owner-supplied real media, so that closeout did not establish a real render. Since then, the deployment VPS has directly qualified FFmpeg 6.1.1, FFprobe 6.1.1, libx264, AAC, and the required assembly filters. `c5-optional-assets` is closed: intro and outro are independently optional, omitted wrappers contribute no placeholder media, duration, identity, or provenance, and supplied wrappers remain fully qualified. A complete owner-media generated story render and human playback review are still unclaimed. The current owner-approved `c5-config-fix` correction will make live development ingress consume ngest's existing Distribution v1 Profile endpoint through a replaceable adapter and add an Article-URL single-story sample helper. The future dedicated ngest VidGen feed-plus-controls endpoint remains the intended production boundary. Phase 6 live story fan-out and operational hardening follows this correction.
+The repository baseline is 0.5.3. Phase 5's deterministic assembly path is implemented. The original Phase 5 closeout host lacked ffmpeg/ffprobe and owner-supplied real media, so that closeout did not establish a real render. Since then, the deployment VPS has directly qualified FFmpeg 6.1.1, FFprobe 6.1.1, libx264, AAC, and the required assembly filters. `c5-optional-assets` is closed: intro and outro are independently optional, omitted wrappers contribute no placeholder media, duration, identity, or provenance, and supplied wrappers remain fully qualified. A complete owner-media generated story render and human playback review are still unclaimed. `c5-config-fix` remains owner-approved but is deferred. The next roadmap phase is Phase 6, which adds the simple presenter-headline path while preserving the completed cinematic pipeline. The previously planned live story fan-out and operational-hardening work moves to Phase 7. The future dedicated ngest VidGen feed-plus-controls endpoint remains the intended production boundary.
 
 ## Start here
 
