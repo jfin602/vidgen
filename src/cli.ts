@@ -31,6 +31,8 @@ Available commands:
 
 Run options:
   --artifacts-root <directory>  Write runs here (default: ${DEFAULT_ARTIFACTS_ROOT}).
+  Live input uses NGEST_BASE_URL, NGEST_PROFILE_KEY, and NGEST_BEARER_TOKEN.
+  NGEST_TIMEOUT_MS is optional; a repository .env is loaded when present.
 
 Story options:
   --input-file <manifest.json>  Required local ngest-shaped manifest file.

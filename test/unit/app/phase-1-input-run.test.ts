@@ -26,7 +26,7 @@ test('CLI persists one safe, validated CanonicalInput under its artifacts-root o
   try {
     await withServer((request, response) => {
       authorization = request.headers.authorization;
-      const manifest = validManifest() as unknown as Record<string, unknown>;
+      const manifest = validDistribution() as Record<string, unknown>;
       manifest.bearerToken = bearerSentinel;
       sendJson(response, manifest);
     }, async (endpoint) => {
@@ -178,17 +178,16 @@ test('a failure publishing terminal input-ready metadata removes the CanonicalIn
   }
 });
 
-test('CLI returns a nonzero status for nextCursor and records a failed run without CanonicalInput', async () => {
+test('CLI rejects a repeated Distribution cursor and records a failed run without CanonicalInput', async () => {
   const root = await makeTemporaryDirectory();
   try {
     await withServer((_request, response) => {
-      const manifest = validManifest();
-      (manifest as unknown as { nextCursor: string }).nextCursor = 'next-page';
+      const manifest = validDistribution({ nextCursor: 'next-page' });
       sendJson(response, manifest);
     }, async (endpoint) => {
       const result = await runCliProcess(root, endpoint);
       assert.equal(result.code, 2);
-      assert.match(result.stderr, /\[ngest_unsupported_continuation\]/);
+      assert.match(result.stderr, /\[ngest_manifest\]/);
       assert.equal(result.stdout.includes(bearerSentinel), false);
       assert.equal(result.stderr.includes(bearerSentinel), false);
     });
@@ -198,8 +197,8 @@ test('CLI returns a nonzero status for nextCursor and records a failed run witho
     const runDirectory = join(root, runId);
     const metadata = await readJson(join(runDirectory, 'run.json'));
     assert.deepEqual(metadata.failure, {
-      code: 'ngest_unsupported_continuation',
-      message: 'Ngest VidGen manifest continuation is not supported.',
+      code: 'ngest_manifest',
+      message: 'Ngest Distribution response repeated a continuation cursor.',
     });
     assert.equal(metadata.status, 'failed');
     await assert.rejects(readFile(join(runDirectory, CANONICAL_INPUT_ARTIFACT_NAME), 'utf8'));
@@ -253,8 +252,9 @@ async function runCliProcess(artifactsRoot: string, endpoint: string): Promise<{
       cwd: process.cwd(),
       env: {
         ...process.env,
-        NGEST_VIDGEN_URL: endpoint,
-        NGEST_VIDGEN_BEARER_TOKEN: bearerSentinel,
+        NGEST_BASE_URL: endpoint,
+        NGEST_PROFILE_KEY: 'daily-briefing',
+        NGEST_BEARER_TOKEN: bearerSentinel,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -289,4 +289,20 @@ async function withServer(
 function sendJson(response: ServerResponse, value: object): void {
   response.writeHead(200, { 'content-type': 'application/json' });
   response.end(JSON.stringify(value));
+}
+
+function validDistribution(overrides: { readonly nextCursor?: string | null } = {}): object {
+  return {
+    apiVersion: 'v1',
+    generatedAt: '2026-09-06T00:00:00.000Z',
+    snapshotRevision: 'snapshot-7',
+    profile: { configKey: 'daily-briefing', displayName: 'Daily Briefing' },
+    publication: { name: 'VidGen News' },
+    digest: null,
+    items: validManifest().articles.map((article) => ({
+      ...article,
+      categories: article.categories.map((displayName) => ({ configKey: displayName.toLowerCase(), displayName })),
+    })),
+    nextCursor: overrides.nextCursor ?? null,
+  };
 }

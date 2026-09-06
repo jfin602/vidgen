@@ -239,7 +239,7 @@ function sanitizeRunError(error: unknown, environment: NgestVidGenEnvironment): 
 }
 
 function messageIsSafe(message: string, environment: NgestVidGenEnvironment): boolean {
-  const bearerToken = environment.NGEST_VIDGEN_BEARER_TOKEN;
+  const bearerToken = environment.NGEST_BEARER_TOKEN;
   return !/authorization/i.test(message)
     && (bearerToken === undefined || !message.includes(bearerToken));
 }
