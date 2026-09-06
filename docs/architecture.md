@@ -261,7 +261,9 @@ FFmpeg owns deterministic assembly and finishing needed by the fixed templates, 
 
 The assembly layer consumes the selected template, validated ClipPlan, strict generated-media.json handoff, local generated assets, and standardized assets. It must not reinterpret story meaning or call media-generation providers.
 
-A separate persisted RenderManifest is not required as a conceptual pipeline stage. Emit render/debug metadata only if implementation evidence shows it is useful.
+Phase 5 implemented this boundary with bounded local FFprobe qualification, deterministic AssemblyPlan creation, a no-shell FFmpeg renderer, manual `vidgen assemble`, post-render technical validation, `assembly-run.json`, strict `final-clip.json`, and atomic `final/clip.mp4` publication. The closeout environment did not contain ffmpeg/ffprobe or the required owner-supplied real media inputs, so the implementation is not yet claimed as real-host/story-render qualified.
+
+A separate creative RenderManifest is not a pipeline stage. The implemented assembly/final metadata exists only for deterministic execution state, provenance, and technical validation.
 
 ## Output baseline
 
@@ -284,7 +286,7 @@ Generated asset reuse is story-local. Reuse requires matching effective generati
 
 External operations must be bounded and failures explicit.
 
-No approval-state machine is required for the first end-to-end pipeline. Human inspection occurs after generation while the pipeline is being developed.
+No approval-state machine is required for the first end-to-end pipeline. Human playback/aesthetic inspection remains separate from deterministic technical validation and was not completed during the Phase 5 closeout.
 
 ## Deployment shape
 
