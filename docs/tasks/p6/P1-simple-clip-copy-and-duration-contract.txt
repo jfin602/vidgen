@@ -1,0 +1,38 @@
+TASK: Phase 6 / P1 — Simple clip copy and duration contract
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra Medium`.
+
+VERSIONING
+- This prompt's assigned project version is `0.6.1`.
+
+GOAL
+
+Create the provider-neutral Phase 6 contract for one short presenter-headline clip. Keep it independent from AssemblyTemplate, ClipPlan, cinematic GeneratedMediaUnit, and cinematic AssemblyPlan.
+
+Read BOOT.md and the current simple-path docs plus StoryInput/structured-text implementation and tests before editing. Use the smallest direct design.
+
+MUST REMAIN TRUE
+
+- StoryInput is the factual input boundary. The simple path does not create a cinematic story workspace or select a template.
+- `maxSeconds` is a whole-number hard ceiling from 4 through 20 inclusive.
+- Presenter copy is one small validated structured-text output containing only the text the presenter should speak.
+- Use the existing provider-neutral structured-text client and one normal-path model call; do not add a second text-provider stack or hidden retry/reflection loop.
+- Ground copy only in normalized StoryInput facts. Headline-only stories remain usable; do not inherit the cinematic non-null-summary requirement.
+- Model output never controls headline/source lower-third text, duration policy, media type, provider instructions, or output paths.
+- Define a deterministic speech-word budget from an explicit engine-owned broadcast-rate constant. Reject model output that is blank, malformed, over budget, or otherwise outside the simple-copy contract.
+- Keep article/control text untrusted and protect the prompt boundary from embedded instructions.
+- Add no persistence, video generation, FFmpeg, live fan-out, publisher retrieval, cache, or new dependency.
+- Existing cinematic contracts/tests remain unchanged.
+
+PROOF
+
+Add focused tests for 4/20 bounds, invalid values, word budgeting, headline-only input, hostile/untrusted story text, strict structured output, one model call, and safe failures. Run the focused tests, `npm run check`, and `git diff --check`.
+
+Downstream-required capability -> owning implementation/export -> focused proof:
+
+validated duration-aware presenter copy -> Phase 6 simple-copy contract/build function -> focused simple-copy tests.
+
+FINAL RESPONSE
+
+Report the contract created, the speech-budget rule, validation run, and confirmation that no cinematic contract was reused or changed.
