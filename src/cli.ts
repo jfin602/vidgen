@@ -19,7 +19,7 @@ Usage:
   vidgen story --input-file <manifest.json> --article-id <articleId> [--template <templateId>] [--artifacts-root <directory>]
   vidgen plan --input-file <manifest.json> --article-id <articleId> [--template <templateId>] [--artifacts-root <directory>]
   vidgen media --story-dir <directory> [--anchor-reference <image-path> ...]
-  vidgen assemble --story-dir <directory> --intro <intro-video-path> --outro <outro-video-path> [--font-file <font-path>]
+  vidgen assemble --story-dir <directory> [--intro <intro-video-path>] [--outro <outro-video-path>] [--font-file <font-path>]
 
 Available commands:
   help, --help, -h  Show this help message.
@@ -53,8 +53,8 @@ Media options:
 
 Assemble options:
   --story-dir <directory>  Required existing media-ready story workspace.
-  --intro <video-path>     Required local standardized intro video.
-  --outro <video-path>     Required local standardized outro video.
+  --intro <video-path>     Optional local standardized intro video.
+  --outro <video-path>     Optional local standardized outro video.
   --font-file <font-path>  Required only when the selected assembly has display text.
   Assemble consumes an existing media-ready story and writes final/clip.mp4.
 `;
@@ -93,8 +93,8 @@ export interface MediaCommand {
 export interface AssembleCommand {
   readonly kind: 'assemble';
   readonly storyDirectory: string;
-  readonly introPath: string;
-  readonly outroPath: string;
+  readonly introPath?: string;
+  readonly outroPath?: string;
   readonly fontPath?: string;
 }
 
@@ -198,8 +198,8 @@ export async function runCli(
     if (command.kind === 'assemble') {
       const result = await (dependencies.assembleStory ?? assembleStoryWorkspace)({
         storyDirectory: command.storyDirectory,
-        introPath: command.introPath,
-        outroPath: command.outroPath,
+        ...(command.introPath === undefined ? {} : { introPath: command.introPath }),
+        ...(command.outroPath === undefined ? {} : { outroPath: command.outroPath }),
         ...(command.fontPath === undefined ? {} : { fontPath: command.fontPath }),
       });
       output.writeStdout(
@@ -275,9 +275,7 @@ function parseAssembleCommand(args: readonly string[]): AssembleCommand {
     values[key] = value;
   }
   if (values.storyDirectory === undefined) throw invalidArgument('Assemble requires --story-dir <directory>.');
-  if (values.introPath === undefined) throw invalidArgument('Assemble requires --intro <intro-video-path>.');
-  if (values.outroPath === undefined) throw invalidArgument('Assemble requires --outro <outro-video-path>.');
-  return { kind: 'assemble', storyDirectory: values.storyDirectory, introPath: values.introPath, outroPath: values.outroPath, ...(values.fontPath === undefined ? {} : { fontPath: values.fontPath }) };
+  return { kind: 'assemble', storyDirectory: values.storyDirectory, ...(values.introPath === undefined ? {} : { introPath: values.introPath }), ...(values.outroPath === undefined ? {} : { outroPath: values.outroPath }), ...(values.fontPath === undefined ? {} : { fontPath: values.fontPath }) };
 }
 
 function parseRunCommand(args: readonly string[]): RunCommand {

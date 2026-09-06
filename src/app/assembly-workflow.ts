@@ -14,8 +14,8 @@ import { VIDGEN_ENGINE_VERSION } from '../version.ts';
 export const ASSEMBLY_RUN_ARTIFACT_NAME = 'assembly-run.json';
 export const FINAL_CLIP_ARTIFACT_NAME = 'final-clip.json';
 export const FINAL_CLIP_RELATIVE_PATH = 'final/clip.mp4';
-export const ASSEMBLY_SCHEMA_VERSION = '1';
-export const ASSEMBLY_INPUT_CONTRACT_VERSION = '1';
+export const ASSEMBLY_SCHEMA_VERSION = '2';
+export const ASSEMBLY_INPUT_CONTRACT_VERSION = '2';
 export const DEFAULT_MAX_FONT_BYTES = 100_000_000;
 export const DEFAULT_MAX_FINAL_CLIP_BYTES = 1_000_000_000;
 /** Two output frames plus a small MP4 timestamp-rounding allowance. */
@@ -97,10 +97,10 @@ export interface AssemblyRenderer {
 
 export interface AssemblyWorkflowDependencies {
   readonly storyDirectory: string;
-  readonly introPath: string;
-  readonly outroPath: string;
+  readonly introPath?: string;
+  readonly outroPath?: string;
   readonly fontPath?: string;
-  readonly qualifyInputs?: (request: { readonly storyDirectory: string; readonly introPath: string; readonly outroPath: string }) => Promise<AssemblyPlan>;
+  readonly qualifyInputs?: (request: { readonly storyDirectory: string; readonly introPath?: string; readonly outroPath?: string }) => Promise<AssemblyPlan>;
   readonly createRenderer?: () => AssemblyRenderer;
   readonly probe?: (path: string) => Promise<LocalMediaProbe>;
   readonly now?: () => Date;
@@ -135,7 +135,11 @@ export async function assembleStoryWorkspace(dependencies: AssemblyWorkflowDepen
 
   // All producer-owned state and explicit local media are qualified before
   // renderer construction. This is intentionally the first executable edge.
-  const plan = await (dependencies.qualifyInputs ?? qualifyAssemblyInputs)({ storyDirectory, introPath: dependencies.introPath, outroPath: dependencies.outroPath });
+  const plan = await (dependencies.qualifyInputs ?? qualifyAssemblyInputs)({
+    storyDirectory,
+    ...(dependencies.introPath === undefined ? {} : { introPath: dependencies.introPath }),
+    ...(dependencies.outroPath === undefined ? {} : { outroPath: dependencies.outroPath }),
+  });
   const needsDisplayText = plan.storySegments.some((segment) => segment.displayText.length > 0);
   const font = await qualifyFont(dependencies.fontPath, needsDisplayText, maxFontBytes);
   const renderer = (dependencies.createRenderer ?? (() => new LocalFfmpegRenderer()))();
@@ -270,8 +274,8 @@ async function qualifyFont(path: string | undefined, required: boolean, maxBytes
 
 function standardizedProvenance(plan: AssemblyPlan): readonly StandardizedAssetProvenance[] {
   return [
-    standardizedAsset('intro', 'before-story', plan.standardizedAssets.intro.identity, plan.standardizedAssets.intro.probe),
-    standardizedAsset('outro', 'after-story', plan.standardizedAssets.outro.identity, plan.standardizedAssets.outro.probe),
+    ...(plan.standardizedAssets.intro === undefined ? [] : [standardizedAsset('intro', 'before-story', plan.standardizedAssets.intro.identity, plan.standardizedAssets.intro.probe)]),
+    ...(plan.standardizedAssets.outro === undefined ? [] : [standardizedAsset('outro', 'after-story', plan.standardizedAssets.outro.identity, plan.standardizedAssets.outro.probe)]),
   ];
 }
 function standardizedAsset(roleId: 'intro' | 'outro', placement: 'before-story' | 'after-story', identity: LocalFileIdentity, probe: LocalMediaProbe): StandardizedAssetProvenance { return { roleId, placement, ...safeIdentity(identity), probe: summarizeProbe(probe) }; }
@@ -304,7 +308,7 @@ function sha256(value: string): string { return createHash('sha256').update(valu
 function record(value: unknown, label: string): Record<string, any> { if (value === null || typeof value !== 'object' || Array.isArray(value)) throw assembly(`${label} is malformed.`); return value as Record<string, any>; }
 function rejectExtra(value: Record<string, unknown>, allowed: readonly string[], label: string): void { if (Object.keys(value).some((key) => !allowed.includes(key))) throw assembly(`${label} contains unsupported fields.`); }
 function validateTemplate(value: unknown): void { const template = record(value, 'Template'); rejectExtra(template, ['id', 'version'], 'Template'); if (typeof template.id !== 'string' || template.id.length < 1 || typeof template.version !== 'string' || template.version.length < 1) throw assembly('Template is malformed.'); }
-function validateStandardizedAssets(value: unknown): void { if (!Array.isArray(value) || value.length !== 2) throw assembly('Standardized assets are malformed.'); for (const [index, asset] of value.entries()) { const item = record(asset, 'Standardized asset'); rejectExtra(item, ['roleId', 'placement', 'basename', 'sha256', 'byteSize', 'probe'], 'Standardized asset'); if ((index === 0 && (item.roleId !== 'intro' || item.placement !== 'before-story')) || (index === 1 && (item.roleId !== 'outro' || item.placement !== 'after-story'))) throw assembly('Standardized assets are malformed.'); validateIdentity(item, 'Standardized asset'); validateProbeSummary(item.probe); } }
+function validateStandardizedAssets(value: unknown): void { if (!Array.isArray(value) || value.length > 2) throw assembly('Standardized assets are malformed.'); for (const asset of value) { const item = record(asset, 'Standardized asset'); rejectExtra(item, ['roleId', 'placement', 'basename', 'sha256', 'byteSize', 'probe'], 'Standardized asset'); if ((item.roleId !== 'intro' || item.placement !== 'before-story') && (item.roleId !== 'outro' || item.placement !== 'after-story')) throw assembly('Standardized assets are malformed.'); validateIdentity(item, 'Standardized asset'); validateProbeSummary(item.probe); } if (value.length === 2 && (record(value[0], 'Standardized asset').roleId !== 'intro' || record(value[1], 'Standardized asset').roleId !== 'outro')) throw assembly('Standardized assets are malformed.'); }
 function validateIdentity(value: unknown, label: string): void { const identity = record(value, label); const allowed = label === 'Standardized asset' ? ['roleId', 'placement', 'basename', 'sha256', 'byteSize', 'probe'] : ['basename', 'sha256', 'byteSize']; rejectExtra(identity, allowed, label); if (typeof identity.basename !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$/u.test(identity.basename) || !hash(identity.sha256) || !positive(identity.byteSize)) throw assembly(`${label} is malformed.`); }
 function validateProbeSummary(value: unknown): void { const probe = record(value, 'Probe summary'); rejectExtra(probe, ['durationSeconds', 'containerNames', 'video', 'audio'], 'Probe summary'); if (!finitePositive(probe.durationSeconds) || !Array.isArray(probe.containerNames) || !probe.containerNames.every((name) => typeof name === 'string' && name.length > 0)) throw assembly('Probe summary is malformed.'); if (probe.video !== undefined) { const video = record(probe.video, 'Probe video'); rejectExtra(video, ['codec', 'width', 'height', 'pixelFormat', 'fps'], 'Probe video'); const fps = record(video.fps, 'Probe video fps'); rejectExtra(fps, ['numerator', 'denominator'], 'Probe video fps'); if (typeof video.codec !== 'string' || !positive(video.width) || !positive(video.height) || typeof video.pixelFormat !== 'string' || !positive(fps.numerator) || !positive(fps.denominator)) throw assembly('Probe summary is malformed.'); } if (probe.audio !== undefined) { const audio = record(probe.audio, 'Probe audio'); rejectExtra(audio, ['codec', 'sampleRate', 'channels'], 'Probe audio'); if (typeof audio.codec !== 'string' || !positive(audio.sampleRate) || !positive(audio.channels)) throw assembly('Probe summary is malformed.'); } }
 function validateOutput(value: unknown): void { const output = record(value, 'Final clip output'); rejectExtra(output, ['path', 'sha256', 'byteSize', 'durationSeconds', 'width', 'height', 'fps', 'videoCodec', 'pixelFormat', 'audioCodec', 'audioSampleRate', 'audioChannels'], 'Final clip output'); const fps = record(output.fps, 'Final clip output fps'); rejectExtra(fps, ['numerator', 'denominator'], 'Final clip output fps'); if (output.path !== FINAL_CLIP_RELATIVE_PATH || !hash(output.sha256) || !positive(output.byteSize) || !finitePositive(output.durationSeconds) || !positive(output.width) || !positive(output.height) || !positive(fps.numerator) || !positive(fps.denominator) || output.videoCodec !== 'h264' || output.pixelFormat !== 'yuv420p' || output.audioCodec !== 'aac' || output.audioSampleRate !== 48_000 || output.audioChannels !== 2) throw assembly('Final clip manifest is malformed.'); }

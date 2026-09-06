@@ -26,6 +26,15 @@ test('CLI parses its help, run, manual story, planning, media, and assembly surf
   assert.deepEqual(parseCliArgs(['assemble', '--story-dir', 'tmp/stories/ready', '--intro', 'intro.mp4', '--outro', 'outro.mp4', '--font-file', 'font.ttf']), {
     kind: 'assemble', storyDirectory: 'tmp/stories/ready', introPath: 'intro.mp4', outroPath: 'outro.mp4', fontPath: 'font.ttf',
   });
+  assert.deepEqual(parseCliArgs(['assemble', '--story-dir', 'tmp/stories/ready', '--intro', 'intro.mp4']), {
+    kind: 'assemble', storyDirectory: 'tmp/stories/ready', introPath: 'intro.mp4',
+  });
+  assert.deepEqual(parseCliArgs(['assemble', '--story-dir', 'tmp/stories/ready', '--outro', 'outro.mp4']), {
+    kind: 'assemble', storyDirectory: 'tmp/stories/ready', outroPath: 'outro.mp4',
+  });
+  assert.deepEqual(parseCliArgs(['assemble', '--story-dir', 'tmp/stories/ready']), {
+    kind: 'assemble', storyDirectory: 'tmp/stories/ready',
+  });
   assert.deepEqual(parseCliArgs([
     'plan', '--input-file', 'fixture.json', '--article-id', 'article-2',
     '--template', 'default-news-40s', '--artifacts-root', 'tmp/stories',
@@ -84,7 +93,7 @@ test('CLI rejects unknown commands and invalid arguments deterministically', () 
       && error.publicMessage === '--artifacts-root requires exactly one directory argument.',
   );
   assert.throws(() => parseCliArgs(['media']), /Media requires --story-dir/);
-  assert.throws(() => parseCliArgs(['assemble', '--story-dir', 'story', '--intro', 'intro.mp4']), /Assemble requires --outro/);
+  assert.throws(() => parseCliArgs(['assemble', '--intro', 'intro.mp4']), /Assemble requires --story-dir/);
   assert.throws(() => parseCliArgs(['media', '--story-dir', 'story', '--anchor-reference', 'a', '--anchor-reference', 'b', '--anchor-reference', 'c', '--anchor-reference', 'd']), /at most three/);
 });
 
@@ -100,6 +109,21 @@ test('CLI delegates assembly and reports only final safe facts', async () => {
   assert.match(stdout.join(''), /final_ready/);
   assert.match(stdout.join(''), /final\/clip\.mp4/);
   assert.match(helpText, /consumes an existing media-ready story/i);
+});
+
+test('CLI delegates each optional wrapper form without invented inputs', async () => {
+  for (const [args, expected] of [
+    [['assemble', '--story-dir', 'workspace', '--intro', 'intro.mp4'], { storyDirectory: 'workspace', introPath: 'intro.mp4' }],
+    [['assemble', '--story-dir', 'workspace', '--outro', 'outro.mp4'], { storyDirectory: 'workspace', outroPath: 'outro.mp4' }],
+    [['assemble', '--story-dir', 'workspace'], { storyDirectory: 'workspace' }],
+  ] as const) {
+    await runCli(args, { writeStdout: () => undefined, writeStderr: () => undefined }, { assembleStory: async (input) => {
+      assert.deepEqual(input, expected);
+      return { status: 'final_ready', storyRunId: 'story-123', assemblyRunId: 'assembly-123', finalPath: 'final/clip.mp4', finalSha256: 'a'.repeat(64), durationSeconds: 40 };
+    } });
+  }
+  assert.match(helpText, /\[--intro <intro-video-path>\]/);
+  assert.match(helpText, /Optional local standardized intro/i);
 });
 
 test('CLI delegates media generation and reports safe counts', async () => {

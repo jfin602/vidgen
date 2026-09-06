@@ -8,7 +8,7 @@ import { PassThrough } from 'node:stream';
 import test from 'node:test';
 
 import type { AssemblyPlan } from '../../../src/app/assembly-input.ts';
-import { FFMPEG_ASSEMBLY_POLICY, LocalFfmpegRenderer } from '../../../src/integrations/ffmpeg/ffmpeg-renderer.ts';
+import { buildRenderArgs, FFMPEG_ASSEMBLY_POLICY, LocalFfmpegRenderer } from '../../../src/integrations/ffmpeg/ffmpeg-renderer.ts';
 import { VidGenError } from '../../../src/core/error.ts';
 
 const capabilityFilters = ' ... scale ... pad ... fps ... setsar ... trim ... setpts ... atrim ... asetpts ... aresample ... aformat ... apad ... concat ... loudnorm ... drawtext ... drawbox ... ';
@@ -88,6 +88,20 @@ test('renderer requires a font only for display and reports bounded safe process
     const stagePath = join(workDirectory, 'font.ttf'); await writeFile(stagePath, 'font');
     await assert.rejects(new LocalFfmpegRenderer({ spawn: () => child('') }).render({ assemblyPlan: plan(['text']), workDirectory, outputPath: join(workDirectory, 'candidate.mp4'), fontPath: stagePath }), hasAssembly);
   });
+});
+
+test('renderer includes only supplied standardized wrappers in canonical composition order', () => {
+  const full = plan();
+  for (const [assets, paths, pairs] of [
+    [full.standardizedAssets, ['intro.mp4', 'hook.mp4', 'content.mp4', 'voice.wav', 'support.mp4', 'closing.mp4', 'outro.mp4'], 6],
+    [{ intro: full.standardizedAssets.intro }, ['intro.mp4', 'hook.mp4', 'content.mp4', 'voice.wav', 'support.mp4', 'closing.mp4'], 5],
+    [{ outro: full.standardizedAssets.outro }, ['hook.mp4', 'content.mp4', 'voice.wav', 'support.mp4', 'closing.mp4', 'outro.mp4'], 5],
+    [{}, ['hook.mp4', 'content.mp4', 'voice.wav', 'support.mp4', 'closing.mp4'], 4],
+  ] as const) {
+    const args = buildRenderArgs({ ...full, standardizedAssets: assets, expectedFinalDurationSeconds: 40 + (assets.intro?.probe.durationSeconds ?? 0) + (assets.outro?.probe.durationSeconds ?? 0) }, 'candidate.mp4');
+    assert.deepEqual(inputPaths(args), paths);
+    assert.match(args[args.indexOf('-filter_complex') + 1]!, new RegExp(`concat=n=${pairs}:v=1:a=1`));
+  }
 });
 
 function plan(displayText: readonly string[] = []): AssemblyPlan {

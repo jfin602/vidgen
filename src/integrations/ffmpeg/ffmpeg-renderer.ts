@@ -125,26 +125,26 @@ export class LocalFfmpegRenderer {
 /** Exported for deterministic tests and P3 provenance inspection. */
 export function buildRenderArgs(plan: AssemblyPlan, outputPath: string, stagedPaths: readonly string[] = []): readonly string[] {
   const args: string[] = ['-hide_banner', '-y'];
-  args.push('-i', plan.standardizedAssets.intro.identity.path);
+  if (plan.standardizedAssets.intro !== undefined) args.push('-i', plan.standardizedAssets.intro.identity.path);
   for (const segment of plan.storySegments) {
     args.push('-i', segment.visual.identity.path);
     if (segment.voiceover !== undefined) args.push('-i', segment.voiceover.identity.path);
   }
-  args.push('-i', plan.standardizedAssets.outro.identity.path);
+  if (plan.standardizedAssets.outro !== undefined) args.push('-i', plan.standardizedAssets.outro.identity.path);
 
   let cursor = 0;
-  const intro = { input: cursor++, media: plan.standardizedAssets.intro };
+  const intro = plan.standardizedAssets.intro === undefined ? undefined : { input: cursor++, media: plan.standardizedAssets.intro };
   const stories = plan.storySegments.map((segment, segmentIndex) => {
     const visual = { input: cursor++, media: segment.visual };
     const voiceover = segment.voiceover === undefined ? undefined : { input: cursor++, media: segment.voiceover };
     return { segment, segmentIndex, visual, voiceover };
   });
-  const outro = { input: cursor, media: plan.standardizedAssets.outro };
+  const outro = plan.standardizedAssets.outro === undefined ? undefined : { input: cursor, media: plan.standardizedAssets.outro };
   const graph: string[] = [];
   const pairs: { readonly video: string; readonly audio: string }[] = [];
-  pairs.push(normalizeStandardized(graph, intro.input, intro.media, 'intro', plan));
+  if (intro !== undefined) pairs.push(normalizeStandardized(graph, intro.input, intro.media, 'intro', plan));
   for (const item of stories) pairs.push(normalizeStory(graph, item, plan, stagedPaths));
-  pairs.push(normalizeStandardized(graph, outro.input, outro.media, 'outro', plan));
+  if (outro !== undefined) pairs.push(normalizeStandardized(graph, outro.input, outro.media, 'outro', plan));
   graph.push(`${pairs.map((pair) => `[${pair.video}][${pair.audio}]`).join('')}concat=n=${pairs.length}:v=1:a=1[vcat][acat]`);
   graph.push(`[acat]loudnorm=I=-16:LRA=11:TP=-1.5,aresample=48000,aformat=sample_rates=48000:channel_layouts=stereo[aout]`);
   args.push('-filter_complex', graph.join(';'), '-map', '[vcat]', '-map', '[aout]', '-c:v', 'libx264', '-crf', '20', '-preset', 'medium', '-pix_fmt', 'yuv420p', '-r', String(plan.output.fps), '-c:a', 'aac', '-ar', '48000', '-ac', '2', '-b:a', '192k', '-movflags', '+faststart', '-f', 'mp4', outputPath);

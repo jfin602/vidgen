@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { assembleStoryWorkspace, fingerprintAssembly, validateFinalCandidate, validateFinalClipManifest } from '../../../src/app/assembly-workflow.ts';
+import { ASSEMBLY_INPUT_CONTRACT_VERSION, ASSEMBLY_SCHEMA_VERSION, assembleStoryWorkspace, fingerprintAssembly, validateAssemblyRunMetadata, validateFinalCandidate, validateFinalClipManifest } from '../../../src/app/assembly-workflow.ts';
 import type { AssemblyPlan } from '../../../src/app/assembly-input.ts';
 import { VidGenError } from '../../../src/core/error.ts';
 import type { LocalMediaProbe } from '../../../src/integrations/ffmpeg/ffprobe.ts';
@@ -29,12 +29,39 @@ test('manual assembly performs one fresh render, atomically publishes final evid
     assert.equal(await readFile(join(directory, 'final', 'clip.mp4'), 'utf8'), 'candidate');
     const manifest = JSON.parse(await readFile(join(directory, 'final-clip.json'), 'utf8'));
     validateFinalClipManifest(manifest);
+    assert.equal(manifest.schemaVersion, '2');
     assert.equal(manifest.ffmpegVersion, 'ffmpeg version test-build');
     assert.equal(manifest.template.id, 'synthetic-template');
     const durable = JSON.stringify(manifest) + await readFile(join(directory, 'assembly-run.json'), 'utf8');
     assert.equal(durable.includes(directory), false);
     assert.equal(durable.includes('display text'), false);
     assert.deepEqual((await readdir(join(directory, 'final'))).sort(), ['clip.mp4']);
+  });
+});
+
+test('workflow persists only supplied wrappers in canonical v2 provenance', async () => {
+  await withDirectory(async (directory) => {
+    const intro = join(directory, 'intro.mp4'); const outro = join(directory, 'outro.mp4'); await writeFile(intro, 'i'); await writeFile(outro, 'o');
+    for (const [request, expectedRoles, duration] of [
+      [{ introPath: intro, outroPath: outro }, ['intro', 'outro'], 45],
+      [{ introPath: intro }, ['intro'], 42],
+      [{ outroPath: outro }, ['outro'], 43],
+      [{}, [], 40],
+    ] as const) {
+      let received: Record<string, string> | undefined;
+      await assembleStoryWorkspace({ storyDirectory: directory, ...request, qualifyInputs: async (input) => { received = input; return plan(input.introPath, input.outroPath); }, createAssemblyRunId: () => `assembly-${duration}`, createRenderer: () => ({ preflight: async () => ({ version: 'ffmpeg version test-build' }), render: async ({ outputPath }) => { await writeFile(outputPath, 'candidate'); return { outputPath, ffmpegVersion: 'ffmpeg version test-build', durationMs: 1 }; } }), probe: async () => finalProbe(duration) });
+      assert.deepEqual(received, { storyDirectory: directory, ...request });
+      const manifest = JSON.parse(await readFile(join(directory, 'final-clip.json'), 'utf8'));
+      const run = JSON.parse(await readFile(join(directory, 'assembly-run.json'), 'utf8'));
+      assert.deepEqual(manifest.standardizedAssets.map((asset: { roleId: string }) => asset.roleId), expectedRoles);
+      assert.equal(manifest.schemaVersion, ASSEMBLY_SCHEMA_VERSION);
+      validateFinalClipManifest(manifest); validateAssemblyRunMetadata(run);
+      assert.throws(() => validateFinalClipManifest({ ...manifest, schemaVersion: '1' }), (error: unknown) => error instanceof VidGenError && error.code === 'assembly');
+      if (expectedRoles.length === 2) {
+        assert.throws(() => validateFinalClipManifest({ ...manifest, standardizedAssets: [manifest.standardizedAssets[0], manifest.standardizedAssets[0]] }), (error: unknown) => error instanceof VidGenError && error.code === 'assembly');
+        assert.throws(() => validateFinalClipManifest({ ...manifest, standardizedAssets: [{ ...manifest.standardizedAssets[0], placement: 'after-story' }, manifest.standardizedAssets[1]] }), (error: unknown) => error instanceof VidGenError && error.code === 'assembly');
+      }
+    }
   });
 });
 
@@ -84,10 +111,13 @@ test('fingerprints include safe assembly semantics but no path identity', () => 
   const right = { ...plan('/different/path/intro-a.mp4', '/different/path/outro.mp4'), standardizedAssets: { ...plan('/different/path/intro-a.mp4', '/different/path/outro.mp4').standardizedAssets, intro: { ...plan('/different/path/intro-a.mp4', '/different/path/outro.mp4').standardizedAssets.intro, identity: { ...plan('/different/path/intro-a.mp4', '/different/path/outro.mp4').standardizedAssets.intro.identity, sha256: 'b'.repeat(64) } } } } as AssemblyPlan;
   assert.equal(fingerprintAssembly({ plan: left, ffmpegVersion: 'ffmpeg version test' }), fingerprintAssembly({ plan: { ...left, standardizedAssets: { ...left.standardizedAssets, intro: { ...left.standardizedAssets.intro, identity: { ...left.standardizedAssets.intro.identity, path: '/other/location/intro.mp4' } } } }, ffmpegVersion: 'ffmpeg version test' }));
   assert.notEqual(fingerprintAssembly({ plan: left, ffmpegVersion: 'ffmpeg version test' }), fingerprintAssembly({ plan: right, ffmpegVersion: 'ffmpeg version test' }));
+  assert.notEqual(fingerprintAssembly({ plan: left, ffmpegVersion: 'ffmpeg version test' }), fingerprintAssembly({ plan: { ...left, standardizedAssets: { ...left.standardizedAssets, intro: { ...left.standardizedAssets.intro!, probe: { ...left.standardizedAssets.intro!.probe, durationSeconds: 9 } } } }, ffmpegVersion: 'ffmpeg version test' }));
   assert.notEqual(fingerprintAssembly({ plan: left, ffmpegVersion: 'ffmpeg version test' }), fingerprintAssembly({ plan: { ...left, generatedMediaFingerprint: 'd'.repeat(64) }, ffmpegVersion: 'ffmpeg version test' }));
   assert.notEqual(fingerprintAssembly({ plan: left, ffmpegVersion: 'ffmpeg version test' }), fingerprintAssembly({ plan: left, ffmpegVersion: 'ffmpeg version test', assemblyPolicy: { version: 'changed-policy' } }));
   assert.notEqual(fingerprintAssembly({ plan: left, ffmpegVersion: 'ffmpeg version test', font: { path: 'font.ttf', basename: 'font.ttf', sha256: 'e'.repeat(64), byteSize: 4 } }), fingerprintAssembly({ plan: left, ffmpegVersion: 'ffmpeg version test', font: { path: 'other.ttf', basename: 'other.ttf', sha256: 'f'.repeat(64), byteSize: 4 } }));
   assert.notEqual(fingerprintAssembly({ plan: left, ffmpegVersion: 'ffmpeg version test' }), fingerprintAssembly({ plan: left, ffmpegVersion: 'ffmpeg version changed' }));
+  assert.notEqual(fingerprintAssembly({ plan: left, ffmpegVersion: 'ffmpeg version test' }), fingerprintAssembly({ plan: { ...left, standardizedAssets: { intro: left.standardizedAssets.intro } }, ffmpegVersion: 'ffmpeg version test' }));
+  assert.equal(ASSEMBLY_INPUT_CONTRACT_VERSION, '2');
 });
 
 test('font is required only for display text and is never persisted as a source path', async () => {
@@ -123,14 +153,18 @@ test('final clip schema is present and declares strict durable objects', () => {
   assert.equal(schema.properties.output.$ref, '#/$defs/output');
   assert.equal(schema.$defs.output.additionalProperties, false);
   assert.equal(schema.$defs.standardizedAsset.additionalProperties, false);
+  assert.equal(schema.properties.schemaVersion.const, ASSEMBLY_SCHEMA_VERSION);
+  assert.equal(schema.properties.standardizedAssets.minItems, 0);
+  assert.equal(schema.properties.standardizedAssets.maxItems, 2);
 });
 
-function plan(introPath: string, outroPath: string): AssemblyPlan {
+function plan(introPath?: string, outroPath?: string): AssemblyPlan {
   const media = (path: string, durationSeconds: number) => ({ identity: { path, basename: path.split(/[\\/]/u).at(-1)!, sha256: hash, byteSize: 5 }, probe: { durationSeconds, containerNames: ['mp4'], streamTypes: ['video', 'audio'] as const, video: { codecName: 'h264', width: 1080, height: 1920, pixelFormat: 'yuv420p', averageFrameRate: { numerator: 30, denominator: 1, value: 30 } }, audio: { codecName: 'aac', sampleRate: 48000, channels: 2 } } });
   const visual = { ...media('visual.mp4', 40), unitId: 'visual-1', role: { id: 'visual', kind: 'video' as const }, segment: { id: 'story', startSeconds: 0, endSeconds: 40 }, targetDurationSeconds: 40 };
-  return { storyRunId: 'story-1', storyFingerprint: hash, clipPlanFingerprint: 'b'.repeat(64), generatedMediaFingerprint: 'c'.repeat(64), template: { id: 'synthetic-template', version: '1' }, output: { width: 1080, height: 1920, fps: 30, container: 'mp4', videoCodec: 'h264' }, standardizedAssets: { intro: media(introPath, 2), outro: media(outroPath, 3) }, storyDurationSeconds: 40, expectedFinalDurationSeconds: 45, storySegments: [{ id: 'story', startSeconds: 0, endSeconds: 40, targetDurationSeconds: 40, visual, displayText: [] }] };
+  const standardizedAssets = { ...(introPath === undefined ? {} : { intro: media(introPath, 2) }), ...(outroPath === undefined ? {} : { outro: media(outroPath, 3) }) };
+  return { storyRunId: 'story-1', storyFingerprint: hash, clipPlanFingerprint: 'b'.repeat(64), generatedMediaFingerprint: 'c'.repeat(64), template: { id: 'synthetic-template', version: '1' }, output: { width: 1080, height: 1920, fps: 30, container: 'mp4', videoCodec: 'h264' }, standardizedAssets, storyDurationSeconds: 40, expectedFinalDurationSeconds: 40 + (standardizedAssets.intro?.probe.durationSeconds ?? 0) + (standardizedAssets.outro?.probe.durationSeconds ?? 0), storySegments: [{ id: 'story', startSeconds: 0, endSeconds: 40, targetDurationSeconds: 40, visual, displayText: [] }] };
 }
-function displayPlan(introPath: string, outroPath: string): AssemblyPlan { const value = plan(introPath, outroPath); return { ...value, storySegments: [{ ...value.storySegments[0]!, displayText: ['display text'] }] }; }
+function displayPlan(introPath?: string, outroPath?: string): AssemblyPlan { const value = plan(introPath, outroPath); return { ...value, storySegments: [{ ...value.storySegments[0]!, displayText: ['display text'] }] }; }
 
-function finalProbe(): LocalMediaProbe { return { durationSeconds: 45, containerNames: ['mov', 'mp4'], streamTypes: ['video', 'audio'], video: { codecName: 'h264', width: 1080, height: 1920, pixelFormat: 'yuv420p', averageFrameRate: { numerator: 30, denominator: 1, value: 30 } }, audio: { codecName: 'aac', sampleRate: 48000, channels: 2 } }; }
+function finalProbe(durationSeconds = 45): LocalMediaProbe { return { durationSeconds, containerNames: ['mov', 'mp4'], streamTypes: ['video', 'audio'], video: { codecName: 'h264', width: 1080, height: 1920, pixelFormat: 'yuv420p', averageFrameRate: { numerator: 30, denominator: 1, value: 30 } }, audio: { codecName: 'aac', sampleRate: 48000, channels: 2 } }; }
 async function withDirectory(run: (directory: string) => Promise<void>): Promise<void> { const directory = await mkdtemp(join(tmpdir(), 'vidgen-assembly-workflow-')); try { await run(directory); } finally { await rm(directory, { recursive: true, force: true }); } }

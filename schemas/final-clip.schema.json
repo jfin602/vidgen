@@ -5,14 +5,14 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "storyRunId", "storyFingerprint", "clipPlanFingerprint", "generatedMediaFingerprint", "assemblyFingerprint", "template", "standardizedAssets", "assemblyPolicy", "ffmpegVersion", "output"],
   "properties": {
-    "schemaVersion": { "const": "1" },
+    "schemaVersion": { "const": "2" },
     "storyRunId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$" },
     "storyFingerprint": { "$ref": "#/$defs/hash" },
     "clipPlanFingerprint": { "$ref": "#/$defs/hash" },
     "generatedMediaFingerprint": { "$ref": "#/$defs/hash" },
     "assemblyFingerprint": { "$ref": "#/$defs/hash" },
     "template": { "$ref": "#/$defs/template" },
-    "standardizedAssets": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "$ref": "#/$defs/standardizedAsset" } },
+    "standardizedAssets": { "type": "array", "minItems": 0, "maxItems": 2, "oneOf": [{ "maxItems": 0 }, { "minItems": 1, "maxItems": 1, "items": { "$ref": "#/$defs/canonicalStandardizedAsset" } }, { "minItems": 2, "maxItems": 2, "prefixItems": [{ "$ref": "#/$defs/introStandardizedAsset" }, { "$ref": "#/$defs/outroStandardizedAsset" }], "items": false }] },
     "font": { "$ref": "#/$defs/identity" },
     "assemblyPolicy": { "type": "object", "additionalProperties": false, "required": ["version"], "properties": { "version": { "type": "string", "minLength": 1 } } },
     "ffmpegVersion": { "type": "string", "pattern": "^ffmpeg version [A-Za-z0-9][A-Za-z0-9._+-]{0,127}$" },
@@ -23,6 +23,9 @@
     "identity": { "type": "object", "additionalProperties": false, "required": ["basename", "sha256", "byteSize"], "properties": { "basename": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$" }, "sha256": { "$ref": "#/$defs/hash" }, "byteSize": { "type": "integer", "minimum": 1 } } },
     "template": { "type": "object", "additionalProperties": false, "required": ["id", "version"], "properties": { "id": { "type": "string", "minLength": 1 }, "version": { "type": "string", "minLength": 1 } } },
     "standardizedAsset": { "type": "object", "additionalProperties": false, "required": ["roleId", "placement", "basename", "sha256", "byteSize", "probe"], "properties": { "roleId": { "enum": ["intro", "outro"] }, "placement": { "enum": ["before-story", "after-story"] }, "basename": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$" }, "sha256": { "$ref": "#/$defs/hash" }, "byteSize": { "type": "integer", "minimum": 1 }, "probe": { "$ref": "#/$defs/probe" } } },
+    "introStandardizedAsset": { "allOf": [{ "$ref": "#/$defs/standardizedAsset" }, { "properties": { "roleId": { "const": "intro" }, "placement": { "const": "before-story" } } }] },
+    "outroStandardizedAsset": { "allOf": [{ "$ref": "#/$defs/standardizedAsset" }, { "properties": { "roleId": { "const": "outro" }, "placement": { "const": "after-story" } } }] },
+    "canonicalStandardizedAsset": { "oneOf": [{ "$ref": "#/$defs/introStandardizedAsset" }, { "$ref": "#/$defs/outroStandardizedAsset" }] },
     "probe": { "type": "object", "additionalProperties": false, "required": ["durationSeconds", "containerNames"], "properties": { "durationSeconds": { "type": "number", "exclusiveMinimum": 0 }, "containerNames": { "type": "array", "items": { "type": "string", "minLength": 1 } }, "video": { "type": "object", "additionalProperties": false, "required": ["codec", "width", "height", "pixelFormat", "fps"], "properties": { "codec": { "type": "string", "minLength": 1 }, "width": { "type": "integer", "minimum": 1 }, "height": { "type": "integer", "minimum": 1 }, "pixelFormat": { "type": "string", "minLength": 1 }, "fps": { "type": "object", "additionalProperties": false, "required": ["numerator", "denominator"], "properties": { "numerator": { "type": "integer", "minimum": 1 }, "denominator": { "type": "integer", "minimum": 1 } } } } }, "audio": { "type": "object", "additionalProperties": false, "required": ["codec", "sampleRate", "channels"], "properties": { "codec": { "type": "string", "minLength": 1 }, "sampleRate": { "type": "integer", "minimum": 1 }, "channels": { "type": "integer", "minimum": 1 } } } } },
     "output": { "type": "object", "additionalProperties": false, "required": ["path", "sha256", "byteSize", "durationSeconds", "width", "height", "fps", "videoCodec", "pixelFormat", "audioCodec", "audioSampleRate", "audioChannels"], "properties": { "path": { "const": "final/clip.mp4" }, "sha256": { "$ref": "#/$defs/hash" }, "byteSize": { "type": "integer", "minimum": 1 }, "durationSeconds": { "type": "number", "exclusiveMinimum": 0 }, "width": { "type": "integer", "minimum": 1 }, "height": { "type": "integer", "minimum": 1 }, "fps": { "type": "object", "additionalProperties": false, "required": ["numerator", "denominator"], "properties": { "numerator": { "type": "integer", "minimum": 1 }, "denominator": { "type": "integer", "minimum": 1 } } }, "videoCodec": { "const": "h264" }, "pixelFormat": { "const": "yuv420p" }, "audioCodec": { "const": "aac" }, "audioSampleRate": { "const": 48000 }, "audioChannels": { "const": 2 } } }
   }
