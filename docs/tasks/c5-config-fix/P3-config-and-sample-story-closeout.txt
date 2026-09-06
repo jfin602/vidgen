@@ -1,0 +1,48 @@
+TASK: Correction 5 / P3 — Config and sample-story closeout
+
+- Recommended configuration: `Terra High`.
+- Required unchanged project version: `0.5.3`.
+
+## Goal
+
+Review and close the bounded live-feed configuration/sample-story correction only if P1-P2 are coherent, regression-safe, and supported by evidence.
+
+## Review requirements
+
+Inspect the actual P1-P2 diffs and affected producers/consumers; do not approve from test status alone.
+
+Confirm:
+
+- live configuration uses base URL + Profile key + bearer rather than an opaque prebuilt endpoint;
+- the request targets the implemented ngest Distribution v1 Profile route and validates returned Profile identity;
+- bearer, redirects, HTTPS policy, timeouts, and public failures remain secret-safe;
+- continuation traversal is bounded, ordered, and snapshot/Profile/Publication coherent, with drift/loops failing closed;
+- Distribution-only digest/generatedAt state does not enter CanonicalInput or creative fingerprints;
+- category adaptation preserves existing VidGen category-string semantics without changing durable schemas;
+- the neutral control default is VidGen-owned and stable;
+- local fixture validation/manual story planning remain compatible;
+- the Article-URL helper reuses the live adapter, selects exactly one governed Article, writes a validated atomic single-Article fixture under ignored runtime artifacts, and never calls publisher/provider/render boundaries;
+- generated sample fixtures work with the existing story/plan path;
+- normal `npm run vidgen` can consume optional `.env` configuration without a new dependency;
+- package and engine version remain `0.5.3`;
+- no jfin602/ngest, provider, assembly, durable schema, or Phase 6 production-fan-out scope leaked into the correction.
+
+## Validation
+
+Run at minimum:
+
+`npm run codex:phase:validate -- c5-config-fix`
+
+focused ingress/sample-story/canonical/story/CLI tests;
+
+`npm test`
+
+`npm run check`
+
+`node src/cli.ts --help`
+
+`git diff --check`
+
+If a safe live ngest credential/Profile is available, a read-only smoke may verify one real Distribution fetch and URL-built sample fixture, but never print the bearer and do not make provider calls. If live credentials are unavailable, report that evidence as unclaimed rather than simulating it.
+
+Make only bounded repairs necessary to satisfy this correction. Stop and report if resolving a failure requires changing the dedicated future VidGen integration contract, canonical/story durable schemas, or broader Phase 6 orchestration.
