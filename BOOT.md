@@ -2,7 +2,7 @@
 
 This is the session router for repository-aware work in jfin602/vidgen.
 
-VidGen is early-stage. Phases 1 and 2 have been implemented, reviewed, and closed. Phase 3 was manually owner-closed after P4 at version 0.3.4. Phase 4 was manually owner-closed at version 0.4.4 after its P5 review/repair pass. Phase 5 was implemented through P3 and manually owner-closed at version 0.5.3 after its P4 closeout review/repair. The Phase 5 closeout host did not have ffmpeg/ffprobe or owner-supplied real media-ready inputs, standardized intro/outro assets, and font, so no real FFmpeg smoke, real story render, or human playback qualification is claimed. Phase 6 is the next roadmap capability; the current owner-directed work is a bounded Phase 5 correction refactor before Phase 6. The product direction was deliberately simplified after Phase 1: ngest supplies a pre-curated set of production-worthy stories, and VidGen's primary production unit is now one self-contained, postable clip per story.
+VidGen is early-stage. Phases 1 and 2 have been implemented, reviewed, and closed. Phase 3 was manually owner-closed after P4 at version 0.3.4. Phase 4 was manually owner-closed at version 0.4.4 after its P5 review/repair pass. Phase 5 was implemented through P3 and manually owner-closed at version 0.5.3 after its P4 closeout review/repair. The Phase 5 closeout host did not have ffmpeg/ffprobe or owner-supplied real media-ready inputs, standardized intro/outro assets, and font, so no real FFmpeg smoke, real story render, or human playback qualification is claimed. Phase 6 is the next roadmap capability; the current owner-directed work is a bounded Phase 5 correction refactor followed by an approved Phase 5 behavior correction that makes standardized intro/outro wrapper media independently optional before Phase 6. The product direction was deliberately simplified after Phase 1: ngest supplies a pre-curated set of production-worthy stories, and VidGen's primary production unit is now one self-contained, postable clip per story.
 
 The initial engineering worksheet is historical decision context. Several of its promoted edition/newscast decisions were superseded by the single-story rebase on 2026-09-05. Current architecture and roadmap docs govern active direction.
 
@@ -28,7 +28,7 @@ The initial engineering worksheet is historical decision context. Several of its
 - Phase 4 owner-closeout version: 0.4.4.
 - Current package baseline: 0.5.3.
 - Next roadmap phase: Phase 6 — live ngest fan-out and operational hardening.
-- Current repository state: Phase 1 authenticated ngest acquisition/canonicalization, Phase 2 local fixture ingress/StoryInput/story workspace, Phase 3 ClipPlan planning, Phase 4 deterministic generated-media units and Google Veo/Gemini media adapters, and Phase 5 deterministic FFprobe qualification, AssemblyPlan creation, FFmpeg rendering, `vidgen assemble`, `assembly-run.json`, `final-clip.json`, and atomic final-clip publication are implemented. Real host FFmpeg/story-render qualification remains deferred until the required runtime and owner-supplied media are available. Publisher retrieval remains deferred.
+- Current repository state: Phase 1 authenticated ngest acquisition/canonicalization, Phase 2 local fixture ingress/StoryInput/story workspace, Phase 3 ClipPlan planning, Phase 4 deterministic generated-media units and Google Veo/Gemini media adapters, and Phase 5 deterministic FFprobe qualification, AssemblyPlan creation, FFmpeg rendering, `vidgen assemble`, `assembly-run.json`, `final-clip.json`, and atomic final-clip publication are implemented. The current Phase 5 implementation still requires both intro and outro inputs. The owner-approved follow-up correction will make those standardized wrapper assets independently optional without inserting placeholders when omitted. Real host FFmpeg/story-render qualification remains deferred until the required runtime and owner-supplied media are available. Publisher retrieval remains deferred.
 - Current roadmap: docs/roadmap/initial-roadmap.md.
 - Current architecture: docs/architecture.md.
 - Current template contract: docs/template-system.md.
@@ -163,6 +163,7 @@ Run artifacts are written under .codex-runs/ and ignored by Git.
 - Use one validated ClipPlan rather than FeedAnalysis, EditorialPlan, Script, and ProductionPlan stages.
 - Templates own clip structure and slot semantics; ClipPlan fills declared content slots.
 - Keep template-specific media requirements deterministic.
+- Standardized intro/outro roles declare supported deterministic wrapper positions; the approved post-Phase-5 contract allows either role to be omitted at assembly time, with no placeholder media inserted.
 - ClipPlan generation consumes StoryInput plus the selected AssemblyTemplate directly; insufficient story context fails clearly rather than triggering an implicit research subsystem.
 - Keep provider-specific behavior behind thin explicit adapters.
 - Preserve provenance and reproducibility inside each story package.
@@ -182,6 +183,14 @@ Current owner-directed work:
     -> /prompt-plan
     -> /prompt-write c5-mvp-refactor
 
-The correction must simplify the existing MVP without changing observable product behavior, durable artifact contracts, trust boundaries, retry/failure semantics, or provider/render behavior. The package version stays 0.5.3 across the correction stack.
+That correction must simplify the existing MVP without changing observable product behavior, durable artifact contracts, trust boundaries, retry/failure semantics, or provider/render behavior. The package version stays 0.5.3 across the correction stack.
 
-Phase 6 follows the correction. Before treating the assembly path as operationally qualified, Phase 6 or an equivalent runtime qualification step must complete the previously blocked real ffmpeg/ffprobe capability smoke and real owner-media story render.
+After the behavior-preserving refactor closes, plan and execute the approved bounded correction:
+
+    /prompt-ass
+    -> /prompt-plan
+    -> /prompt-write c5-optional-standardized-assets
+
+That correction changes assembly behavior and durable artifact semantics deliberately: intro and outro become independently optional, omission inserts no placeholder frames/audio, only supplied assets participate in qualification/duration/fingerprinting/provenance, and social-first output may begin directly with the story hook.
+
+Phase 6 follows these corrections. Before treating the assembly path as operationally qualified, Phase 6 or an equivalent runtime qualification step must complete the previously blocked real ffmpeg/ffprobe capability smoke and one real owner-media story render; an intro is no longer a prerequisite for that qualification once the optional-wrapper correction lands.
