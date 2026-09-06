@@ -35,7 +35,7 @@ Implemented foundation:
 - `assembly-run.json`, strict `final-clip.json`, post-render technical validation, and atomic `final/clip.mp4` publication;
 - fail-closed handling for unsupported ngest continuation.
 
-Phase 3 implemented the single creative-planning stage. Phase 4 implemented deterministic generated-media realization and story-local raw media/provenance. Phase 5 implemented standardized asset qualification plus deterministic FFmpeg assembly and final-clip provenance. Its real host/media qualification remains deferred until the necessary runtime and owner inputs are available. Publisher retrieval and live fan-out remain later work.
+Phase 3 implemented the single creative-planning stage. Phase 4 implemented deterministic generated-media realization and story-local raw media/provenance. Phase 5 implemented standardized asset qualification plus deterministic FFmpeg assembly and final-clip provenance. Its real host/media qualification remains deferred until the necessary runtime and owner inputs are available. The current Phase 5 implementation requires both intro and outro; an approved follow-up correction will make those standardized wrapper assets independently optional before Phase 6. Publisher retrieval and live fan-out remain later work.
 
 ## Core architectural standards
 
@@ -60,7 +60,7 @@ A selected assembly template defines:
 - timing expectations;
 - which segments are presenter, generated content, voiceover, or standardized assets;
 - required content slots;
-- fixed intro/outro usage.
+- supported deterministic intro/outro wrapper positions; under the approved post-Phase-5 contract, either wrapper may be omitted at assembly time.
 
 The model fills declared story-content slots.
 
@@ -82,7 +82,7 @@ The locked default content template is:
     28-40 sec
       Closing beat
 
-Standardized premade intro/outro assets wrap or fulfill fixed assembly positions. Their exact media duration/placement should be qualified from the real assets without reintroducing creative planning.
+Standardized premade intro/outro assets may occupy deterministic wrapper positions around the story body. They are independently optional under the approved post-Phase-5 contract: if an asset is omitted, assembly inserts nothing in its place and the story timeline is not shifted by a placeholder. Any wrapper that is supplied must still be qualified from the real local asset without reintroducing creative planning. For social-first output, beginning directly with the story hook is the normal no-intro path.
 
 See docs/template-system.md.
 
@@ -98,7 +98,7 @@ No downstream step should need to reinterpret the story or redesign the template
 
 The current MVP does not use Remotion.
 
-The generated presenter/content media and standardized intro/outro clips are normalized and assembled deterministically with FFmpeg.
+The generated presenter/content media and any supplied standardized intro/outro clips are normalized and assembled deterministically with FFmpeg.
 
 Remotion or another programmable compositor is deferred unless real production requirements demonstrate a need for one.
 
@@ -187,7 +187,7 @@ Current implementation:
 - Veo-backed content video uses deterministic unit context;
 - Gemini TTS produces exact off-screen voiceover from template-declared voiceover text;
 - raw generated assets remain story-local and are tracked by hash/provenance/effective generation input;
-- standardized premade intro/outro clips remain outside generated-media production and are qualified by the Phase 5 assembly path;
+- standardized premade intro/outro clips remain outside generated-media production and, when supplied, are qualified by the assembly path;
 - supporting text/graphics, if needed outside generated media, remain deterministic rather than another creative reasoning stage.
 
 Provider model and voice selections remain runtime configuration rather than durable template semantics.
