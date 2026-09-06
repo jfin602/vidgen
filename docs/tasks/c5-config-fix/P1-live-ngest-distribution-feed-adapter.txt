@@ -1,0 +1,43 @@
+TASK: Correction 5 / P1 — Live ngest Distribution feed adapter
+
+- Recommended configuration: `Terra High`.
+- Required unchanged project version: `0.5.3`.
+
+## Goal
+
+Make VidGen's live input path consume the ngest Distribution v1 endpoint that exists today, while keeping the downstream CanonicalInput/story contracts unchanged and leaving the future dedicated VidGen endpoint replaceable at this boundary.
+
+## Required behavior
+
+- Replace the opaque full-endpoint live configuration with:
+  - `NGEST_BASE_URL`;
+  - `NGEST_PROFILE_KEY`;
+  - `NGEST_BEARER_TOKEN`;
+  - one bounded optional timeout setting using the current millisecond semantics.
+- Construct the request as `GET {baseUrl}/api/v1/distribution/{encodedProfileKey}` with `Accept: application/json` and bearer authentication.
+- Preserve the current HTTPS-except-loopback rule, manual redirect handling, timeout behavior, and secret-safe public errors.
+- Validate the Distribution v1 wire separately from the existing local VidGen-shaped fixture validator.
+- Require the returned `profile.configKey` to equal the configured Profile key.
+- Traverse the documented `?cursor=` continuation contract to obtain one coherent complete snapshot. Preserve article/page order, require stable snapshot/Profile/Publication identity across pages, detect repeated/unbounded continuation, and fail closed on drift or malformed pages.
+- Adapt the complete Distribution snapshot into the existing VidGen transport shape before CanonicalInput construction:
+  - `items -> articles`;
+  - preserve canonical Article fields and exact `originalUrl`;
+  - map structured ngest categories to the existing VidGen category-string representation using their display names in source order;
+  - ignore Distribution-only `digest` and `generatedAt`;
+  - preserve ngest API/snapshot provenance;
+  - supply VidGen's current neutral control default `{ version: "1", editorial: {}, script: {}, production: {} }`.
+- Do not leak the upstream Distribution wire beyond the ngest adapter.
+- Keep the current local fixture path and `validateNgestVidGenManifestPage()` usable unchanged for manual fixtures.
+- Keep CanonicalInput, StoryInput, fingerprints, durable schemas, package version, provider behavior, and assembly behavior unchanged.
+- Make normal `npm run vidgen -- ...` execution able to read an optional repository `.env` using Node's built-in env-file support; do not add dotenv or another configuration authority.
+- Update CLI help/config-facing text only as needed to reflect the live runtime keys.
+
+## Focused proof
+
+Tests must prove URL construction/encoding, bearer and redirect safety, required config validation, Profile mismatch rejection, Distribution-to-VidGen mapping, category mapping, neutral controls, multi-page aggregation/order, snapshot drift/repeated-cursor failure, timeout behavior, and secret non-disclosure.
+
+Run focused ingress/canonical/run tests, then `npm run test:app` and `git diff --check`.
+
+## Non-goals
+
+Do not modify jfin602/ngest, add the future dedicated `/api/v1/vidgen/{profile}` contract, interpret the ngest digest, add creative controls, start story production fan-out, call providers, or change durable VidGen model/schema versions.
