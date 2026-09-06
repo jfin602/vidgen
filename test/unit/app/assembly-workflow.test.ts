@@ -21,7 +21,7 @@ test('manual assembly performs one fresh render, atomically publishes final evid
     const result = await assembleStoryWorkspace({
       storyDirectory: directory, introPath: intro, outroPath: outro, qualifyInputs: async () => plan(intro, outro),
       createAssemblyRunId: () => 'assembly-1', now: () => new Date('2026-09-05T00:00:00.000Z'),
-      createRenderer: () => ({ preflight: async () => ({ version: 'ffmpeg version test-build' }), render: async ({ outputPath }) => { renders += 1; await writeFile(outputPath, 'candidate'); return { outputPath, ffmpegVersion: 'ffmpeg version test-build', durationMs: 1 }; } }),
+      createRenderer: () => ({ preflight: async () => ({ version: 'ffmpeg version test-build /private/build-details' }), render: async ({ outputPath }) => { renders += 1; await writeFile(outputPath, 'candidate'); return { outputPath, ffmpegVersion: 'ffmpeg version test-build', durationMs: 1 }; } }),
       probe: async () => finalProbe(),
     });
     assert.equal(renders, 1);
@@ -29,6 +29,7 @@ test('manual assembly performs one fresh render, atomically publishes final evid
     assert.equal(await readFile(join(directory, 'final', 'clip.mp4'), 'utf8'), 'candidate');
     const manifest = JSON.parse(await readFile(join(directory, 'final-clip.json'), 'utf8'));
     validateFinalClipManifest(manifest);
+    assert.equal(manifest.ffmpegVersion, 'ffmpeg version test-build');
     assert.equal(manifest.template.id, 'synthetic-template');
     const durable = JSON.stringify(manifest) + await readFile(join(directory, 'assembly-run.json'), 'utf8');
     assert.equal(durable.includes(directory), false);

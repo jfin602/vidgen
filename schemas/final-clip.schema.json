@@ -15,7 +15,7 @@
     "standardizedAssets": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "$ref": "#/$defs/standardizedAsset" } },
     "font": { "$ref": "#/$defs/identity" },
     "assemblyPolicy": { "type": "object", "additionalProperties": false, "required": ["version"], "properties": { "version": { "type": "string", "minLength": 1 } } },
-    "ffmpegVersion": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "ffmpegVersion": { "type": "string", "pattern": "^ffmpeg version [A-Za-z0-9][A-Za-z0-9._+-]{0,127}$" },
     "output": { "$ref": "#/$defs/output" }
   },
   "$defs": {

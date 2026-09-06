@@ -240,7 +240,7 @@ export function validateFinalClipManifest(value: unknown): FinalClipManifest {
   rejectExtra(manifest, ['schemaVersion', 'storyRunId', 'storyFingerprint', 'clipPlanFingerprint', 'generatedMediaFingerprint', 'assemblyFingerprint', 'template', 'standardizedAssets', 'font', 'assemblyPolicy', 'ffmpegVersion', 'output'], 'Final clip manifest');
   if (manifest.schemaVersion !== ASSEMBLY_SCHEMA_VERSION || !safeId(manifest.storyRunId) || !hash(manifest.storyFingerprint) || !hash(manifest.clipPlanFingerprint) || !hash(manifest.generatedMediaFingerprint) || !hash(manifest.assemblyFingerprint)) throw assembly('Final clip manifest is malformed.');
   validateTemplate(manifest.template); validateStandardizedAssets(manifest.standardizedAssets); if (manifest.font !== undefined) validateIdentity(manifest.font, 'Final clip font');
-  const policy = record(manifest.assemblyPolicy, 'Final clip assembly policy'); rejectExtra(policy, ['version'], 'Final clip assembly policy'); if (typeof policy.version !== 'string' || policy.version.length < 1 || typeof manifest.ffmpegVersion !== 'string' || manifest.ffmpegVersion.length < 1) throw assembly('Final clip manifest is malformed.');
+  const policy = record(manifest.assemblyPolicy, 'Final clip assembly policy'); rejectExtra(policy, ['version'], 'Final clip assembly policy'); if (typeof policy.version !== 'string' || policy.version.length < 1 || !isSafeFfmpegVersion(manifest.ffmpegVersion)) throw assembly('Final clip manifest is malformed.');
   validateOutput(manifest.output);
   return value as FinalClipManifest;
 }
@@ -250,7 +250,7 @@ export function validateAssemblyRunMetadata(value: unknown): AssemblyRunMetadata
   rejectExtra(run, ['schemaVersion', 'assemblyRunId', 'status', 'storyRunId', 'startedAt', 'endedAt', 'engineVersion', 'storyFingerprint', 'clipPlanFingerprint', 'generatedMediaFingerprint', 'assemblyFingerprint', 'template', 'standardizedAssets', 'font', 'assemblyPolicy', 'ffmpegVersion', 'expectedDurationSeconds', 'output', 'failure'], 'Assembly-run metadata');
   if (run.schemaVersion !== ASSEMBLY_SCHEMA_VERSION || !safeId(run.assemblyRunId) || !safeId(run.storyRunId) || !['running', 'final_ready', 'failed'].includes(run.status as string) || typeof run.startedAt !== 'string' || typeof run.engineVersion !== 'string' || !hash(run.storyFingerprint) || !hash(run.clipPlanFingerprint) || !hash(run.generatedMediaFingerprint) || !hash(run.assemblyFingerprint) || !finitePositive(run.expectedDurationSeconds)) throw assembly('Assembly-run metadata is malformed.');
   validateTemplate(run.template); validateStandardizedAssets(run.standardizedAssets); if (run.font !== undefined) validateIdentity(run.font, 'Assembly-run font');
-  const policy = record(run.assemblyPolicy, 'Assembly-run policy'); rejectExtra(policy, ['version'], 'Assembly-run policy'); if (typeof policy.version !== 'string' || policy.version.length < 1 || typeof run.ffmpegVersion !== 'string' || run.ffmpegVersion.length < 1) throw assembly('Assembly-run metadata is malformed.');
+  const policy = record(run.assemblyPolicy, 'Assembly-run policy'); rejectExtra(policy, ['version'], 'Assembly-run policy'); if (typeof policy.version !== 'string' || policy.version.length < 1 || !isSafeFfmpegVersion(run.ffmpegVersion)) throw assembly('Assembly-run metadata is malformed.');
   if (run.status === 'running' && (run.endedAt !== undefined || run.output !== undefined || run.failure !== undefined)) throw assembly('Assembly-run metadata is malformed.');
   if (run.status === 'final_ready') { if (typeof run.endedAt !== 'string' || run.failure !== undefined || run.output === undefined) throw assembly('Assembly-run metadata is malformed.'); validateOutput(run.output); }
   if (run.status === 'failed') { if (typeof run.endedAt !== 'string' || run.output !== undefined || !isFailure(run.failure)) throw assembly('Assembly-run metadata is malformed.'); }
@@ -285,7 +285,20 @@ async function writeJsonForArtifact(writeJson: typeof writeJsonAtomically, path:
 async function removeIfExists(path: string, message: string): Promise<void> { try { await rm(path, { force: true }); } catch (cause) { throw new VidGenError('artifact', message, { cause }); } }
 async function cleanupWorkDirectory(path: string): Promise<void> { await rm(path, { recursive: true, force: true }).catch(() => undefined); }
 function safeFailure(error: unknown): { readonly code: VidGenErrorCode; readonly message: string } { if (!isVidGenError(error)) return { code: 'unexpected', message: 'Assembly workflow failed unexpectedly.' }; if (error.code === 'invalid_argument') return { code: error.code, message: 'Assembly input is invalid.' }; if (error.code === 'configuration') return { code: error.code, message: 'Assembly runtime configuration failed.' }; if (error.code === 'artifact') return { code: error.code, message: 'Assembly artifact persistence failed.' }; return { code: error.code, message: 'Assembly rendering or technical validation failed.' }; }
-function safeFfmpegVersion(value: unknown): string { if (typeof value !== 'string' || value.trim().length === 0 || value.length > 512) throw new VidGenError('configuration', 'FFmpeg version could not be identified.'); return value.trim(); }
+/**
+ * Version output is executable-controlled input. Preserve only the normalized
+ * version token required for provenance, never a complete stdout line/build
+ * configuration that could contain paths or other diagnostic data.
+ */
+function safeFfmpegVersion(value: unknown): string {
+  if (typeof value !== 'string') throw new VidGenError('configuration', 'FFmpeg version could not be identified.');
+  const match = /^ffmpeg version\s+([A-Za-z0-9][A-Za-z0-9._+-]{0,127})(?:\s|$)/u.exec(value.trim());
+  if (match === null) throw new VidGenError('configuration', 'FFmpeg version could not be identified.');
+  return `ffmpeg version ${match[1]!}`;
+}
+function isSafeFfmpegVersion(value: unknown): boolean {
+  try { return safeFfmpegVersion(value) === value; } catch { return false; }
+}
 function safeRunId(value: unknown): string { if (!safeId(value)) throw new VidGenError('invalid_argument', 'Assembly run ID is invalid.'); return value as string; }
 function timestamp(value: Date): string { if (!(value instanceof Date) || Number.isNaN(value.valueOf())) throw new VidGenError('invalid_argument', 'Assembly clock produced an invalid timestamp.'); return value.toISOString(); }
 function sha256(value: string): string { return createHash('sha256').update(value).digest('hex'); }
