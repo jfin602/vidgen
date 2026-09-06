@@ -1,0 +1,57 @@
+TASK: Correction 6 / P1 — Headline duration and publication repair
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Repair the bounded Phase 6 headline-path defects found in owner review without changing the cinematic pipeline or broadening Phase 6.
+
+Read BOOT.md, the current P6 prompts, and the resulting simple-copy, presenter-video, headline-workflow, sidecar-schema, FFmpeg-finisher code/tests before editing. Keep the repair concentrated at the existing simple-path boundaries.
+
+MUST REMAIN TRUE
+
+- User `maxSeconds` remains an integer 4-20 hard ceiling; CLI default remains 20.
+- Presenter copy must be budgeted against duration the current provider path can actually realize. With the current reference-image Veo path, 8 seconds plus at most one 7-second extension means copy for requested ceilings 16-20 must not be budgeted beyond 15 seconds.
+- After copy is validated, derive the shortest useful whole-second final duration from the existing 150 WPM engine rate: `max(4, ceil(wordCount * 60 / 150))`, bounded by the requested and realizable ceiling.
+- Request presenter video for that planned final duration. A planned duration <=8 uses only the initial 8-second reference generation; >8 uses exactly one extension. Do not require an extension merely because the user's ceiling exceeds 8, and never request 22 seconds in this path.
+- Provider-returned duration/provenance must not override the engine-selected plan; reject incompatible coverage/plan results before persisting raw media.
+- FFmpeg finishing and sidecar `plannedDurationSeconds` use the same engine-selected duration. `requestedMaxSeconds` continues to record the user's ceiling and `finalDurationSeconds` records the qualified output.
+- Build and strictly validate the complete sidecar before promoting the candidate MP4 to its final name. The sidecar remains the success authority and is written last. Mark success only after sidecar publication; any in-process failure after final MP4 promotion must remove that MP4 best-effort.
+- Add a narrow runtime validator aligned with `schemas/headline-clip.schema.json`; do not add a general schema framework or dependency. Tighten open sidecar areas such as `final.technical` so the durable contract is actually strict.
+- Preserve secret/path safety, temporary-file cleanup, safe IDs, deterministic lower-third behavior, FFprobe/FFmpeg safety, and existing output filenames/root.
+- Preserve existing `run`, `story`, `plan`, `media`, and `assemble` behavior and all cinematic durable contracts.
+- Package and engine version remain 0.6.5.
+
+PROOF
+
+Focused tests must cover:
+- requested 16-20 ceilings cannot authorize copy longer than the 15-second realizable budget;
+- short copy under the default 20-second ceiling selects the initial 8-second provider path only;
+- copy requiring more than 8 seconds selects exactly one extension;
+- 4-second behavior and final trimming remain valid;
+- provider result/plan mismatch fails safely;
+- sidecar-construction or runtime-validation failure after finishing leaves no final MP4/JSON pair;
+- sidecar write failure still removes a promoted MP4;
+- strict sidecar validation rejects unsupported fields and validates the produced durable shape.
+
+Run the focused Phase 6 tests, `npm run check`, `node src/cli.ts --help`, and `git diff --check`.
+
+Downstream-required capability -> owning implementation/export -> focused proof:
+
+validated copy -> deterministic planned final duration -> headline workflow duration tests.
+
+planned final duration -> one-operation or one-extension presenter generation -> provider/workflow tests.
+
+finished candidate + validated provenance -> authoritative MP4/JSON publication -> failure-honesty and sidecar-contract tests.
+
+NON-GOALS
+
+Do not add live fan-out, publisher retrieval, caching/resume, database/queue work, automated publishing, Remotion, new providers, new dependencies, cinematic refactors, or roadmap/documentation changes.
+
+FINAL RESPONSE
+
+Report the effective-duration rule, provider-operation selection, publication repair, strict sidecar changes, exact validation run, and confirmation that version 0.6.5 and the cinematic pipeline remain unchanged.
