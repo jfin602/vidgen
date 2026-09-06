@@ -2,7 +2,7 @@
 
 This is the session router for repository-aware work in jfin602/vidgen.
 
-VidGen is early-stage. Phases 1 and 2 have been implemented, reviewed, and closed. Phase 3 was manually owner-closed after P4 at version 0.3.4. Phase 4 has now been manually owner-closed at version 0.4.4 after its P5 review/repair pass. This owner transition does not claim any additional live-provider qualification beyond evidence actually observed. Phase 5 is now the current roadmap phase. The product direction was deliberately simplified after Phase 1: ngest supplies a pre-curated set of production-worthy stories, and VidGen's primary production unit is now one self-contained, postable clip per story.
+VidGen is early-stage. Phases 1 and 2 have been implemented, reviewed, and closed. Phase 3 was manually owner-closed after P4 at version 0.3.4. Phase 4 was manually owner-closed at version 0.4.4 after its P5 review/repair pass. Phase 5 was implemented through P3 and manually owner-closed at version 0.5.3 after its P4 closeout review/repair. The Phase 5 closeout host did not have ffmpeg/ffprobe or owner-supplied real media-ready inputs, standardized intro/outro assets, and font, so no real FFmpeg smoke, real story render, or human playback qualification is claimed. Phase 6 is the next roadmap capability; the current owner-directed work is a bounded Phase 5 correction refactor before Phase 6. The product direction was deliberately simplified after Phase 1: ngest supplies a pre-curated set of production-worthy stories, and VidGen's primary production unit is now one self-contained, postable clip per story.
 
 The initial engineering worksheet is historical decision context. Several of its promoted edition/newscast decisions were superseded by the single-story rebase on 2026-09-05. Current architecture and roadmap docs govern active direction.
 
@@ -26,9 +26,9 @@ The initial engineering worksheet is historical decision context. Several of its
 - Phase 2 completion version: 0.2.5.
 - Phase 3 owner-closeout version: 0.3.4.
 - Phase 4 owner-closeout version: 0.4.4.
-- Current package baseline: 0.5.0.
-- Current roadmap phase: Phase 5 — FFmpeg assembly and first complete clip.
-- Current repository state: Phase 1 authenticated ngest acquisition/canonicalization, Phase 2 local fixture ingress/StoryInput/story workspace, Phase 3 ClipPlan planning, and Phase 4 deterministic generated-media units, Google Veo/Gemini media adapters, story-local reuse, raw generated assets, `media-run.json`, `generated-media.json`, and manual `vidgen media` workflow are implemented. Publisher retrieval remains deferred.
+- Current package baseline: 0.5.3.
+- Next roadmap phase: Phase 6 — live ngest fan-out and operational hardening.
+- Current repository state: Phase 1 authenticated ngest acquisition/canonicalization, Phase 2 local fixture ingress/StoryInput/story workspace, Phase 3 ClipPlan planning, Phase 4 deterministic generated-media units and Google Veo/Gemini media adapters, and Phase 5 deterministic FFprobe qualification, AssemblyPlan creation, FFmpeg rendering, `vidgen assemble`, `assembly-run.json`, `final-clip.json`, and atomic final-clip publication are implemented. Real host FFmpeg/story-render qualification remains deferred until the required runtime and owner-supplied media are available. Publisher retrieval remains deferred.
 - Current roadmap: docs/roadmap/initial-roadmap.md.
 - Current architecture: docs/architecture.md.
 - Current template contract: docs/template-system.md.
@@ -36,7 +36,7 @@ The initial engineering worksheet is historical decision context. Several of its
 - Current control notes: docs/control-interface.md.
 - Historical engineering worksheet: docs/planning/initial-engineering-question-worksheet.md.
 
-Ngest owns governed feed truth and production eligibility. VidGen does not re-rank or re-select supplied stories. VidGen owns template filling, generated media, deterministic FFmpeg assembly, story artifacts, and final clips. Publisher retrieval is a deferred fallback capability, not part of the current Phase 5 assembly path.
+Ngest owns governed feed truth and production eligibility. VidGen does not re-rank or re-select supplied stories. VidGen owns template filling, generated media, deterministic FFmpeg assembly, story artifacts, and final clips. Publisher retrieval is a deferred fallback capability and is not part of the completed Phase 5 assembly implementation or the current refactor correction.
 
 ## /boot
 
@@ -174,12 +174,14 @@ Run artifacts are written under .codex-runs/ and ignored by Git.
 
 ## Current next action
 
-Phases 1 and 2 are closed at 0.1.5 and 0.2.5. Phase 3 was manually owner-closed at 0.3.4. Phase 4 was manually owner-closed at 0.4.4 after its P5 review/repair pass. The repository is on the 0.5.0 Phase 5 baseline.
+Phases 1 and 2 are closed at 0.1.5 and 0.2.5. Phase 3 was manually owner-closed at 0.3.4. Phase 4 was manually owner-closed at 0.4.4. Phase 5 was manually owner-closed at 0.5.3 with its real FFmpeg/story-render qualification still explicitly unclaimed because the closeout environment and owner media were unavailable.
 
-Before Phase 5 implementation:
+Current owner-directed work:
 
     /prompt-ass
     -> /prompt-plan
-    -> /prompt-write p5
+    -> /prompt-write c5-mvp-refactor
 
-Phase 5 should consume the validated AssemblyTemplate, ClipPlan, story-local raw generated assets, generated-media.json, and the real standardized intro/outro assets, then probe, qualify, normalize, trim, mux, and assemble them deterministically with FFmpeg into the first complete vertical clip. Do not reintroduce story interpretation, media generation, publisher retrieval, or live feed fan-out into the assembly layer.
+The correction must simplify the existing MVP without changing observable product behavior, durable artifact contracts, trust boundaries, retry/failure semantics, or provider/render behavior. The package version stays 0.5.3 across the correction stack.
+
+Phase 6 follows the correction. Before treating the assembly path as operationally qualified, Phase 6 or an equivalent runtime qualification step must complete the previously blocked real ffmpeg/ffprobe capability smoke and real owner-media story render.
