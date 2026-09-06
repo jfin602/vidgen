@@ -12,7 +12,7 @@ The initial development goal is narrower than the eventual live integration: man
 
 ## Implementation status
 
-Phases 1 and 2 are complete and closed at versions 0.1.5 and 0.2.5. Phase 3 was manually owner-closed after P4 at version 0.3.4; its unrun live-provider closeout smoke was explicitly waived. The repository is now on the 0.4.0 Phase 4 baseline.
+Phases 1 and 2 are complete and closed at versions 0.1.5 and 0.2.5. Phase 3 was manually owner-closed at version 0.3.4. Phase 4 was manually owner-closed at version 0.4.4 after its P5 review/repair pass. The repository is now on the 0.5.0 Phase 5 baseline.
 
 Implemented foundation:
 - Node.js + TypeScript CLI foundation;
@@ -22,12 +22,17 @@ Implemented foundation:
 - a strict declarative default-news-40s assembly template and registry with template-owned slot authoring semantics;
 - a strict provider-neutral ClipPlan contract and template-derived structured-output schema;
 - a Google Gemini structured-text adapter with runtime model configuration;
+- deterministic generated-media unit resolution from template segment/role references plus validated ClipPlan values;
+- provider-neutral video and speech generation contracts;
+- Google Veo presenter/content-video generation and Gemini TTS voiceover adapters;
 - a manual story command that creates an independent story workspace with provenance/template metadata and future source/media directories;
 - a manual plan command that performs one normal-path model call and persists validated ClipPlan plus safe planning metadata;
-- filesystem-backed run/story/planning metadata and shared atomic JSON persistence;
+- a manual media command that consumes an existing planned workspace, writes raw story-local assets, and persists resumable media metadata plus a strict generated-media handoff manifest;
+- story-local generated-asset reuse keyed by effective generation input and current file identity;
+- filesystem-backed run/story/planning/media metadata and shared atomic persistence;
 - fail-closed handling for unsupported ngest continuation.
 
-Phase 3 implemented the first creative-planning stage: one validated ClipPlan generated directly from a sufficiently described StoryInput plus the selected AssemblyTemplate. Phase 4 now owns generated story media. Publisher retrieval, standardized asset binding/qualification, FFmpeg assembly, and live fan-out remain later work.
+Phase 3 implemented the single creative-planning stage. Phase 4 implemented deterministic generated-media realization and story-local raw media/provenance. Phase 5 now owns standardized asset qualification plus FFmpeg assembly into the first complete clip. Publisher retrieval and live fan-out remain later work.
 
 ## Core architectural standards
 
@@ -173,13 +178,16 @@ Publisher-page retrieval remains a later fallback capability for insufficient up
 
 The MVP remains Google-first behind thin replaceable boundaries.
 
-Current direction:
-- Veo for presenter generation from scripted text plus approved/reference imagery;
-- generated video for the content visual where the default template requires it;
-- standardized premade intro/outro clips;
-- supporting text/graphics, if needed outside generated media, should be deterministic and simple rather than another creative reasoning stage.
+Current implementation:
+- deterministic per-segment GeneratedMediaUnits resolve directly from template role references plus validated ClipPlan content;
+- Veo-backed presenter generation uses exact spoken text plus explicit approved local reference imagery;
+- Veo-backed content video uses deterministic unit context;
+- Gemini TTS produces exact off-screen voiceover from template-declared voiceover text;
+- raw generated assets remain story-local and are tracked by hash/provenance/effective generation input;
+- standardized premade intro/outro clips remain outside generated-media production and are qualified during Phase 5;
+- supporting text/graphics, if needed outside generated media, remain deterministic rather than another creative reasoning stage.
 
-Exact Veo version, presenter continuity technique, and off-screen narration/voiceover provider remain open until provider qualification.
+Provider model and voice selections remain runtime configuration rather than durable template semantics.
 
 ## Output
 
