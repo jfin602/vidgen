@@ -67,8 +67,9 @@ IMPLEMENTATION REQUIREMENTS
    - Do not enable tools, web search, agents, background execution, or unrelated model features.
 
 4. Exact narration ownership.
-   - Request speech for exactly the provided voiceover unit `spokenText`.
-   - Do not prepend/append spoken editorial content.
+   - The provider input may wrap the voiceover unit `spokenText` in one fixed engine-owned recitation instruction such as "Read exactly the following text with no additions or omissions".
+   - The exact `spokenText` must appear once, unchanged, as the only story narration inside that provider input.
+   - Do not prepend/append additional spoken editorial content.
    - Provider-facing control text may ask for delivery/style only if it is deterministic engine-owned wording and cannot change the literal narration.
    - Do not send the display headline or unrelated StoryInput text as alternate narration.
    - Do not call a text model to rewrite for duration.
@@ -153,7 +154,7 @@ FOCUSED TESTS
 
 Use injected fake fetch to prove:
 - missing key/model/voice fails before fetch activity;
-- one valid voiceover request submits exactly the supplied narration text;
+- one valid voiceover request contains the supplied spokenText exactly once, unchanged, inside only fixed engine-owned recitation/style guidance;
 - no display headline/other ClipPlan slot is silently appended as narration;
 - request uses the configured runtime model/voice and current documented audio response shape;
 - valid documented audio output becomes bounded provider-neutral audio bytes;
