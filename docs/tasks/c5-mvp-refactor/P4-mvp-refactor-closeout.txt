@@ -1,0 +1,61 @@
+TASK: Correction 5 / P4 — MVP refactor closeout
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.5.3`.
+
+GOAL
+
+Review the complete P1-P3 refactor as a behavior-preserving simplification of the VidGen MVP. Repair only regressions, accidental complexity introduced by this correction, or clear missed duplication that can be removed without changing contracts.
+
+Read BOOT.md, the reconciled current docs, P1-P3 prompts/commits, and the resulting product implementation/tests. Review actual diffs rather than assuming the refactor is correct because tests pass.
+
+ACCEPTANCE
+
+Confirm:
+- product behavior and CLI surfaces are unchanged;
+- durable schemas, artifact names/shapes/status meanings, fingerprints, provenance, retry/resume/reuse, and failure-honesty semantics are unchanged;
+- ngest trust/eligibility boundaries remain intact;
+- provider-specific behavior stays behind current thin adapters;
+- network/provider/download limits and secret safety were not weakened;
+- local file, FFprobe, FFmpeg, filtergraph/text staging, and final-publication safety were not weakened;
+- no new framework, speculative abstraction, dependency, cache, database, queue, Remotion path, publisher retrieval, live fan-out, or other Phase 6 behavior appeared;
+- runner infrastructure under `scripts/codex-phase*` and its runner tests were not refactored as product code;
+- package/engine version remains 0.5.3.
+
+No LOC target is required. A smaller diff is not automatically better; retained complexity is acceptable when it protects a current trust, durability, provider, or render contract.
+
+VALIDATION
+
+Run:
+- `npm run codex:phase:validate -- c5-mvp-refactor`;
+- `npm test`;
+- `npm run check`;
+- `node src/cli.ts --help`;
+- `git diff --check`.
+
+Inspect the correction's full source diff from the parent of P1 through current HEAD and report the net code-change shape plus the main simplifications.
+
+If ffmpeg/ffprobe and suitable local test inputs are available, real runtime evidence may be observed and reported. Their absence does not convert the already documented Phase 5 qualification gap into a correction failure; keep that qualification explicitly unclaimed.
+
+BOUNDED REPAIRS
+
+Fix only:
+- regressions caused by P1-P3;
+- behavior-preserving simplifications clearly missed inside the same product scope;
+- tests needed to protect those repairs.
+
+Do not change schemas/templates/docs/roadmap/version or invent new semantics to make a refactor look cleaner. If simplification would require a product decision, leave the code and report it.
+
+FINAL RESPONSE
+
+Report:
+- P1-P3 review findings;
+- meaningful simplifications and any intentionally retained complexity;
+- exact validation actually run and results;
+- confirmation of unchanged external/durable/provider/render behavior;
+- confirmation version remains 0.5.3;
+- confirmation the prior real FFmpeg/story-render qualification is still either actually observed now or explicitly unclaimed;
+- whether `c5-mvp-refactor` is ready for human review.
