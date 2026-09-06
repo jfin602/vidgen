@@ -8,7 +8,7 @@ VidGen turns each production-worthy news story supplied by ngest into its own se
 
 Ngest supplies a governed, pre-curated feed. Every story delivered to VidGen is already intended for content production. VidGen does not perform another newsworthiness, ranking, clustering, or story-selection pass.
 
-The initial development goal is narrower than the eventual live production integration: manually feed one selected local VidGen-shaped sample story through the same post-adapter validation/normalization semantics used by live input, then debug the story-to-video pipeline until it reliably produces a usable clip.
+The current development priority is narrower than the eventual live production integration: manually feed one selected local VidGen-shaped sample story through the shared post-adapter StoryInput boundary, then produce one short presenter-led headline clip with a deterministic headline/source lower third and paired metadata JSON. The previously implemented template-driven cinematic pipeline remains supported and preserved.
 
 ## Implementation status
 
@@ -35,9 +35,22 @@ Implemented foundation:
 - `assembly-run.json`, strict `final-clip.json`, post-render technical validation, and atomic `final/clip.mp4` publication;
 - fail-closed handling for unsupported ngest continuation in the original Phase 1 client.
 
-Phase 3 implemented the single creative-planning stage. Phase 4 implemented deterministic generated-media realization and story-local raw media/provenance. Phase 5 implemented standardized asset qualification plus deterministic FFmpeg assembly and final-clip provenance. `c5-optional-assets` subsequently made intro and outro independently optional without placeholders. The deployment VPS has qualified the required FFmpeg/FFprobe capabilities, while one complete owner-media generated story render and playback review remain unclaimed. `c5-config-fix` is the current owner-approved transitional ingress correction: it will consume ngest's existing Distribution v1 Profile feed through a replaceable adapter, supply neutral VidGen-owned controls, and add an Article-URL sample-fixture helper. Publisher retrieval and production live fan-out remain later work.
+Phase 3 implemented the cinematic creative-planning stage. Phase 4 implemented cinematic generated-media realization and story-local raw media/provenance. Phase 5 implemented standardized asset qualification plus deterministic FFmpeg assembly and final-clip provenance. `c5-optional-assets` subsequently made intro and outro independently optional without placeholders. The deployment VPS has qualified the required FFmpeg/FFprobe capabilities, while one complete owner-media generated cinematic story render and playback review remain unclaimed. The next roadmap capability is Phase 6: a simpler StoryInput-based presenter-headline path with a configurable 4-20 second maximum-duration ceiling and paired MP4/JSON output. `c5-config-fix` remains owner-approved but deferred; publisher retrieval and live fan-out remain later work.
 
 ## Core architectural standards
+
+### Shared StoryInput, two production paths
+
+StoryInput is the common production boundary. The current-priority simple path branches directly from StoryInput and does not require AssemblyTemplate, ClipPlan, cinematic GeneratedMediaUnit resolution, or cinematic AssemblyPlan. The implemented cinematic path remains supported and preserves its existing template/ClipPlan/media/assembly contracts.
+
+Conceptually:
+
+    StoryInput
+      |     \
+      |      +--> cinematic template pipeline (preserved)
+      v
+    simple presenter-headline pipeline (current priority)
+
 
 ### Ngest owns production eligibility
 
@@ -51,9 +64,11 @@ Each story produces one independent story package containing the final clip and 
 
 Failures, retries, or regeneration for one story should not contaminate another story.
 
-### Templates own structure
+### Templates own cinematic structure
 
-VidGen does not ask a model to invent a clip format for every story.
+The template system governs the preserved cinematic path. The simple presenter-headline path does not use an AssemblyTemplate unless a future design explicitly promotes it into that system.
+
+For cinematic production, VidGen does not ask a model to invent a clip format for every story.
 
 A selected assembly template defines:
 - segment order;
@@ -86,9 +101,9 @@ Standardized premade intro/outro assets may occupy deterministic wrapper positio
 
 See docs/template-system.md.
 
-### One creative planning artifact
+### Cinematic creative planning
 
-The current MVP does not use separate FeedAnalysis, EditorialPlan, Script, and ProductionPlan stages.
+The preserved cinematic path does not use separate FeedAnalysis, EditorialPlan, Script, and ProductionPlan stages.
 
 One validated ClipPlan is a filled template form. It contains the story-specific text required by the selected template, such as hook, headline, narration, supporting information, and closing content. It does not contain shot planning, provider instructions, timing decisions, media selection, transition decisions, or a second layer of generated-media prompts.
 
@@ -154,9 +169,10 @@ Conceptually:
 
 Live feed fan-out is deliberately deferred until the single-story video process works.
 
-## Story package
+## Artifact boundaries
 
-Exact names remain provisional, but the intended ownership shape is approximately:
+The preserved cinematic path continues to use the existing story-package shape:
+
 
     stories/<story-production-id>/
       story.json
@@ -169,9 +185,16 @@ Exact names remain provisional, but the intended ownership shape is approximatel
       final/
         clip.mp4
 
-The story package should retain the story-specific source files and generated files required to understand, inspect, reuse, or reproduce the clip.
+The cinematic story package should retain the story-specific source files and generated files required to understand, inspect, reuse, or reproduce the clip.
 
-Shared engine code and shared standardized template assets do not need to be duplicated into every story directory; the story package should identify the template/version and shared asset identities used.
+The simple path instead targets a flatter publication-oriented pair under an engine-owned output directory:
+
+    <clip-id>.mp4
+    <clip-id>.json
+
+The JSON sidecar must couple the clip to the governed Article and include enough identity/provenance to inspect and publish it safely, including Article metadata, storyFingerprint, presenter text actually used, configured maxSeconds, actual final duration, clip hash/size, provider/model provenance, and engine version. Exact durable schema names remain Phase 6 planning work.
+
+Shared engine code and shared standardized cinematic template assets do not need to be duplicated into every story directory; cinematic story packages should continue to identify the template/version and shared asset identities used.
 
 ## ClipPlan grounding input
 
@@ -198,9 +221,15 @@ Current implementation:
 
 Provider model and voice selections remain runtime configuration rather than durable template semantics.
 
+## Simple presenter-headline path
+
+The Phase 6 simple path produces one continuous presenter clip from StoryInput, then deterministically adds a lower third containing the Article headline and source display name. It does not require B-roll, separate TTS voiceover, intro/outro wrappers, ClipPlan, AssemblyTemplate, cinematic GeneratedMediaUnit resolution, or cinematic AssemblyPlan.
+
+Its configurable `maxSeconds` value is a hard output ceiling from 4 through 20 seconds inclusive, not a requested target. The engine should prefer the shortest useful provider-supported duration that does not exceed that ceiling and must verify the final qualified output does not exceed it. Provider-specific duration granularity must remain behind the provider boundary rather than becoming the product contract.
+
 ## Output
 
-The initial first-class target is:
+The initial first-class target for both paths is:
 - 1080x1920;
 - 9:16 vertical;
 - MP4;
