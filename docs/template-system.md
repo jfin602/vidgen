@@ -53,7 +53,7 @@ A template may describe:
 - declared ClipPlan content slots;
 - small slot authoring semantics;
 - required generated asset roles;
-- standardized asset references;
+- supported standardized asset positions/references;
 - whether a segment requires off-screen narration;
 - basic output/normalization constraints.
 
@@ -111,17 +111,31 @@ The model must not add segments, alter timing, select media types, create provid
 
 ## Standardized intro and outro
 
-The MVP uses premade, standardized intro and outro media.
+Templates may declare premade standardized intro and outro wrapper positions. Declaring a standardized role means the template supports that deterministic position; it does not, by itself, require an asset to be supplied for every render.
 
-The intended assembly is conceptually:
+The approved post-Phase-5 assembly contract allows all four forms:
 
-    standardized intro
-          +
-    generated story media
-          +
+    story
+
+    story
+      +
     standardized outro
 
-Phase 2 intentionally kept intro/outro references role-only because the real standardized media files were not present. Phase 5 implemented qualification of explicit owner-supplied local intro/outro files: file identity, duration, stream/media properties, and their relationship to the locked story timing are measured rather than guessed or delegated to the creative model. The Phase 5 closeout did not have the real owner assets or ffmpeg/ffprobe runtime available, so no real-media qualification result is claimed.
+    standardized intro
+      +
+    story
+
+    standardized intro
+      +
+    story
+      +
+    standardized outro
+
+Intro and outro are independently optional. If either is omitted, VidGen inserts no black frames, silence, placeholder clip, generated substitute, or other timeline filler. Social-first output may therefore begin immediately with the story hook.
+
+Phase 2 intentionally kept intro/outro references role-only because the real standardized media files were not present. Phase 5 implemented qualification of explicit owner-supplied local intro/outro files under the then-current requirement that both be supplied: file identity, duration, stream/media properties, and their relationship to the locked story timing are measured rather than guessed or delegated to the creative model. The Phase 5 closeout did not have the real owner assets or ffmpeg/ffprobe runtime available, so no real-media qualification result is claimed.
+
+The approved follow-up correction will preserve that qualification rigor for any wrapper actually supplied while allowing either or both wrapper inputs to be absent. Only supplied and used standardized assets participate in expected final duration, assembly identity/fingerprinting, and durable provenance. No new `required` field is part of this decision; stronger mandatory-role semantics remain deferred until a real template requires them.
 
 ## Default generated-media expectation
 
@@ -171,14 +185,14 @@ Before final assembly, VidGen should be able to prove:
 - no undeclared production structure is being smuggled in through ClipPlan;
 - generated-media.json contains exactly one ready local asset for every resolved GeneratedMediaUnit;
 - generated assets match their recorded hashes/identities;
-- required standardized assets are available and qualified;
+- every standardized asset actually supplied for assembly is available and qualified, while omission of an optional wrapper is valid;
 - all media can be normalized to the template's assembly constraints.
 
 The strict AssemblyTemplate schema/runtime validator now includes the Phase 3 slot authoring contract. The implemented ClipPlan producer consumes that validated template directly and preserves generic non-default/non-40-second template validation.
 
 ## Story package linkage
 
-A story package should record the template ID/version and identities of standardized assets used.
+A story package should record the template ID/version and identities of standardized assets actually used.
 
 Shared template definitions and standardized intro/outro media may remain outside individual story directories; they do not need to be duplicated into every story package.
 
