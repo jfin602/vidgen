@@ -164,7 +164,7 @@ The local fixture is not permission to invent a second creative schema.
 
 The owner-approved `c5-config-fix` sample helper is intended to accept one publisher Article URL, find exactly one governed Article through the live adapter, and materialize a validated one-Article fixture under ignored runtime artifacts. That helper performs no publisher retrieval, provider call, media generation, or rendering.
 
-Once live production fan-out is implemented, it must reuse the same downstream story pipeline.
+Once live production fan-out is implemented, it must reuse the same canonical/StoryInput boundary and dispatch each story into the selected VidGen production path rather than inventing a new ngest-specific creative contract.
 
 ## Database boundary
 
@@ -209,7 +209,7 @@ For the owner-approved `c5-config-fix` path, the ngest Distribution v1 continuat
 
 The correction may therefore acquire one coherent complete governed feed snapshot by bounded cursor traversal. It must preserve page/article order, require stable Profile/Publication/snapshot identity, reject loops or unsafe bounds, and fail closed on drift.
 
-This resolves transport acquisition semantics only. Phase 6 still owns production story fan-out, per-story isolation, retries/resume, idempotency, operational limits, and orchestration.
+This resolves transport acquisition semantics only. Production story fan-out, per-story isolation, retries/resume, idempotency, operational limits, and orchestration are now Phase 7 work. Phase 6 is the simple presenter-headline clip path.
 
 ## Security
 
