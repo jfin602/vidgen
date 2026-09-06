@@ -58,7 +58,7 @@ VidGen does not connect directly to ngest persistence.
 
 ## Current state
 
-Phases 1 and 2 are complete and closed at versions 0.1.5 and 0.2.5. Phase 3 was manually owner-closed at version 0.3.4. Phase 4 was manually owner-closed at version 0.4.4 after its P5 review/repair pass. The repository now provides:
+Phases 1 and 2 are complete and closed at versions 0.1.5 and 0.2.5. Phase 3 was manually owner-closed at version 0.3.4. Phase 4 was manually owner-closed at version 0.4.4. Phase 5 was manually owner-closed at version 0.5.3 after its closeout review/repair. The repository now provides:
 - the Node.js + TypeScript CLI foundation;
 - secure bearer-authenticated ngest manifest acquisition;
 - local ngest-shaped fixture ingress through the same transport validator;
@@ -75,11 +75,14 @@ Phases 1 and 2 are complete and closed at versions 0.1.5 and 0.2.5. Phase 3 was 
 - story-local reuse keyed by effective generation input plus current asset hash/size validation;
 - resumable `media-run.json` and strict provider-neutral `generated-media.json` handoff metadata;
 - filesystem-backed run/story/planning/media metadata with atomic persistence;
+- strict local generated/standardized media qualification through bounded FFprobe;
+- deterministic AssemblyPlan creation and a no-shell FFmpeg renderer;
+- a manual `vidgen assemble` workflow with `assembly-run.json`, strict `final-clip.json`, post-render validation, and atomic `final/clip.mp4` publication;
 - deterministic tests.
 
 The project was simplified after Phase 1. FeedAnalysis, EditorialPlan, separate Script and ProductionPlan stages, Remotion composition, edition-level planning, and story-selection logic are no longer part of the current MVP.
 
-The repository is on the 0.5.0 Phase 5 planning baseline. Phase 5 owns deterministic probing, qualification, normalization, trimming, audio muxing, standardized intro/outro integration, and FFmpeg assembly of the already planned/generated story package into the first complete vertical clip. Publisher retrieval and live feed fan-out remain later work.
+The repository baseline is 0.5.3. Phase 5's deterministic assembly path is implemented, but the Phase 5 closeout host lacked ffmpeg/ffprobe and the required owner-supplied media-ready workspace, intro, outro, and font. Therefore no real FFmpeg integration smoke, real story render, or human playback qualification is claimed. The current owner-directed work is a behavior-preserving MVP refactor correction before Phase 6 live feed fan-out and operational hardening.
 
 ## Start here
 
