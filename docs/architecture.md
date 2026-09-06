@@ -56,7 +56,7 @@ FFmpeg runs locally. Managed media providers supply their own generation infrast
 
 VidGen's intended production input remains the dedicated bearer-authenticated ngest VidGen integration endpoint carrying governed feed data plus Profile-associated VidGen controls.
 
-Until that endpoint is available, the owner-approved `c5-config-fix` correction uses ngest's existing authenticated Distribution v1 Profile endpoint as a transitional development transport:
+If the owner later resumes the approved deferred `c5-config-fix` correction, it will use ngest's existing authenticated Distribution v1 Profile endpoint as a transitional development transport:
 
     NGEST_BASE_URL
           +
