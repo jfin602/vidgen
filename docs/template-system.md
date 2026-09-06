@@ -121,7 +121,7 @@ The intended assembly is conceptually:
           +
     standardized outro
 
-Phase 2 intentionally kept intro/outro references role-only because the real standardized media files were not present. Their concrete filenames, hashes, durations, codecs, and relationship to the locked 0-40 logical story timing must be qualified from the actual owner-supplied media before final assembly rather than guessed or delegated to the creative model.
+Phase 2 intentionally kept intro/outro references role-only because the real standardized media files were not present. Phase 5 now owns qualification of the actual owner-supplied files: concrete filenames/identity, duration, codec/media properties, and their relationship to the locked story timing must be measured rather than guessed or delegated to the creative model.
 
 ## Default generated-media expectation
 
@@ -137,35 +137,42 @@ Do not introduce a separate generated-graphic pipeline unless real clips demonst
 
 ## Deterministic generated-role input resolution
 
-Generated media inputs should be derived from filled template slots plus the template's declared segment/asset-role relationships.
+Phase 4 derives generated media directly from filled template slots plus the template's declared segment/generated-role relationships.
 
-For the default template, the intended relationship is:
+The implemented rule is one GeneratedMediaUnit per segment-role reference, preserving segment order and role order. Reusing the same role ID in multiple segments therefore creates multiple timing-scoped units rather than one merged creative asset.
 
-    opening-anchor
+For the default template:
+
+    hook / opening-anchor
       <- hook + headline
+      spoken <- hook only
 
-    content-video
+    content / content-video
       <- narration
 
-    content-voiceover
+    content / content-voiceover
       <- narration
 
-    supporting-anchor
-      <- supporting-information + closing
+    support / supporting-anchor
+      <- supporting-information
 
-Phase 3 generates no separate media prompts for these roles. Phase 4 may translate these deterministic inputs into provider-specific requests behind its provider boundary.
+    closing / supporting-anchor
+      <- closing
+
+Provider adapters translate these deterministic units into Veo/TTS requests without adding a shot-planning or second story-interpretation artifact.
 
 ## Validation
 
-Before generation/assembly, VidGen should be able to prove:
+Before final assembly, VidGen should be able to prove:
 - the selected template exists and is supported;
 - every declared content slot has usable authoring semantics;
 - the ClipPlan fills every required story-content slot exactly once;
 - the ClipPlan contains no undeclared slots;
 - no undeclared production structure is being smuggled in through ClipPlan;
-- required standardized assets are available;
-- generated asset expectations are well-defined;
-- resulting media can be normalized to the template's assembly constraints.
+- generated-media.json contains exactly one ready local asset for every resolved GeneratedMediaUnit;
+- generated assets match their recorded hashes/identities;
+- required standardized assets are available and qualified;
+- all media can be normalized to the template's assembly constraints.
 
 The strict AssemblyTemplate schema/runtime validator now includes the Phase 3 slot authoring contract. The implemented ClipPlan producer consumes that validated template directly and preserves generic non-default/non-40-second template validation.
 
