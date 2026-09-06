@@ -16,7 +16,7 @@ The roadmap assumes:
 - Node.js + TypeScript;
 - manually invoked CLI development first;
 - one selected story at a time until the video path is proven;
-- manual sample input shaped like the ngest integration contract;
+- manual sample input using VidGen's validated post-adapter input shape;
 - each supplied ngest story is already production-worthy;
 - no VidGen ranking, clustering, or story-selection stage;
 - one story = one independent artifact/package boundary;
@@ -42,7 +42,7 @@ Implemented capabilities:
 - Node.js/TypeScript project/runtime tooling;
 - CLI entrypoint;
 - runtime secret handling;
-- dedicated ngest bearer-token client;
+- bearer-authenticated ngest input client;
 - authenticated HTTP acquisition;
 - transport validation;
 - CanonicalFeed;
@@ -51,7 +51,7 @@ Implemented capabilities:
 - deterministic canonical serialization and SHA-256 inputFingerprint;
 - filesystem-backed run metadata/artifacts;
 - deterministic tests;
-- fail-closed behavior for unsupported non-null nextCursor.
+- fail-closed behavior for unsupported non-null nextCursor in the original Phase 1 transport.
 
 Preserved boundaries:
 - no direct ngest database access;
@@ -88,8 +88,8 @@ Conceptual contract:
       selected template
 
 Implemented capabilities:
-- representative fictional ngest-shaped local fixture using the real external manifest shape;
-- local fixture loading through the same validateNgestVidGenManifestPage() boundary as live ingress;
+- representative fictional local fixture using VidGen's validated post-adapter input shape;
+- local fixture loading through `validateNgestVidGenManifestPage()` before canonicalization;
 - explicit one-Article StoryInput selection with fail-closed missing/ambiguous behavior;
 - deterministic storyFingerprint isolated from unrelated feed Articles and provenance-only changes;
 - provenance linkage back to CanonicalInput/Article;
@@ -251,16 +251,17 @@ Phase 5 non-goals remained:
 
 ## Approved post-Phase-5 corrections
 
-Before Phase 6, the owner approved two bounded Phase 5 corrections in order:
+Before ordinary Phase 6 work, the owner approved bounded Phase 5 corrections:
 
-1. `c5-mvp-refactor` — behavior-preserving simplification only. It must not change observable product behavior, durable artifact meanings, trust boundaries, retry/failure semantics, or provider/render behavior.
-2. `c5-optional-standardized-assets` — deliberate assembly-contract correction. Intro and outro become independently optional deterministic wrapper assets. Omission inserts no placeholder media or silence; only supplied wrappers are probed/qualified, included in expected duration and assembly identity, and recorded in durable provenance. Social-first output may begin directly with the story hook.
+1. `c5-mvp-refactor` — COMPLETE. Behavior-preserving simplification only; observable product behavior, durable artifact meanings, trust boundaries, retry/failure semantics, and provider/render behavior were preserved.
+2. `c5-optional-assets` — COMPLETE. Intro and outro are independently optional deterministic wrapper assets. Omission inserts no placeholder media or silence; only supplied wrappers are probed/qualified, included in expected duration and assembly identity, and recorded in durable provenance. Social-first output may begin directly with the story hook.
+3. `c5-config-fix` — OWNER-APPROVED / PLANNED. Transitional live-development ingress will consume ngest's existing authenticated Distribution v1 Profile endpoint using base URL + Profile key + bearer configuration, validate and adapt the complete bounded snapshot into the existing VidGen input shape with neutral VidGen-owned controls, and add an Article-URL helper that writes validated one-Article sample fixtures.
 
-The second correction is not part of the behavior-preserving refactor and must receive its own implementation planning, focused tests, schema/artifact compatibility decision, and closeout evidence.
+The Distribution-v1 path is transitional. It must remain isolated behind the ngest adapter so the future dedicated Profile-bound VidGen feed-plus-controls endpoint can replace it without changing downstream CanonicalInput, StoryInput, provider, or assembly contracts.
 
 ## Phase 6 — Live ngest fan-out and operational hardening
 
-Status: NEXT ROADMAP PHASE / AFTER C5 CORRECTIONS
+Status: NEXT ROADMAP PHASE / AFTER C5-CONFIG-FIX
 
 Goal:
 Connect the proven story pipeline back to live curated ngest input and process supplied stories independently.
@@ -279,10 +280,9 @@ Conceptual contract:
         + independent story pipelines
 
 Likely concerns:
-- complete the previously blocked real ffmpeg/ffprobe capability smoke and one owner-media story render before treating the Phase 5 assembly path as operationally qualified;
+- complete one owner-media generated story render, final post-probe, and human playback review before treating the Phase 5 assembly path as fully operationally qualified; the deployment VPS has already qualified FFmpeg/FFprobe, libx264, AAC, and required filter availability;
 - add bounded publisher-page retrieval fallback before live operation if real ngest stories can lack sufficient normalized context; keep broader web research deferred;
-- live authentication/integration qualification;
-- explicit resolution of ngest continuation/pagination semantics before multi-page production use;
+- live authentication/integration qualification of the transitional adapter and later dedicated endpoint as applicable;
 - story fan-out without editorial selection;
 - sequential processing first unless workload evidence justifies concurrency;
 - failure isolation between stories;
@@ -313,18 +313,11 @@ Likely concerns:
 
 ## Immediate next action
 
-Run the owner-directed behavior-preserving correction stack:
+Run the owner-approved correction stack:
 
-    /prompt-ass
-    -> /prompt-plan
-    -> /prompt-write c5-mvp-refactor
+    npm run codex:phase:validate -- c5-config-fix
+    npm run codex:phase -- c5-config-fix
 
-That correction should simplify the existing MVP implementation after rapid Phase 1-5 construction. It must not add product capability, alter durable schemas/artifact meanings, weaken validation/trust boundaries, change provider/render semantics, or turn the previously unperformed real FFmpeg/story-render qualification into a claimed success.
+The correction keeps package/engine version 0.5.3 unchanged. It may resolve bounded Distribution-v1 transport acquisition and sample-fixture generation, but it must not implement Phase 6 production fan-out or silently promote the transitional Distribution endpoint into the permanent VidGen integration contract.
 
-After that correction closes, plan the approved assembly behavior correction:
-
-    /prompt-ass
-    -> /prompt-plan
-    -> /prompt-write c5-optional-standardized-assets
-
-Only after both corrections close should ordinary Phase 6 planning proceed. The deferred real-host/owner-media assembly qualification remains an explicit operational-hardening prerequisite; once optional wrappers are implemented, a real story render may qualify the assembly path with an outro only or with no standardized wrapper assets at all.
+After `c5-config-fix` closes, complete the first real owner-media story qualification on the deployment VPS, then proceed to ordinary Phase 6 planning for live story fan-out and operational hardening.

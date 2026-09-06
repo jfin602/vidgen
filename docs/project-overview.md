@@ -8,7 +8,7 @@ VidGen turns each production-worthy news story supplied by ngest into its own se
 
 Ngest supplies a governed, pre-curated feed. Every story delivered to VidGen is already intended for content production. VidGen does not perform another newsworthiness, ranking, clustering, or story-selection pass.
 
-The initial development goal is narrower than the eventual live integration: manually feed one selected sample story in the same shape the ngest integration would provide, then debug the story-to-video pipeline until it reliably produces a usable clip.
+The initial development goal is narrower than the eventual live production integration: manually feed one selected local VidGen-shaped sample story through the same post-adapter validation/normalization semantics used by live input, then debug the story-to-video pipeline until it reliably produces a usable clip.
 
 ## Implementation status
 
@@ -16,7 +16,7 @@ Phases 1 and 2 are complete and closed at versions 0.1.5 and 0.2.5. Phase 3 was 
 
 Implemented foundation:
 - Node.js + TypeScript CLI foundation;
-- authenticated ngest manifest acquisition plus local ngest-shaped fixture ingress through the same validator;
+- authenticated ngest acquisition plus local VidGen-shaped fixture ingress through the same post-adapter validation/normalization semantics;
 - CanonicalFeed, CanonicalControl, CanonicalInput, and explicit StoryInput normalization;
 - deterministic input and story fingerprinting;
 - a strict declarative default-news-40s assembly template and registry with template-owned slot authoring semantics;
@@ -33,9 +33,9 @@ Implemented foundation:
 - bounded local FFprobe qualification and deterministic AssemblyPlan creation;
 - a no-shell FFmpeg renderer plus manual `vidgen assemble` workflow;
 - `assembly-run.json`, strict `final-clip.json`, post-render technical validation, and atomic `final/clip.mp4` publication;
-- fail-closed handling for unsupported ngest continuation.
+- fail-closed handling for unsupported ngest continuation in the original Phase 1 client.
 
-Phase 3 implemented the single creative-planning stage. Phase 4 implemented deterministic generated-media realization and story-local raw media/provenance. Phase 5 implemented standardized asset qualification plus deterministic FFmpeg assembly and final-clip provenance. Its real host/media qualification remains deferred until the necessary runtime and owner inputs are available. The current Phase 5 implementation requires both intro and outro; an approved follow-up correction will make those standardized wrapper assets independently optional before Phase 6. Publisher retrieval and live fan-out remain later work.
+Phase 3 implemented the single creative-planning stage. Phase 4 implemented deterministic generated-media realization and story-local raw media/provenance. Phase 5 implemented standardized asset qualification plus deterministic FFmpeg assembly and final-clip provenance. `c5-optional-assets` subsequently made intro and outro independently optional without placeholders. The deployment VPS has qualified the required FFmpeg/FFprobe capabilities, while one complete owner-media generated story render and playback review remain unclaimed. `c5-config-fix` is the current owner-approved transitional ingress correction: it will consume ngest's existing Distribution v1 Profile feed through a replaceable adapter, supply neutral VidGen-owned controls, and add an Article-URL sample-fixture helper. Publisher retrieval and production live fan-out remain later work.
 
 ## Core architectural standards
 
@@ -132,19 +132,25 @@ VidGen must not query ngest persistence directly or reproduce ngest eligibility/
 
 The first story-to-video implementation is manually invoked.
 
-A selected sample story should be represented using the same external shape expected from the ngest VidGen integration and should pass through the same validation/normalization boundary rather than creating a separate demo-only story model.
+A selected sample story should use VidGen's validated post-adapter input shape rather than creating a separate demo-only story model. The current owner-approved transitional live path may receive the upstream Distribution v1 wire first, but that transport is adapted at the ngest boundary before downstream canonicalization.
 
 Conceptually:
 
-    local ngest-shaped fixture ----+
-                                   |
-                                   v
-                           common validation
-                                   |
-    live ngest response -----------+
-                                   |
-                                   v
-                             CanonicalInput
+    live Distribution v1 wire
+              |
+              v
+      transport validator/
+            adapter
+              |
+              +------------------+
+                                 |
+    local VidGen-shaped fixture -+
+                                 |
+                                 v
+                         VidGen input validation
+                                 |
+                                 v
+                           CanonicalInput
 
 Live feed fan-out is deliberately deferred until the single-story video process works.
 

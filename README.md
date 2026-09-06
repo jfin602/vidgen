@@ -33,7 +33,7 @@ Current standards:
 - Node.js + TypeScript;
 - manually invoked CLI development flow;
 - one selected story at a time while the video pipeline is being qualified;
-- local sample input shaped like the real ngest integration contract;
+- local VidGen-shaped sample input that exercises the same post-adapter validation/normalization semantics as live ngest input;
 - one story = one independent artifact directory;
 - one validated ClipPlan per story;
 - fixed assembly templates own timing and media-slot structure;
@@ -60,8 +60,8 @@ VidGen does not connect directly to ngest persistence.
 
 Phases 1 and 2 are complete and closed at versions 0.1.5 and 0.2.5. Phase 3 was manually owner-closed at version 0.3.4. Phase 4 was manually owner-closed at version 0.4.4. Phase 5 was manually owner-closed at version 0.5.3 after its closeout review/repair. The repository now provides:
 - the Node.js + TypeScript CLI foundation;
-- secure bearer-authenticated ngest manifest acquisition;
-- local ngest-shaped fixture ingress through the same transport validator;
+- secure bearer-authenticated ngest acquisition at the input boundary;
+- local VidGen-shaped fixture ingress through the same post-adapter validation/normalization path;
 - CanonicalFeed, CanonicalControl, CanonicalInput, and explicit StoryInput;
 - deterministic input and story fingerprinting;
 - a validated declarative default-news-40s assembly template with template-owned slot authoring semantics;
@@ -82,7 +82,7 @@ Phases 1 and 2 are complete and closed at versions 0.1.5 and 0.2.5. Phase 3 was 
 
 The project was simplified after Phase 1. FeedAnalysis, EditorialPlan, separate Script and ProductionPlan stages, Remotion composition, edition-level planning, and story-selection logic are no longer part of the current MVP.
 
-The repository baseline is 0.5.3. Phase 5's deterministic assembly path is implemented, but the Phase 5 closeout host lacked ffmpeg/ffprobe and the then-required owner-supplied media-ready workspace, intro, outro, and font. Therefore no real FFmpeg integration smoke, real story render, or human playback qualification is claimed. The current implementation still requires both intro and outro. The owner-approved follow-up correction after the behavior-preserving MVP refactor will make intro and outro independently optional; omitted wrappers contribute no placeholder media, duration, identity, or provenance. Phase 6 live feed fan-out and operational hardening follows those corrections.
+The repository baseline is 0.5.3. Phase 5's deterministic assembly path is implemented. The original Phase 5 closeout host lacked ffmpeg/ffprobe and owner-supplied real media, so that closeout did not establish a real render. Since then, the deployment VPS has directly qualified FFmpeg 6.1.1, FFprobe 6.1.1, libx264, AAC, and the required assembly filters. `c5-optional-assets` is closed: intro and outro are independently optional, omitted wrappers contribute no placeholder media, duration, identity, or provenance, and supplied wrappers remain fully qualified. A complete owner-media generated story render and human playback review are still unclaimed. The current owner-approved `c5-config-fix` correction will make live development ingress consume ngest's existing Distribution v1 Profile endpoint through a replaceable adapter and add an Article-URL single-story sample helper. The future dedicated ngest VidGen feed-plus-controls endpoint remains the intended production boundary. Phase 6 live story fan-out and operational hardening follows this correction.
 
 ## Start here
 
