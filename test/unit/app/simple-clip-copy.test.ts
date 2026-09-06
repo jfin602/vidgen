@@ -8,6 +8,7 @@ import {
   buildSimpleClipCopyModelRequest,
   buildSimpleClipCopyModelOutputSchema,
   generateSimpleClipCopy,
+  getSimpleClipPlannedDurationSeconds,
   getSimpleClipWordBudget,
   SIMPLE_CLIP_BROADCAST_WORDS_PER_MINUTE,
 } from '../../../src/core/simple-clip-copy.ts';
@@ -18,10 +19,19 @@ import { validManifest } from '../../fixtures/canonical-input.ts';
 test('simple clip duration ceiling is whole-number 4 through 20 seconds with a 150 WPM budget', () => {
   assert.equal(SIMPLE_CLIP_BROADCAST_WORDS_PER_MINUTE, 150);
   assert.equal(getSimpleClipWordBudget(4), 10);
-  assert.equal(getSimpleClipWordBudget(20), 50);
+  assert.equal(getSimpleClipWordBudget(15), 37);
+  assert.equal(getSimpleClipWordBudget(16), 37);
+  assert.equal(getSimpleClipWordBudget(20), 37);
   for (const value of [3, 21, 4.5, Number.NaN, '4']) {
     assert.throws(() => getSimpleClipWordBudget(value as number), hasSimpleClipCode);
   }
+});
+
+test('simple copy selects the shortest useful 4-15 second duration after validation', () => {
+  assert.equal(getSimpleClipPlannedDurationSeconds('one two three four five', 20), 4);
+  assert.equal(getSimpleClipPlannedDurationSeconds(Array.from({ length: 21 }, (_, index) => `word${index}`).join(' '), 20), 9);
+  assert.equal(getSimpleClipPlannedDurationSeconds(Array.from({ length: 37 }, (_, index) => `word${index}`).join(' '), 20), 15);
+  assert.equal(getSimpleClipPlannedDurationSeconds('one two three four five', 4), 4);
 });
 
 test('simple copy accepts only trimmed text within its duration-derived word budget', () => {

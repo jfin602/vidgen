@@ -5,6 +5,8 @@ import type { JsonObject } from '../shared/json.ts';
 
 export const SIMPLE_CLIP_MIN_SECONDS = 4;
 export const SIMPLE_CLIP_MAX_SECONDS = 20;
+/** Current reference-image presenter generation can cover at most 15 seconds. */
+export const SIMPLE_CLIP_REALIZABLE_MAX_SECONDS = 15;
 /** Engine-owned maximum speaking pace used to bound one presenter response. */
 export const SIMPLE_CLIP_BROADCAST_WORDS_PER_MINUTE = 150;
 
@@ -22,7 +24,17 @@ export interface SimpleClipCopyResult {
 /** Returns the maximum whole-word presenter copy for the configured hard duration ceiling. */
 export function getSimpleClipWordBudget(maxSeconds: number): number {
   assertSimpleClipMaxSeconds(maxSeconds);
-  return Math.floor((maxSeconds * SIMPLE_CLIP_BROADCAST_WORDS_PER_MINUTE) / 60);
+  return Math.floor((Math.min(maxSeconds, SIMPLE_CLIP_REALIZABLE_MAX_SECONDS) * SIMPLE_CLIP_BROADCAST_WORDS_PER_MINUTE) / 60);
+}
+
+/** Selects the shortest useful whole-second final duration after copy validation. */
+export function getSimpleClipPlannedDurationSeconds(text: string, maxSeconds: number): number {
+  assertSimpleClipMaxSeconds(maxSeconds);
+  if (typeof text !== 'string' || text.trim() !== text || text.length === 0) {
+    throw invalidSimpleClip('Simple clip presenter text must be non-blank normalized text.');
+  }
+  const wordCount = countSpeechWords(text);
+  return Math.min(maxSeconds, SIMPLE_CLIP_REALIZABLE_MAX_SECONDS, Math.max(SIMPLE_CLIP_MIN_SECONDS, Math.ceil((wordCount * 60) / SIMPLE_CLIP_BROADCAST_WORDS_PER_MINUTE)));
 }
 
 /** Validates the simple path's engine-owned final-duration ceiling. */
