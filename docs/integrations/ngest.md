@@ -17,11 +17,11 @@ The intended production architecture remains a dedicated authenticated VidGen in
               v
       dedicated VidGen response
 
-The current owner-approved `c5-config-fix` correction introduces a transitional live-development transport using ngest's already-implemented Distribution v1 Profile endpoint until the dedicated feed-plus-controls endpoint is available.
+The owner-approved but currently deferred `c5-config-fix` correction would introduce a transitional live-development transport using ngest's already-implemented Distribution v1 Profile endpoint until the dedicated feed-plus-controls endpoint is available.
 
 ## Transitional Distribution v1 development path
 
-The approved current runtime configuration is:
+When the deferred correction is resumed, its approved runtime configuration is:
 
     NGEST_BASE_URL
     NGEST_PROFILE_KEY
