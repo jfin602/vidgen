@@ -2,13 +2,13 @@
 
 This is the current early-stage documentation set.
 
-The project was deliberately rebased after Phase 1 from an edition-oriented newscast pipeline to a much smaller single-story clip pipeline. The original engineering worksheet remains historical decision context; current architecture, template, and roadmap documents govern where they conflict with earlier worksheet answers.
+The project was deliberately rebased after Phase 1 from an edition-oriented newscast pipeline to a single-story clip engine. The owner has now prioritized an even simpler StoryInput -> presenter -> lower-third -> MP4+JSON path as Phase 6 while preserving the implemented template-driven cinematic pipeline as an advanced path. The original engineering worksheet remains historical decision context; current architecture and roadmap documents govern where they conflict with earlier worksheet answers.
 
 ## Read order
 
 - project-overview.md — current product intent and ngest/VidGen ownership boundary.
-- architecture.md — current single-story pipeline, artifact, provider, and FFmpeg assembly boundaries.
-- template-system.md — assembly-template contract and locked default clip structure.
+- architecture.md — shared StoryInput boundary plus the current-priority simple presenter path and preserved cinematic path.
+- template-system.md — preserved cinematic assembly-template contract and locked default cinematic clip structure.
 - integrations/ngest.md — authenticated ngest boundary and manual ngest-shaped fixture path.
 - control-interface.md — current provisional control compatibility and simplified future direction.
 - roadmap/initial-roadmap.md — current implementation sequence.
