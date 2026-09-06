@@ -88,10 +88,8 @@ export function normalizeCanonicalFeed(value: Pick<
 /** Validates the stable control shell while preserving provisional stage fields. */
 export function normalizeCanonicalControl(value: unknown): CanonicalControl {
   const control = requireObject(value, 'control');
-  const allowedKeys = new Set(['version', 'editorial', 'script', 'production']);
-
   for (const key of Object.keys(control)) {
-    if (!allowedKeys.has(key)) {
+    if (!['version', 'editorial', 'script', 'production'].includes(key)) {
       throw invalidCanonicalInput(`control.${key} is not a supported control branch.`);
     }
   }
@@ -183,7 +181,7 @@ function normalizeStage(control: JsonObject, name: 'editorial' | 'script' | 'pro
   }
 
   const stage = requireObject(control[name], `control.${name}`);
-  return cloneJsonObject(stage);
+  return cloneJsonValue(stage) as JsonObject;
 }
 
 function requireObject(value: unknown, label: string): JsonObject {
@@ -257,20 +255,8 @@ function assertNoSecretKeys(value: JsonValue, path: string, depth = 0): void {
   }
 }
 
-function cloneJsonObject(value: JsonObject): JsonObject {
-  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, cloneJsonValue(item)]));
-}
-
 function cloneJsonValue(value: JsonValue): JsonValue {
-  if (Array.isArray(value)) {
-    return value.map(cloneJsonValue);
-  }
-
-  if (value !== null && typeof value === 'object') {
-    return cloneJsonObject(value);
-  }
-
-  return value;
+  return JSON.parse(JSON.stringify(value)) as JsonValue;
 }
 
 function invalidCanonicalInput(message: string): VidGenError {
