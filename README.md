@@ -43,7 +43,7 @@ Current standards:
 - FFmpeg for deterministic clip assembly and finishing;
 - no Remotion in the MVP;
 - 1080x1920 9:16 H.264 MP4 at 30 fps as the initial output target;
-- Phase 3 works directly from sufficiently described ngest StoryInput; publisher retrieval is deferred as a later fallback;
+- ClipPlan planning works directly from sufficiently described ngest StoryInput; publisher retrieval is deferred as a later fallback;
 - no initial approval workflow, global cache, database, queue, or distributed orchestration.
 
 See docs/template-system.md for the assembly-template contract.
@@ -58,7 +58,7 @@ VidGen does not connect directly to ngest persistence.
 
 ## Current state
 
-Phases 1 and 2 are complete and closed at versions 0.1.5 and 0.2.5. Phase 3 was manually owner-closed after P4 at version 0.3.4, with its unrun live-provider closeout gate explicitly waived. The repository now provides:
+Phases 1 and 2 are complete and closed at versions 0.1.5 and 0.2.5. Phase 3 was manually owner-closed at version 0.3.4. Phase 4 was manually owner-closed at version 0.4.4 after its P5 review/repair pass. The repository now provides:
 - the Node.js + TypeScript CLI foundation;
 - secure bearer-authenticated ngest manifest acquisition;
 - local ngest-shaped fixture ingress through the same transport validator;
@@ -69,12 +69,17 @@ Phases 1 and 2 are complete and closed at versions 0.1.5 and 0.2.5. Phase 3 was 
 - a Google Gemini structured-text adapter with runtime model configuration;
 - a manual `vidgen story` workflow that creates an independent story workspace;
 - a manual `vidgen plan` workflow that performs one normal-path model call and persists validated `clip-plan.json` plus safe planning metadata;
-- filesystem-backed run/story/planning metadata with atomic JSON persistence;
+- deterministic per-segment generated-media units derived from AssemblyTemplate + validated ClipPlan;
+- provider-neutral video/speech generation contracts with Google Veo and Gemini TTS adapters;
+- a manual `vidgen media` workflow that consumes an existing planned story workspace and writes raw story-local presenter/video/voiceover assets;
+- story-local reuse keyed by effective generation input plus current asset hash/size validation;
+- resumable `media-run.json` and strict provider-neutral `generated-media.json` handoff metadata;
+- filesystem-backed run/story/planning/media metadata with atomic persistence;
 - deterministic tests.
 
 The project was simplified after Phase 1. FeedAnalysis, EditorialPlan, separate Script and ProductionPlan stages, Remotion composition, edition-level planning, and story-selection logic are no longer part of the current MVP.
 
-The repository is on the 0.4.0 Phase 4 planning baseline. Phase 4 realizes the generated presenter/video/voiceover assets required by the selected AssemblyTemplate from the already validated ClipPlan. Publisher retrieval, FFmpeg assembly, live feed fan-out, and broader orchestration remain later work.
+The repository is on the 0.5.0 Phase 5 planning baseline. Phase 5 owns deterministic probing, qualification, normalization, trimming, audio muxing, standardized intro/outro integration, and FFmpeg assembly of the already planned/generated story package into the first complete vertical clip. Publisher retrieval and live feed fan-out remain later work.
 
 ## Start here
 
