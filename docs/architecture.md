@@ -7,7 +7,7 @@ Status: CURRENT MVP DIRECTION / EARLY-STAGE
 Initial development:
 
     manually selected
-    ngest-shaped story fixture
+    VidGen-shaped story fixture
               |
               v
       boundary validation
@@ -40,7 +40,7 @@ Initial development:
               v
          final clip.mp4
 
-Live ngest acquisition remains a supported boundary from Phase 1, but live feed fan-out is not required to debug the initial video-production path.
+Live ngest acquisition remains a supported boundary from Phase 1. The current owner-approved `c5-config-fix` correction will make that development path consume ngest Distribution v1 through a transport adapter; live production story fan-out remains Phase 6 work.
 
 ## Runtime and execution shape
 
@@ -54,7 +54,27 @@ FFmpeg runs locally. Managed media providers supply their own generation infrast
 
 ## Ngest boundary
 
-VidGen's eventual production input comes from the dedicated bearer-authenticated ngest VidGen integration endpoint.
+VidGen's intended production input remains the dedicated bearer-authenticated ngest VidGen integration endpoint carrying governed feed data plus Profile-associated VidGen controls.
+
+Until that endpoint is available, the owner-approved `c5-config-fix` correction uses ngest's existing authenticated Distribution v1 Profile endpoint as a transitional development transport:
+
+    NGEST_BASE_URL
+          +
+    NGEST_PROFILE_KEY
+          |
+          v
+    GET /api/v1/distribution/{profile}
+          |
+          v
+    Distribution transport validator/adapter
+          |
+          v
+    existing VidGen input shape
+          |
+          v
+      CanonicalInput
+
+The transitional adapter must discard Distribution-only digest/generatedAt state, validate the returned Profile identity, preserve canonical Article order/destinations, and supply neutral VidGen-owned controls. This does not replace the future dedicated feed-plus-controls boundary.
 
 Ngest's feed is pre-curated for VidGen production. Every supplied story is already eligible for content creation.
 
@@ -69,11 +89,11 @@ See docs/integrations/ngest.md.
 
 ## Manual fixture boundary
 
-The first video-production phases use a manually selected sample story shaped like real ngest integration input.
+The first video-production phases use a manually selected local sample story in VidGen's validated post-adapter input shape.
 
-This is a development transport substitute, not a second creative contract.
+This is a development transport substitute, not a second creative contract. It does not need to reproduce the upstream Distribution v1 envelope.
 
-Both fixture and live input should converge through the same validation/normalization semantics before story-level production logic begins.
+Live input first passes through its transport-specific validator/adapter; both paths then converge through the same VidGen input validation/normalization semantics before story-level production logic begins.
 
 No demo-only story fields should be invented merely to make the fixture path easier.
 
