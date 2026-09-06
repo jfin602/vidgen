@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "VidGen headline clip sidecar",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "clipId", "article", "profile", "publication", "story", "presenterText", "requestedMaxSeconds", "plannedDurationSeconds", "finalDurationSeconds", "final", "textProvider", "videoProvider", "references", "font", "finishing", "engineVersion"],
+  "properties": {
+    "schemaVersion": { "const": "1" },
+    "clipId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$" },
+    "article": { "$ref": "#/$defs/article" },
+    "profile": { "$ref": "#/$defs/profile" },
+    "publication": { "$ref": "#/$defs/publication" },
+    "story": { "$ref": "#/$defs/story" },
+    "presenterText": { "type": "string", "minLength": 1 },
+    "requestedMaxSeconds": { "type": "integer", "minimum": 4, "maximum": 20 },
+    "plannedDurationSeconds": { "type": "integer", "minimum": 1, "maximum": 20 },
+    "finalDurationSeconds": { "type": "number", "minimum": 0 },
+    "final": { "$ref": "#/$defs/final" },
+    "textProvider": { "$ref": "#/$defs/provider" },
+    "videoProvider": { "$ref": "#/$defs/videoProvider" },
+    "references": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "$ref": "#/$defs/reference" } },
+    "font": { "$ref": "#/$defs/file" },
+    "finishing": { "$ref": "#/$defs/finishing" },
+    "engineVersion": { "type": "string", "pattern": "^[A-Za-z0-9._:/@ -]{1,256}$" }
+  },
+  "$defs": {
+    "profile": { "type": "object", "additionalProperties": false, "required": ["configKey", "displayName"], "properties": { "configKey": { "type": "string", "minLength": 1 }, "displayName": { "type": "string", "minLength": 1 } } },
+    "publication": { "type": "object", "additionalProperties": false, "required": ["name"], "properties": { "name": { "type": "string", "minLength": 1 } } },
+    "article": { "type": "object", "additionalProperties": false, "required": ["articleId", "headline", "originalUrl", "effectiveFeedDate", "feedDateSource", "publishedAt", "author", "summary", "imageUrl", "source", "categories"], "properties": { "articleId": { "type": "string", "minLength": 1 }, "headline": { "type": "string", "minLength": 1 }, "originalUrl": { "type": "string", "format": "uri" }, "effectiveFeedDate": { "type": "string", "minLength": 1 }, "feedDateSource": { "type": "string", "minLength": 1 }, "publishedAt": { "type": ["string", "null"] }, "author": { "type": ["string", "null"] }, "summary": { "type": ["string", "null"] }, "imageUrl": { "type": ["string", "null"] }, "source": { "$ref": "#/$defs/profile" }, "categories": { "type": "array", "items": { "type": "string", "minLength": 1 } } } },
+    "story": { "type": "object", "additionalProperties": false, "required": ["fingerprint", "provenance"], "properties": { "fingerprint": { "$ref": "#/$defs/hash" }, "provenance": { "type": "object", "additionalProperties": false, "required": ["sourceInputFingerprint", "ngestApiVersion"], "properties": { "sourceInputFingerprint": { "$ref": "#/$defs/hash" }, "ngestApiVersion": { "type": "string", "minLength": 1 }, "snapshotRevision": {} } } } },
+    "hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "file": { "type": "object", "additionalProperties": false, "required": ["basename", "sha256", "byteSize"], "properties": { "basename": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$" }, "sha256": { "$ref": "#/$defs/hash" }, "byteSize": { "type": "integer", "minimum": 1 } } },
+    "reference": { "type": "object", "additionalProperties": false, "required": ["ordinal", "basename", "mimeType", "sha256", "byteSize"], "properties": { "ordinal": { "type": "integer", "minimum": 1 }, "basename": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$" }, "mimeType": { "enum": ["image/png", "image/jpeg", "image/webp"] }, "sha256": { "$ref": "#/$defs/hash" }, "byteSize": { "type": "integer", "minimum": 1 } } },
+    "provider": { "type": "object", "additionalProperties": false, "required": ["provider", "model"], "properties": { "provider": { "type": "string", "pattern": "^[A-Za-z0-9._:/@ -]{1,256}$" }, "model": { "type": "string", "pattern": "^[A-Za-z0-9._:/@ -]{1,256}$" }, "requestId": { "type": "string", "pattern": "^[A-Za-z0-9._:/@ -]{1,256}$" } } },
+    "videoProvider": { "type": "object", "additionalProperties": false, "required": ["provider", "model"], "properties": { "provider": { "type": "string", "pattern": "^[A-Za-z0-9._:/@ -]{1,256}$" }, "model": { "type": "string", "pattern": "^[A-Za-z0-9._:/@ -]{1,256}$" }, "requestId": { "type": "string", "pattern": "^[A-Za-z0-9._:/@ -]{1,256}$" }, "operationId": { "type": "string", "pattern": "^[A-Za-z0-9._:/@ -]{1,256}$" }, "operationIds": { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z0-9._:/@ -]{1,256}$" } }, "generationOperationCount": { "type": "integer", "minimum": 1 } } },
+    "final": { "type": "object", "additionalProperties": false, "required": ["filename", "sha256", "byteSize", "technical"], "properties": { "filename": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}\\.mp4$" }, "sha256": { "$ref": "#/$defs/hash" }, "byteSize": { "type": "integer", "minimum": 1 }, "technical": { "type": "object" } } },
+    "finishing": { "type": "object", "additionalProperties": false, "required": ["policy", "ffmpegVersion"], "properties": { "policy": { "type": "string", "minLength": 1 }, "ffmpegVersion": { "type": "string", "pattern": "^[A-Za-z0-9._:/@ -]{1,256}$" } } }
+  }
+}

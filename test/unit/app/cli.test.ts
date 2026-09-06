@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import './headline-workflow.test.ts';
 
 import { helpText, parseCliArgs, runCli } from '../../../src/cli.ts';
 import { VidGenError } from '../../../src/core/error.ts';
@@ -10,6 +11,8 @@ test('CLI parses its help, run, manual story, planning, media, and assembly surf
   assert.deepEqual(parseCliArgs(['--help']), { kind: 'help' });
   assert.deepEqual(parseCliArgs(['-h']), { kind: 'help' });
   assert.deepEqual(parseCliArgs(['run']), { kind: 'run' });
+  assert.deepEqual(parseCliArgs(['headline', '--input-file', 'fixture.json', '--article-id', 'article-2', '--anchor-reference', 'anchor.png', '--font-file', 'font.ttf']), { kind: 'headline', inputFile: 'fixture.json', articleId: 'article-2', maxSeconds: 20, anchorReferencePaths: ['anchor.png'], fontPath: 'font.ttf' });
+  assert.deepEqual(parseCliArgs(['headline', '--input-file', 'fixture.json', '--article-id', 'article-2', '--max-seconds', '4', '--anchor-reference', 'anchor.png', '--font-file', 'font.ttf', '--artifacts-root', 'clips']), { kind: 'headline', inputFile: 'fixture.json', articleId: 'article-2', maxSeconds: 4, anchorReferencePaths: ['anchor.png'], fontPath: 'font.ttf', artifactsRoot: 'clips' });
   assert.deepEqual(parseCliArgs(['run', '--artifacts-root', 'tmp/runs']), {
     kind: 'run', artifactsRoot: 'tmp/runs',
   });
@@ -93,6 +96,7 @@ test('CLI rejects unknown commands and invalid arguments deterministically', () 
       && error.publicMessage === '--artifacts-root requires exactly one directory argument.',
   );
   assert.throws(() => parseCliArgs(['media']), /Media requires --story-dir/);
+  assert.throws(() => parseCliArgs(['headline', '--input-file', 'fixture.json', '--article-id', 'article-1', '--anchor-reference', 'a', '--font-file', 'font.ttf', '--max-seconds', '3']), /whole number from 4 through 20/);
   assert.throws(() => parseCliArgs(['assemble', '--intro', 'intro.mp4']), /Assemble requires --story-dir/);
   assert.throws(() => parseCliArgs(['media', '--story-dir', 'story', '--anchor-reference', 'a', '--anchor-reference', 'b', '--anchor-reference', 'c', '--anchor-reference', 'd']), /at most three/);
 });

@@ -9,6 +9,7 @@ import {
 import { planStoryWorkspace } from './app/clip-plan-workflow.ts';
 import { generateStoryMedia } from './app/media-workflow.ts';
 import { assembleStoryWorkspace } from './app/assembly-workflow.ts';
+import { DEFAULT_HEADLINE_ARTIFACTS_ROOT, generateHeadlineClip } from './app/headline-workflow.ts';
 import { isVidGenError, VidGenError } from './core/error.ts';
 
 export const helpText = `VidGen
@@ -20,6 +21,7 @@ Usage:
   vidgen plan --input-file <manifest.json> --article-id <articleId> [--template <templateId>] [--artifacts-root <directory>]
   vidgen media --story-dir <directory> [--anchor-reference <image-path> ...]
   vidgen assemble --story-dir <directory> [--intro <intro-video-path>] [--outro <outro-video-path>] [--font-file <font-path>]
+  vidgen headline --input-file <manifest.json> --article-id <articleId> [--max-seconds <4-20>] --anchor-reference <image-path> [--anchor-reference <image-path> ...] --font-file <font-path> [--artifacts-root <directory>]
 
 Available commands:
   help, --help, -h  Show this help message.
@@ -28,6 +30,7 @@ Available commands:
   plan             Create one selected story workspace and generate its ClipPlan.
   media            Generate raw story-local media from an existing ClipPlan.
   assemble         Assemble an existing media-ready story and write final/clip.mp4.
+  headline         Generate one finished presenter-headline MP4 and metadata sidecar.
 
 Run options:
   --artifacts-root <directory>  Write runs here (default: ${DEFAULT_ARTIFACTS_ROOT}).
@@ -59,6 +62,14 @@ Assemble options:
   --outro <video-path>     Optional local standardized outro video.
   --font-file <font-path>  Required only when the selected assembly has display text.
   Assemble consumes an existing media-ready story and writes final/clip.mp4.
+
+Headline options:
+  --input-file <manifest.json>  Required local ngest-shaped manifest file.
+  --article-id <articleId>      Required explicit Article ID to select.
+  --max-seconds <4-20>          Final duration ceiling (default: 20).
+  --anchor-reference <path>     Required local presenter image; repeat one to three times.
+  --font-file <font-path>       Required local lower-third font.
+  --artifacts-root <directory>  Write flat pairs here (default: ${DEFAULT_HEADLINE_ARTIFACTS_ROOT}).
 `;
 
 export interface HelpCommand {
@@ -99,8 +110,9 @@ export interface AssembleCommand {
   readonly outroPath?: string;
   readonly fontPath?: string;
 }
+export interface HeadlineCommand { readonly kind: 'headline'; readonly inputFile: string; readonly articleId: string; readonly maxSeconds: number; readonly anchorReferencePaths: readonly string[]; readonly fontPath: string; readonly artifactsRoot?: string; }
 
-export type CliCommand = HelpCommand | RunCommand | StoryCommand | PlanCommand | MediaCommand | AssembleCommand;
+export type CliCommand = HelpCommand | RunCommand | StoryCommand | PlanCommand | MediaCommand | AssembleCommand | HeadlineCommand;
 
 export interface CliOutput {
   writeStdout(text: string): void;
@@ -127,6 +139,7 @@ export function parseCliArgs(args: readonly string[]): CliCommand {
     case 'plan': return { ...parseStoryCommand(rest, 'Plan'), kind: 'plan' };
     case 'media': return parseMediaCommand(rest);
     case 'assemble': return parseAssembleCommand(rest);
+    case 'headline': return parseHeadlineCommand(rest);
     default:
       if (command.startsWith('-')) {
         throw invalidArgument(`Unknown argument: ${JSON.stringify(command)}.`);
@@ -141,6 +154,7 @@ export interface CliDependencies {
   readonly planStory?: typeof planStoryWorkspace;
   readonly generateMedia?: typeof generateStoryMedia;
   readonly assembleStory?: typeof assembleStoryWorkspace;
+  readonly generateHeadline?: typeof generateHeadlineClip;
 }
 
 export async function runCli(
@@ -213,6 +227,11 @@ export async function runCli(
       );
       return 0;
     }
+    if (command.kind === 'headline') {
+      const result = await (dependencies.generateHeadline ?? generateHeadlineClip)({ inputFile: command.inputFile, articleId: command.articleId, maxSeconds: command.maxSeconds, anchorReferencePaths: command.anchorReferencePaths, fontPath: command.fontPath, ...(command.artifactsRoot === undefined ? {} : { artifactsRoot: command.artifactsRoot }) });
+      output.writeStdout(`Headline ${result.clipId} is final_ready.\nfinal: ${result.finalPath}\nmetadata: ${result.metadataPath}\nsha256: ${result.sha256}\ndurationSeconds: ${result.durationSeconds}\n`);
+      return 0;
+    }
 
     const result = await (dependencies.createStory ?? createStoryWorkspace)({
       inputFile: command.inputFile,
@@ -235,6 +254,26 @@ export async function runCli(
     output.writeStderr(`Run failed [${category}]: ${message} Run "vidgen --help" for usage.\n`);
     return 2;
   }
+}
+
+function parseHeadlineCommand(args: readonly string[]): HeadlineCommand {
+  const values: Partial<Record<'inputFile' | 'articleId' | 'fontPath' | 'artifactsRoot' | 'maxSeconds', string>> = {};
+  const anchors: string[] = [];
+  const names: Record<string, keyof typeof values | 'anchor'> = { '--input-file': 'inputFile', '--article-id': 'articleId', '--font-file': 'fontPath', '--artifacts-root': 'artifactsRoot', '--max-seconds': 'maxSeconds', '--anchor-reference': 'anchor' };
+  for (let i = 0; i < args.length; i += 2) {
+    const option = args[i]; const key = names[option ?? '']; const value = args[i + 1];
+    if (key === undefined) throw invalidArgument(`Unknown headline argument: ${JSON.stringify(option)}.`);
+    if (value === undefined || value.trim().length === 0) throw invalidArgument(`${option} requires exactly one non-empty value.`);
+    if (key === 'anchor') { if (anchors.length >= 3) throw invalidArgument('Headline accepts at most three --anchor-reference values.'); anchors.push(value); }
+    else { if (values[key] !== undefined) throw invalidArgument(`Headline option ${option} must not be repeated.`); values[key] = value; }
+  }
+  if (values.inputFile === undefined) throw invalidArgument('Headline requires --input-file <manifest.json>.');
+  if (values.articleId === undefined) throw invalidArgument('Headline requires --article-id <articleId>.');
+  if (values.fontPath === undefined) throw invalidArgument('Headline requires --font-file <font-path>.');
+  if (anchors.length === 0) throw invalidArgument('Headline requires one to three --anchor-reference values.');
+  const maxSeconds = values.maxSeconds === undefined ? 20 : Number(values.maxSeconds);
+  if (!Number.isInteger(maxSeconds) || maxSeconds < 4 || maxSeconds > 20) throw invalidArgument('Headline --max-seconds must be a whole number from 4 through 20.');
+  return { kind: 'headline', inputFile: values.inputFile, articleId: values.articleId, fontPath: values.fontPath, maxSeconds, anchorReferencePaths: anchors, ...(values.artifactsRoot === undefined ? {} : { artifactsRoot: values.artifactsRoot }) };
 }
 
 function parseMediaCommand(args: readonly string[]): MediaCommand {
