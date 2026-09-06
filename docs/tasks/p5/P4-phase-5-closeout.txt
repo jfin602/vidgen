@@ -1,0 +1,421 @@
+TASK: Phase 5 / P4 — Phase 5 closeout validation and first real assembled clip
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- This prompt's assigned project version is `0.5.4`.
+
+CONTEXT
+
+This is the final Phase 5 closeout prompt.
+
+Read BOOT.md, README.md, AGENTS.md, docs/architecture.md, docs/template-system.md, docs/roadmap/initial-roadmap.md, all Phase 5 prompts, and the complete P1-P3 implementation/tests before changing anything.
+
+P1-P3 should now provide:
+- strict reuse of the Phase 4 media-ready handoff;
+- current generated asset hash/size verification;
+- bounded local FFprobe qualification;
+- explicit local standardized intro/outro qualification;
+- deterministic AssemblyPlan;
+- injection-safe no-shell FFmpeg renderer;
+- simple deterministic display-slot lower-third treatment;
+- exact segment timing/voiceover replacement/audio normalization policy;
+- manual `vidgen assemble`;
+- atomic final/clip.mp4 publication;
+- assembly-run.json;
+- strict final-clip.json + schema.
+
+Phase 5 intentionally stops before live multi-story ngest fan-out, publisher retrieval, database/queue orchestration, global caching, automated publishing, alternate aspect ratios, and Remotion.
+
+The repository did not contain standardized intro/outro media when Phase 5 was planned. Ordinary real end-to-end acceptance therefore requires human-provided actual local intro/outro files, a local font file for the default headline treatment, and one existing media-ready story workspace containing decodable generated media.
+
+GOAL
+
+Rigorously validate the complete Phase 5 boundary, perform deterministic real local FFmpeg/FFprobe qualification, then assemble and technically validate the first real postable story clip using human-provided actual standardized assets and a media-ready story workspace.
+
+Repair only bounded Phase 5 defects.
+
+VALIDATION CHECKLIST
+
+1. Repository/runtime integrity.
+   - Re-read current BOOT/roadmap and P1-P3.
+   - Confirm package-lock.json is absent.
+   - Confirm package.json/src/version.ts enter closeout from the Git-proven P1-P3 prefix at 0.5.3.
+   - Run:
+       npm run codex:phase:validate -- p5
+       npm test
+       npm run check
+       node src/cli.ts --help
+       git diff --check
+
+2. Architecture boundary.
+   Confirm the implemented Phase 5 flow is only:
+
+       existing media_ready story
+              +
+       generated-media.json
+              +
+       explicit local intro/outro/font
+              |
+              v
+       strict local qualification
+         FFprobe + hashes
+              |
+              v
+       deterministic AssemblyPlan
+              |
+              v
+       deterministic FFmpeg render
+              |
+              v
+       post-render FFprobe validation
+              |
+              v
+       final/clip.mp4
+       assembly-run.json
+       final-clip.json
+
+   Confirm no:
+   - new ClipPlan/Script/ProductionPlan/shot planning;
+   - media/provider generation;
+   - publisher retrieval/web research;
+   - stock/media search;
+   - live ngest fan-out;
+   - database/queue/global cache;
+   - Remotion;
+   - automated publishing.
+
+3. Phase 4 handoff reuse.
+   - Inspect the P1 consumer path.
+   - Confirm Phase 5 does not clone/weaken producer-owned ClipPlan/generated-media semantics.
+   - media-run must be media_ready.
+   - generated-media identity must match story/template/clipPlan.
+   - every current generated asset must match manifest path/hash/byte size before probe/render.
+   - stale/corrupt generated assets fail rather than silently regenerate.
+
+4. FFprobe safety.
+   Re-check current official docs:
+   - https://ffmpeg.org/ffprobe.html
+
+   Verify:
+   - child process uses argv/no shell;
+   - local files only;
+   - no packet/frame payload dump;
+   - bounded timeout/stdout/stderr;
+   - JSON parse is strict;
+   - rational frame-rate parsing is safe;
+   - exactly supported stream layouts are enforced;
+   - raw FFprobe JSON/stderr/absolute paths do not become public/durable data.
+
+5. Standardized asset semantics.
+   - intro maps to standardized before-story role;
+   - outro maps to standardized after-story role;
+   - both are explicit local files supplied by the human/CLI;
+   - their hashes/byte sizes/media properties are measured;
+   - their concrete durations/codecs are NOT written back into AssemblyTemplate;
+   - final expected duration uses measured intro + logical story + measured outro.
+
+6. Deterministic AssemblyPlan.
+   For default-news-40s verify exactly:
+   - logical story duration = 40 seconds;
+   - hook uses u01 as the single visual and carries headline display text;
+   - content uses u02 as visual + u03 as replacement voiceover;
+   - support uses u04 visual;
+   - closing uses u05 visual;
+   - u04/u05 remain independent timing-scoped units;
+   - mapping comes from template/manifest identities, not hard-coded default IDs.
+
+   Verify synthetic non-default/non-40-second template proof remains green within the one-visual/optional-one-voiceover assembly subset.
+
+7. Duration safety.
+   - materially too-short visual fails before render;
+   - longer visual is trimmed to target;
+   - materially overlong voiceover fails rather than cutting narration;
+   - shorter voiceover is padded with silence;
+   - standardized intro/outro retain measured durations;
+   - no freeze-frame/time-stretch is used to hide insufficient visual coverage.
+
+8. FFmpeg process safety.
+   Re-check current official docs:
+   - https://ffmpeg.org/ffmpeg.html
+   - https://ffmpeg.org/ffmpeg-filters.html
+   - https://ffmpeg.org/faq.html
+
+   Verify:
+   - no shell invocation;
+   - no arbitrary FFmpeg flags from CLI/control/ClipPlan;
+   - all input/stream mappings are explicit;
+   - process timeout and captured-output bounds exist;
+   - raw stderr is diagnostic cause only and not public/durable metadata.
+
+9. FFmpeg build preflight.
+   On the actual closeout host run/observe:
+   - `ffmpeg -version`;
+   - `ffprobe -version`;
+   - required encoder/filter capability checks.
+
+   Confirm actual build has:
+   - libx264;
+   - AAC encoder;
+   - scale;
+   - pad;
+   - fps;
+   - setsar;
+   - trim/setpts;
+   - atrim/asetpts;
+   - aresample/aformat/apad;
+   - concat;
+   - loudnorm;
+   - drawtext/drawbox for the default display headline.
+
+   If the host build lacks required capability, ordinary Phase 5 closeout is blocked; do not silently change the render contract to hide it.
+
+10. Render policy.
+    Verify the versioned engine-owned policy is outside AssemblyTemplate and records:
+    - scale-to-fit + centered padding;
+    - 1080x1920;
+    - 30 fps;
+    - libx264;
+    - CRF 20;
+    - medium preset;
+    - yuv420p;
+    - AAC 48 kHz stereo 192k;
+    - faststart;
+    - voiceover replacement policy;
+    - final one-pass loudnorm target;
+    - display treatment version.
+
+    Confirm policy changes alter assemblyFingerprint.
+
+11. Display text safety.
+    - default headline is not dropped;
+    - display text never becomes dialogue;
+    - display text is not interpolated directly into the filtergraph;
+    - engine-owned textfile/staging mechanism is used;
+    - hostile strings cannot inject filter syntax;
+    - supplied font is local, bounded, hashed, and staged through an engine-owned temporary name;
+    - no raw font bytes or absolute font path is durable metadata.
+
+12. Audio behavior.
+    Verify:
+    - content-video native audio is discarded when same segment declares voiceover;
+    - voiceover is exact Phase 4 TTS asset and is padded after speech if short;
+    - presenter source audio is preserved on presenter segments;
+    - source audio is normalized to 48 kHz stereo;
+    - missing visual/standardized audio becomes silence;
+    - standardized intro/outro audio is preserved when present;
+    - final concatenated audio receives the fixed loudnorm policy;
+    - no music/stinger/ducking subsystem was introduced.
+
+13. Video behavior.
+    Verify:
+    - each input uses its explicit qualified video stream;
+    - timestamps reset;
+    - scale preserves aspect ratio;
+    - centered black padding reaches exact target size;
+    - SAR normalized;
+    - story visuals trim to exact segment timing;
+    - intro/outro preserve measured duration;
+    - frame rate is normalized to 30;
+    - no automatic crop-to-fill or time stretch.
+
+14. Concatenation.
+    Verify final structural order:
+    - before-story standardized intro;
+    - all logical story segments in template order;
+    - after-story standardized outro.
+
+    Confirm concat path does not rely on shell cat, unsafe concat protocol, or untrusted list files.
+
+15. Durable assembly lifecycle.
+    Inspect:
+    - assembly-run.json;
+    - final-clip.json schema/runtime validator;
+    - candidate render work directory;
+    - final/clip.mp4 publication.
+
+    Verify:
+    - old final-clip manifest invalidated before a new attempt;
+    - candidate rendered off-authority;
+    - candidate post-probed before publication;
+    - final clip hash/size computed from exact rendered bytes;
+    - rename publishes final/clip.mp4 only after technical validation;
+    - final manifest is atomic;
+    - terminal metadata failure cannot leave a new success manifest/authoritative clip;
+    - upstream Phase 2-4 files are unchanged.
+
+16. Final technical validation contract.
+    final/clip.mp4 must post-probe as:
+    - MP4-compatible container;
+    - exactly one video stream;
+    - exactly one audio stream;
+    - width 1080;
+    - height 1920;
+    - H.264;
+    - yuv420p;
+    - 30 fps;
+    - AAC;
+    - 48000 Hz;
+    - 2 channels/stereo;
+    - positive duration;
+    - duration within the implemented frame-scale tolerance of:
+      intro measured duration + 40 sec default story + outro measured duration.
+
+17. Final provenance.
+    final-clip.json must carry:
+    - story/template/clipPlan/generated-media identities;
+    - assemblyFingerprint;
+    - standardized safe identity/probe summaries;
+    - font safe identity;
+    - assembly policy identity;
+    - FFmpeg version;
+    - exact final relative path/hash/size/probe facts.
+
+    It must NOT carry:
+    - absolute paths;
+    - raw FFprobe/FFmpeg output;
+    - provider secrets;
+    - ClipPlan body duplicated into final metadata;
+    - font bytes;
+    - generated media bytes.
+
+18. No final cache.
+    - an explicit repeated assemble invocation renders again;
+    - assemblyFingerprint is provenance, not a skip key;
+    - generated provider assets remain reusable upstream;
+    - no global/final render cache appears.
+
+19. Deterministic real local FFmpeg integration smoke.
+    REQUIRED even before owner media is available.
+
+    Using only local temporary test assets created specifically for the smoke:
+    - generate small synthetic video/audio fixtures with the actual host FFmpeg or use committed tiny legal test fixtures if the repository later contains them;
+    - construct a valid synthetic Phase 5 AssemblyPlan/test boundary without calling any provider;
+    - exercise the real FFprobe adapter;
+    - exercise the real FFmpeg renderer;
+    - post-probe the produced candidate;
+    - prove the actual host can create the required 1080x1920/30 H.264/AAC MP4 with the required filters/encoders.
+
+    Keep this test bounded and remove temporary files.
+    Do not claim it proves real story/standardized media quality.
+
+20. First real story render — REQUIRED FOR ORDINARY PHASE 5 ACCEPTANCE.
+    Require human-provided local inputs:
+    - one existing real/owner-accepted `media_ready` story workspace with valid generated-media.json and decodable raw generated assets;
+    - actual standardized intro video path;
+    - actual standardized outro video path;
+    - actual local font path for the default headline display treatment.
+
+    Do not invent, download, or substitute standardized brand media/font merely to close the phase.
+
+    Run exactly one normal:
+
+        vidgen assemble --story-dir <...> --intro <...> --outro <...> --font-file <...>
+
+    Avoid repeated expensive upstream generation; Phase 5 itself should make no provider calls.
+
+21. Real render evidence.
+    For the real story render, safely record:
+    - storyRunId;
+    - assemblyRunId;
+    - template id/version;
+    - intro/outro safe basenames + hashes + measured durations;
+    - generatedMediaFingerprint;
+    - assemblyFingerprint;
+    - FFmpeg version;
+    - final relative path;
+    - final byte size + SHA-256;
+    - final probed technical properties;
+    - expected vs actual final duration.
+
+    Do not record absolute human filesystem paths.
+
+22. Real clip usability handoff.
+    The closeout agent may technically inspect/probe the clip but must not pretend to have completed human aesthetic review.
+
+    Final response should give the human:
+    - final clip location;
+    - the technical validation evidence;
+    - any known warning such as possible presenter dialogue trimming or display readability that requires actual playback review.
+
+    If actual playback is performed by an available runtime/tool, describe only what was actually observed.
+    Otherwise state that visual/audio quality remains for human playback review.
+
+23. Ordinary closeout blocker rule.
+    If ANY of these are unavailable:
+    - ffmpeg/ffprobe required capabilities;
+    - real media_ready story workspace;
+    - actual standardized intro;
+    - actual standardized outro;
+    - required font;
+    - successful real render/post-probe;
+
+    then:
+    - DO NOT claim ordinary Phase 5 qualification;
+    - DO NOT set version 0.5.4;
+    - report exact blocker;
+    - retain all deterministic/synthetic FFmpeg proof that did pass.
+
+    A later explicit owner override remains an owner decision outside this prompt; never assume it.
+
+24. Security search.
+    Inspect code/test artifacts and any closeout output for accidental:
+    - absolute intro/outro/font paths in JSON;
+    - raw FFmpeg/FFprobe stderr/stdout;
+    - display text inside filtergraph metadata;
+    - shell invocation;
+    - provider API keys;
+    - source/publisher URL fetches;
+    - temporary work paths in final manifest.
+
+25. Bounded repairs.
+    If validation exposes a defect clearly inside Phase 5:
+    - fix it;
+    - add/adjust focused regression coverage;
+    - rerun affected checks.
+
+    Do not expand closeout into:
+    - provider/media generation fixes unless Phase 5 directly broke a compatibility contract;
+    - publisher retrieval;
+    - live ngest;
+    - Remotion;
+    - design-system work;
+    - animated graphics;
+    - music/stingers;
+    - global cache/database/queue;
+    - automated publishing;
+    - unrelated refactors.
+
+VERSION / REVIEW STATE
+
+Only if deterministic tests, actual host FFmpeg integration, and the required first real story render all succeed:
+- set package.json to 0.5.4;
+- set src/version.ts to 0.5.4.
+
+Closeout changes require human review and must remain uncommitted according to the phase runner workflow.
+
+If the real render is blocked:
+- leave version at 0.5.3;
+- do not pretend synthetic render proof is a real story render;
+- report the blocker precisely.
+
+FINAL RESPONSE
+
+Summarize:
+- validation commands actually run and outcomes;
+- files/contracts inspected;
+- any bounded defects repaired;
+- Phase 4 handoff/hash verification evidence;
+- default + synthetic AssemblyPlan proof;
+- actual FFprobe/FFmpeg build/capability evidence;
+- renderer process/filtergraph safety evidence;
+- display text/font injection-safety evidence;
+- segment timing/voiceover/audio policy evidence;
+- synthetic real-FFmpeg integration smoke and output facts;
+- exact first real story assemble command performed and safe output facts, OR exact owner-input/runtime blocker;
+- final-clip/assembly-run failure-honesty evidence;
+- confirmation no Phase 6+ behavior leaked in;
+- whether Phase 5 is ready for human review and subsequent /closeout.
+
+Do not claim evidence that was not actually observed.
