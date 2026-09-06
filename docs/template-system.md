@@ -1,10 +1,12 @@
 # Template System
 
-Status: CURRENT MVP DIRECTION / INITIAL CONTRACT
+Status: PRESERVED CINEMATIC PATH / CURRENT CONTRACT
+
+> Scope: this document governs VidGen's preserved cinematic production path. The current-priority simple presenter-headline path branches directly from StoryInput and does not require AssemblyTemplate or ClipPlan unless a future design explicitly promotes it into this system.
 
 ## Purpose
 
-VidGen templates remove repeated production reasoning.
+For the preserved cinematic path, VidGen templates remove repeated production reasoning.
 
 A template defines the deterministic assembly skeleton for a story clip. ClipPlan supplies story-specific content for declared slots. Media generation realizes the required generated assets. FFmpeg assembles the result.
 
