@@ -1,0 +1,38 @@
+TASK: Phase 6 / P3 — Deterministic simple clip finisher
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- This prompt's assigned project version is `0.6.3`.
+
+GOAL
+
+Add the dedicated FFprobe/FFmpeg finishing boundary for one raw presenter video plus deterministic headline/source lower third. Do not manufacture a cinematic AssemblyPlan.
+
+Read BOOT.md, P1-P2, current FFprobe/local-file/FFmpeg renderer code and tests before editing. Share safe process/file helpers where useful, but keep the simple render contract explicit.
+
+MUST REMAIN TRUE
+
+- Input is one already-local raw presenter video, one bounded local font, headline, source display name, and the provider-planned final duration.
+- Validate lower-third feasibility before expensive generation can be invoked by the later workflow. Preserve full headline/source text: deterministic wrapping/layout may reject text that cannot safely fit, but must not silently truncate or rewrite it.
+- Stage untrusted headline/source text through engine-owned text files. Never interpolate article text into FFmpeg filter syntax.
+- FFprobe/FFmpeg remain argv-only, no-shell, bounded, local-file oriented, with safe errors and no raw stderr/stdout leakage.
+- Require usable presenter video/audio coverage. A raw provider clip may be longer than the final target; deterministic trim is allowed and is required for sub-8-second ceilings with the current reference-image Veo path.
+- Final technical target remains 1080x1920, 30 fps, H.264/yuv420p, AAC 48 kHz stereo, MP4, with presenter audio retained and deterministic loudness normalization.
+- Lower third contains the governed Article headline and source display name only. No intro, outro, B-roll, separate voiceover, concat, ClipPlan, or AssemblyPlan.
+- Post-probe validation must enforce the final technical contract and duration within frame-scale tolerance of the planned final duration, which must never exceed `maxSeconds`.
+- Existing cinematic renderer/assembly behavior and policy remain compatible.
+- No provider calls, final publication workflow, CLI, Remotion, or new dependency.
+
+PROOF
+
+Add focused tests for staged hostile text, full-text wrapping/rejection, sub-8 trimming, 8/15-second inputs, missing/invalid streams, duration failures, exact output normalization, no-shell execution, bounded failures, post-probe validation, and cinematic renderer regression. Run focused FFprobe/FFmpeg tests, `npm run check`, and `git diff --check`.
+
+Downstream-required capability -> owning implementation/export -> focused proof:
+
+validated finished simple candidate -> dedicated simple FFmpeg finishing/probe contract -> focused finisher tests.
+
+FINAL RESPONSE
+
+Report the finishing contract, text-injection protection, duration handling, tests run, and confirmation the cinematic assembler stayed intact.
