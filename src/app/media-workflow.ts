@@ -105,6 +105,8 @@ export interface MediaWorkflowDependencies {
   readonly engineVersion?: string;
   readonly maxAnchorReferenceBytes?: number;
   readonly maxGeneratedAssetBytes?: number;
+  /** Injectable atomic JSON boundary for focused persistence-failure tests. */
+  readonly writeJson?: typeof writeJsonAtomically;
 }
 
 export interface MediaWorkflowResult {
@@ -138,6 +140,7 @@ export async function generateStoryMedia(dependencies: MediaWorkflowDependencies
   const engineVersion = dependencies.engineVersion ?? VIDGEN_ENGINE_VERSION;
   const maxReferenceBytes = positiveInteger(dependencies.maxAnchorReferenceBytes ?? DEFAULT_MAX_ANCHOR_REFERENCE_BYTES, 'Anchor-reference byte limit must be positive.');
   const maxAssetBytes = positiveInteger(dependencies.maxGeneratedAssetBytes ?? DEFAULT_MAX_GENERATED_ASSET_BYTES, 'Generated-asset byte limit must be positive.');
+  const writeJson = dependencies.writeJson ?? writeJsonAtomically;
   const workspace = await loadValidatedWorkspace(dependencies.storyDirectory, dependencies.getTemplate ?? getAssemblyTemplate);
   const units = resolveGeneratedMediaUnits(workspace.template, workspace.clipPlan);
   const presenterUnits = units.filter((unit) => unit.role.kind === 'presenter');
@@ -168,7 +171,7 @@ export async function generateStoryMedia(dependencies: MediaWorkflowDependencies
   await removeIfExists(join(workspace.directory, GENERATED_MEDIA_ARTIFACT_NAME));
 
   const persist = async (status: MediaRunMetadata['status'], endedAt?: string, failure?: MediaRunMetadata['failure']): Promise<void> => {
-    await writeJsonAtomically({ writeFile, rename, unlink }, join(workspace.directory, MEDIA_RUN_ARTIFACT_NAME), {
+    await writeJson({ writeFile, rename, unlink }, join(workspace.directory, MEDIA_RUN_ARTIFACT_NAME), {
       schemaVersion: GENERATED_MEDIA_SCHEMA_VERSION,
       storyRunId: workspace.storyRunId,
       status,
@@ -218,7 +221,7 @@ export async function generateStoryMedia(dependencies: MediaWorkflowDependencies
       assets: records,
     };
     validateGeneratedMediaManifest(manifest, workspace, units);
-    await writeJsonAtomically({ writeFile, rename, unlink }, join(workspace.directory, GENERATED_MEDIA_ARTIFACT_NAME), manifest, prettyJson);
+    await writeJson({ writeFile, rename, unlink }, join(workspace.directory, GENERATED_MEDIA_ARTIFACT_NAME), manifest, prettyJson);
     try {
       await persist('media_ready', timestamp(now()));
     } catch (cause) {
@@ -283,6 +286,9 @@ async function loadReferences(paths: readonly string[], maxBytes: number): Promi
     const info = await stat(path);
     if (!info.isFile() || info.size < 1 || info.size > maxBytes) throw new VidGenError('invalid_argument', 'Anchor-reference file is empty or exceeds the supported size.');
     const bytes = new Uint8Array(await readFile(path));
+    // The file can change between stat() and readFile(). Recheck the exact
+    // provider-bound bytes so a replacement cannot bypass the input bound.
+    if (bytes.byteLength < 1 || bytes.byteLength > maxBytes) throw new VidGenError('invalid_argument', 'Anchor-reference file is empty or exceeds the supported size.');
     const mimeType = imageMime(bytes);
     if (mimeType === undefined) throw new VidGenError('invalid_argument', 'Anchor-reference file type is unsupported.');
     const image = createApprovedReferenceImage(mimeType, bytes);

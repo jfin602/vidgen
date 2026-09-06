@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -11,6 +11,7 @@ import {
 } from '../../../src/app/media-workflow.ts';
 import type { SpeechGenerationClient, VideoGenerationClient } from '../../../src/core/generated-media.ts';
 import { getAssemblyTemplate } from '../../../src/core/template-registry.ts';
+import { writeJsonAtomically } from '../../../src/shared/atomic-json.ts';
 
 const storyFingerprint = 'a'.repeat(64);
 const runId = 'planned-media-test';
@@ -58,6 +59,10 @@ test('anchor, model, ClipPlan, and byte changes selectively invalidate story-loc
     const corrupt = fakes('video-v2', 'speech-v2', 'voice-b');
     await generateStoryMedia({ storyDirectory: directory, anchorReferencePaths: [reference], createVideoClient: () => corrupt.video, createSpeechClient: () => corrupt.speech, now: clock() });
     assert.deepEqual(corrupt.videoUnits, ['u02']);
+    await unlink(join(directory, 'assets', 'presenter', 'u04.mp4'));
+    const missing = fakes('video-v2', 'speech-v2', 'voice-b');
+    await generateStoryMedia({ storyDirectory: directory, anchorReferencePaths: [reference], createVideoClient: () => missing.video, createSpeechClient: () => missing.speech, now: clock() });
+    assert.deepEqual(missing.videoUnits, ['u04']);
     const planPath = join(directory, 'clip-plan.json');
     const plan = JSON.parse(await readFile(planPath, 'utf8')) as any;
     plan.slots[0].text = 'Different validated hook.';
@@ -66,6 +71,29 @@ test('anchor, model, ClipPlan, and byte changes selectively invalidate story-loc
     await generateStoryMedia({ storyDirectory: directory, anchorReferencePaths: [reference], createVideoClient: () => changedPlan.video, createSpeechClient: () => changedPlan.speech, now: clock() });
     assert.deepEqual(changedPlan.videoUnits, ['u01', 'u02', 'u04', 'u05']);
     assert.deepEqual(changedPlan.speechUnits, ['u03']);
+  });
+});
+
+test('a terminal media-ready metadata failure invalidates the new success manifest', async () => {
+  await withWorkspace(async (directory) => {
+    const reference = join(directory, 'anchor.png');
+    await writeFile(reference, png(1));
+    let writes = 0;
+
+    await assert.rejects(generateStoryMedia({
+      storyDirectory: directory,
+      anchorReferencePaths: [reference],
+      ...fakes(),
+      now: clock(),
+      writeJson: async (...args) => {
+        writes += 1;
+        if (writes === 8) throw new Error('terminal media metadata write failed');
+        return writeJsonAtomically(...args);
+      },
+    }));
+
+    assert.equal((JSON.parse(await readFile(join(directory, MEDIA_RUN_ARTIFACT_NAME), 'utf8')) as any).status, 'failed');
+    await assert.rejects(readFile(join(directory, GENERATED_MEDIA_ARTIFACT_NAME), 'utf8'));
   });
 });
 
@@ -87,6 +115,26 @@ test('a provider failure leaves durable completed assets resumable and no succes
     await generateStoryMedia({ storyDirectory: directory, anchorReferencePaths: [reference], createVideoClient: () => resumed.video, createSpeechClient: () => resumed.speech, now: clock() });
     assert.deepEqual(resumed.videoUnits, ['u02', 'u04', 'u05']);
     assert.deepEqual(resumed.speechUnits, ['u03']);
+  });
+});
+
+test('media workflow rejects an invalid local anchor reference before constructing provider clients', async () => {
+  await withWorkspace(async (directory) => {
+    const reference = join(directory, 'anchor.png');
+    await writeFile(reference, Buffer.from('not an image'));
+    let videoConstructed = false;
+    let speechConstructed = false;
+
+    await assert.rejects(generateStoryMedia({
+      storyDirectory: directory,
+      anchorReferencePaths: [reference],
+      createVideoClient: () => { videoConstructed = true; return fakes().video; },
+      createSpeechClient: () => { speechConstructed = true; return fakes().speech; },
+      now: clock(),
+    }), /Anchor-reference file type is unsupported/);
+
+    assert.equal(videoConstructed, false);
+    assert.equal(speechConstructed, false);
   });
 });
 
