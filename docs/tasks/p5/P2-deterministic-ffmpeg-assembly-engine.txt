@@ -1,0 +1,369 @@
+TASK: Phase 5 / P2 — Deterministic FFmpeg assembly engine
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- This prompt's assigned project version is `0.5.2`.
+
+CONTEXT
+
+Read BOOT.md first, then docs/architecture.md, docs/template-system.md, docs/roadmap/initial-roadmap.md, P1, the new AssemblyPlan/FFprobe contracts/tests, and current official FFmpeg documentation before editing.
+
+Official documentation to verify at implementation time:
+- https://ffmpeg.org/ffmpeg.html
+- https://ffmpeg.org/ffmpeg-filters.html
+- https://ffmpeg.org/faq.html
+
+P1 should provide one fully validated in-memory AssemblyPlan. P2 must consume that plan without rereading/reinterpreting ClipPlan or generated-media semantics.
+
+The renderer is deterministic. It may normalize media and apply simple fixed presentation, but it must not make creative decisions or call a model/provider.
+
+The default visual/audio sequence is derived by P1, conceptually:
+
+    standardized intro
+    hook presenter
+    content video + replacement voiceover
+    support presenter
+    closing presenter
+    standardized outro
+
+Do not hard-code those IDs or roles into FFmpeg command generation.
+
+GOAL
+
+Implement the local FFmpeg execution boundary that turns a validated AssemblyPlan into one temporary technically normalized MP4 candidate using one deterministic filtergraph/render policy.
+
+The output of P2 is not yet the durable final artifact. P3 owns final workspace lifecycle, post-render FFprobe validation, hashing, atomic publication, and success metadata.
+
+IMPLEMENTATION REQUIREMENTS
+
+1. Thin renderer boundary.
+   Add a small interface/class/function, likely under `src/integrations/ffmpeg/` plus a narrow core/application request/result type, that consumes:
+   - validated AssemblyPlan;
+   - explicit temporary output path;
+   - optional validated/staged font input when display text is present.
+
+   Return only safe renderer evidence such as:
+   - output path supplied by caller;
+   - FFmpeg version/build identity string useful for provenance;
+   - execution duration/exit information if useful.
+
+   Do not return raw stderr/stdout as durable domain data.
+
+2. Child-process safety.
+   - use Node child-process APIs with argv arrays;
+   - never invoke through a shell;
+   - never construct a shell command string;
+   - treat all local paths as argv values, not shell fragments;
+   - bound process wall-clock timeout;
+   - bound captured stdout/stderr bytes;
+   - on timeout, terminate the child and fail explicitly;
+   - non-zero exit fails;
+   - public errors must not dump full FFmpeg stderr, ClipPlan/display text, or absolute paths.
+
+3. Runtime executable configuration.
+   - default executable may be `ffmpeg`;
+   - allow a narrow injected/configured local executable path for testing/deployment if useful;
+   - missing/unusable executable should become a configuration/assembly failure with a safe message;
+   - do not place an FFmpeg path in AssemblyTemplate or durable ClipPlan.
+
+4. Capability preflight.
+   Before the first render through a default/local client, verify the selected FFmpeg build can support the required MVP operation.
+
+   At minimum check:
+   - version is observable;
+   - H.264 `libx264` encoder exists;
+   - AAC encoder exists;
+   - required filters exist:
+     * scale;
+     * pad;
+     * fps;
+     * setsar;
+     * trim;
+     * setpts;
+     * atrim;
+     * asetpts;
+     * aresample;
+     * aformat;
+     * apad;
+     * concat;
+     * loudnorm;
+   - when AssemblyPlan contains display text, also require:
+     * drawtext;
+     * drawbox if used by the selected fixed treatment.
+
+   Use bounded argv/no-shell subprocess calls.
+   Do not assume every system FFmpeg build includes drawtext/libx264.
+
+5. Fixed MVP render policy.
+   Keep render policy outside AssemblyTemplate and version it as a small engine-owned constant/identity so future tuning changes assembly fingerprints without changing story/template truth.
+
+   Initial technical policy:
+   - output width: template.output.width (currently 1080);
+   - output height: template.output.height (currently 1920);
+   - output frame rate: template.output.fps (currently 30);
+   - video codec implementation: libx264;
+   - pixel format: yuv420p;
+   - H.264 CRF: 20;
+   - x264 preset: medium;
+   - audio codec: AAC;
+   - audio sample rate: 48000 Hz;
+   - audio channels: stereo;
+   - audio bitrate: 192k;
+   - final MP4 fast-start: `+faststart`;
+   - final audio loudness treatment: one deterministic EBU R128 `loudnorm` pass using an explicit engine-owned target such as I=-16, LRA=11, TP=-1.5.
+
+   These are provisional implementation-level defaults, not template fields and not permanent product law.
+   Export enough policy identity for P3 to fingerprint/render provenance.
+
+6. One deterministic render graph.
+   Prefer one FFmpeg invocation/filter_complex for the entire candidate rather than writing/re-encoding every segment through intermediate MP4 files.
+
+   Inputs should be supplied in deterministic order derived from AssemblyPlan:
+   - standardized intro;
+   - story segment visual inputs in template order;
+   - each segment voiceover input in deterministic association/order;
+   - standardized outro.
+
+   The code may choose an equivalent deterministic input ordering if tests document it, but mapping must not rely on FFmpeg automatic stream selection.
+
+7. Stream mapping.
+   - Every input stream selected by the graph must be explicit.
+   - Never rely on FFmpeg's default stream-choice heuristics.
+   - P1's probe facts are authoritative for whether a visual input has an audio stream.
+
+8. Video normalization.
+   For every standardized/story visual input:
+   - use only the single qualified video stream;
+   - reset timestamps;
+   - scale to fit within the template output while preserving aspect ratio;
+   - pad to exact 1080x1920 (or template output) with deterministic centered black padding where aspect ratio differs;
+   - set square sample aspect ratio;
+   - convert to the target frame rate;
+   - trim story visual segments to exact targetDurationSeconds;
+   - standardized intro/outro preserve their full P1-probed duration rather than template story timing.
+
+   Do not:
+   - stretch time to make a too-short story visual fit;
+   - freeze-frame a short visual;
+   - alter template segment duration;
+   - crop content merely to fill the full frame unless future evidence promotes such a policy.
+
+   P1 should already reject materially too-short story visuals.
+
+9. Story-segment audio policy.
+   For each logical story segment:
+
+   A. When a voiceover unit exists:
+   - discard/do not map the visual source audio for that segment;
+   - use only the qualified voiceover audio;
+   - resample/reformat to 48 kHz stereo;
+   - reset timestamps;
+   - pad silence after the voiceover when it is shorter than targetDurationSeconds;
+   - trim/pad the resulting audio timeline to exact segment duration.
+   - P1 must already have rejected a materially overlong voiceover so this trim must not silently cut words.
+
+   B. When no voiceover exists and the visual contains audio:
+   - preserve that visual audio;
+   - reset timestamps;
+   - resample/reformat to 48 kHz stereo;
+   - pad/trim to exact segment duration.
+
+   C. When no voiceover exists and the visual has no audio:
+   - synthesize deterministic 48 kHz stereo silence for the exact segment duration.
+
+   Do not route presenter segments through Phase 4 TTS.
+   Do not mix content-video native audio underneath the declared replacement voiceover in this MVP.
+
+10. Standardized intro/outro audio.
+    - Preserve qualified intro/outro audio if present.
+    - Normalize it to the same 48 kHz stereo working format.
+    - If absent, synthesize silence matching that standardized asset's full probed duration.
+    - Do not invent fade/music policy unless the actual standardized media already contains it.
+
+11. Display text treatment.
+    Template display slots must not disappear from final assembly.
+
+    For each AssemblyPlan segment with one or more display values:
+    - create one simple generic deterministic lower-third treatment;
+    - preserve display-value order;
+    - combine multiple display values deterministically, e.g. newline-separated;
+    - do not rewrite text;
+    - do not create a graphics-generation subsystem;
+    - use FFmpeg drawbox/drawtext only.
+
+    Security:
+    - NEVER place untrusted display text directly into the filtergraph expression.
+    - Write display text to engine-owned temporary UTF-8 text files and use drawtext `textfile` support or an equally safe current documented mechanism.
+    - Use engine-owned safe filenames, not slot IDs or text.
+    - Escape/stage any filtergraph paths robustly.
+    - Add hostile text tests containing quotes, colons, semicolons, brackets, backslashes, percent signs, commas, apostrophes, and newlines and prove it cannot alter filtergraph structure.
+
+12. Font handling.
+    - P2 should consume a caller-validated local font path/value only when display text exists.
+    - Do not download fonts.
+    - Do not bundle a new font dependency merely for this task.
+    - Prefer staging/copying the caller-provided font to an engine-owned safe temporary filename in the render working directory before constructing drawtext filters, so arbitrary source path syntax does not enter the filtergraph.
+    - Do not persist raw font bytes into JSON metadata.
+
+13. Fixed lower-third geometry.
+    Keep the first treatment deliberately plain and deterministic:
+    - within safe horizontal margins;
+    - placed in a lower-third region;
+    - legible fixed engine-owned font size relative to the current 1080x1920 output;
+    - opaque/semi-opaque box or shadow sufficient for readability;
+    - white text or another simple fixed neutral treatment;
+    - no animation;
+    - no model-generated style/layout;
+    - no per-story creative positioning.
+
+    This is an MVP deterministic display treatment, not a locked long-term design system.
+
+14. Concatenation.
+    - After each intro/story/outro pair has normalized video+audio timelines, concatenate them in this exact structural order:
+      * standardized before-story asset(s) in declared standardized role order/placement;
+      * logical story segments in AssemblyTemplate order;
+      * standardized after-story asset(s).
+    - Use FFmpeg's concat filter or an equivalently safe current documented re-encode path suitable for inputs normalized in one filtergraph.
+    - Do not use shell `cat`, concat protocol, or an untrusted concat-list file.
+    - Produce exactly one output video stream and one output audio stream.
+
+15. Final audio normalization.
+    - Apply the engine-owned loudnorm policy to the concatenated audio output.
+    - Explicitly resample back to the intended 48 kHz output as needed by current FFmpeg loudnorm behavior.
+    - Do not implement music ducking, stingers, or multitrack mixing beyond the voiceover replacement policy in this phase.
+
+16. Output encoding.
+    Explicitly map only the final filtergraph video/audio outputs and encode:
+    - libx264;
+    - yuv420p;
+    - target 30 fps;
+    - AAC 48 kHz stereo 192k;
+    - MP4;
+    - faststart.
+
+    Do not rely on filename extension alone to choose format; explicitly select/produce MP4 where useful, especially for temporary output names.
+
+17. Temporary/work directory.
+    - Renderer work occurs only in a caller-provided engine-owned temporary directory under the story's final boundary.
+    - Display text/font staging files live there.
+    - Clean up staging files on success/failure where possible.
+    - P2 must not write/rename the durable `final/clip.mp4`; P3 owns publication.
+
+18. Renderer input validation.
+    - Reject a missing required font when display text exists before FFmpeg render activity.
+    - Reject a font supplied when no display text exists only if P3 policy chooses that strictness; keep behavior deterministic.
+    - Reject output paths outside the caller-owned render work boundary.
+    - Do not accept arbitrary extra FFmpeg flags from ClipPlan/control/CLI.
+
+19. Assembly policy identity.
+    Export one JSON-safe stable policy descriptor/version containing all render-affecting engine defaults:
+    - normalize/scale/pad strategy identity;
+    - H.264 encoder/CRF/preset/pixel format;
+    - audio codec/rate/channels/bitrate;
+    - voiceover replacement policy;
+    - loudnorm target;
+    - display treatment version.
+
+    This descriptor will participate in P3 assemblyFingerprint.
+    Do not include executable absolute path or timestamps.
+
+20. Tests must not require FFmpeg.
+    Normal deterministic tests should inject a fake process runner and inspect:
+    - preflight argv;
+    - render argv;
+    - filtergraph structure;
+    - staged display/font handling;
+    - timeout/error behavior.
+
+    Do not make `npm test` depend on a host FFmpeg installation.
+    A real FFmpeg integration smoke belongs in closeout.
+
+21. Version/test wiring.
+    - Set package.json and src/version.ts to 0.5.2.
+    - Keep package-lock.json absent.
+    - Add focused renderer tests to the normal application test path.
+
+FOCUSED TESTS
+
+Prove:
+- no child process uses shell execution;
+- capability preflight rejects missing libx264/AAC/required filters;
+- drawtext is required only when display text is present;
+- default AssemblyPlan input ordering and stream mapping are deterministic;
+- each of the four default story visual segments is trimmed to its exact target timing;
+- content segment u02 native audio is not used when u03 voiceover exists;
+- u03 audio is padded when shorter and fills exactly the 10-second content audio timeline;
+- presenter/source audio is preserved for segments without voiceover;
+- silence is synthesized when a visual/standardized input lacks audio;
+- intro/outro retain their measured durations;
+- every video is scale-to-fit + centered-pad + square-SAR + target-fps normalized;
+- final concat order is intro + template segments + outro;
+- final output maps exactly one video and one audio stream;
+- libx264/yuv420p/30fps and AAC/48k/stereo/192k/faststart are explicit;
+- final loudnorm policy is present and policy identity contains its target;
+- no untrusted display text appears directly inside the filtergraph;
+- hostile display strings cannot inject filters/labels/options;
+- font/display staging uses engine-owned filenames;
+- process timeout/non-zero/oversized logs fail with safe public errors;
+- P2 never calls ffprobe/provider/model and never publishes final/clip.mp4.
+
+REGRESSION COVERAGE
+
+Run:
+- P2 FFmpeg renderer tests;
+- P1 FFprobe/AssemblyPlan tests;
+- media-workflow/generated-media tests;
+- CLI tests;
+- AssemblyTemplate/ClipPlan tests;
+- inherited Phase 1-4 tests;
+- runner tests;
+- npm test;
+- npm run check;
+- git diff --check.
+
+PRODUCER / CONSUMER BOUNDARY
+
+Downstream-required capability:
+one deterministic technically normalized candidate render from a fully validated AssemblyPlan, with no story reinterpretation and no durable publication side effects
+
+Owning implementation/export:
+bounded no-shell FFmpeg renderer + fixed versioned assembly policy descriptor
+
+Focused proof:
+fake-process tests proving explicit stream mapping, exact template segment durations, voiceover replacement, standardized wrapping, safe display text staging, fixed output encoding, and bounded failure behavior
+
+PRESERVED BEHAVIOR
+
+- P1 remains the sole technical input/probe/AssemblyPlan authority.
+- Template timing and generated-media mapping are not re-derived in FFmpeg code.
+- Phase 4 assets are never regenerated or modified.
+- Voiceover replaces content-video native audio only where the template declares that voiceover unit on the same segment.
+- Presenter audio remains Veo-produced source audio.
+- Intro/outro preserve measured duration.
+- Display values remain display-only.
+- No Remotion.
+- No provider/model calls.
+- No publisher retrieval.
+- No global cache/database/queue.
+
+NON-GOALS
+
+Do not implement:
+- durable assembly-run/final-clip manifests;
+- CLI `assemble`;
+- final post-render FFprobe qualification;
+- final hash/provenance publication;
+- captions beyond current template display values;
+- animated graphics;
+- music/stinger policy;
+- audio ducking/multitrack mix;
+- provider media regeneration;
+- publisher retrieval;
+- live ngest fan-out;
+- automated publishing.
+
+COMPLETION
+
+Leave version 0.5.2 with a deterministic, injection-safe, no-shell FFmpeg renderer capable of producing one temporary 1080x1920/30fps H.264/AAC MP4 candidate from P1's validated AssemblyPlan, while durable final lifecycle remains deferred to P3.
