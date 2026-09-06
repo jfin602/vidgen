@@ -13,6 +13,7 @@ export type VidGenErrorCode =
   | 'assembly_template'
   | 'clip_plan'
   | 'generated_media'
+  | 'assembly'
   | 'text_model'
   | 'ngest_authentication'
   | 'ngest_http'

@@ -117,13 +117,22 @@ export interface MediaWorkflowResult {
   readonly manifestPath: string;
 }
 
-interface ValidatedWorkspace {
+/** The producer-owned, fully revalidated Phase 2/3 workspace handoff. */
+export interface ValidatedPlannedWorkspace {
   readonly directory: string;
   readonly storyRunId: string;
   readonly storyFingerprint: string;
   readonly template: AssemblyTemplate;
   readonly clipPlan: ClipPlan;
   readonly clipPlanFingerprint: string;
+}
+
+/** A media-ready Phase 4 handoff, including the already strict manifest. */
+export interface ValidatedMediaReadyWorkspace extends ValidatedPlannedWorkspace {
+  readonly mediaRun: MediaRunMetadata;
+  readonly generatedMedia: GeneratedMediaManifest;
+  readonly generatedMediaUnits: readonly GeneratedMediaUnit[];
+  readonly generatedMediaFingerprint: string;
 }
 
 interface LoadedReference {
@@ -141,7 +150,7 @@ export async function generateStoryMedia(dependencies: MediaWorkflowDependencies
   const maxReferenceBytes = positiveInteger(dependencies.maxAnchorReferenceBytes ?? DEFAULT_MAX_ANCHOR_REFERENCE_BYTES, 'Anchor-reference byte limit must be positive.');
   const maxAssetBytes = positiveInteger(dependencies.maxGeneratedAssetBytes ?? DEFAULT_MAX_GENERATED_ASSET_BYTES, 'Generated-asset byte limit must be positive.');
   const writeJson = dependencies.writeJson ?? writeJsonAtomically;
-  const workspace = await loadValidatedWorkspace(dependencies.storyDirectory, dependencies.getTemplate ?? getAssemblyTemplate);
+  const workspace = await loadValidatedPlannedWorkspace(dependencies.storyDirectory, dependencies.getTemplate ?? getAssemblyTemplate);
   const units = resolveGeneratedMediaUnits(workspace.template, workspace.clipPlan);
   const presenterUnits = units.filter((unit) => unit.role.kind === 'presenter');
   const references = await loadReferences(dependencies.anchorReferencePaths ?? [], maxReferenceBytes);
@@ -241,8 +250,16 @@ export function fingerprintClipPlan(clipPlan: ClipPlan): string {
   return sha256(canonicalJson(clipPlan));
 }
 
+/**
+ * Hashes the fully validated provider-neutral handoff. Asset byte hashes are
+ * already durable members of the manifest and are not reread here.
+ */
+export function fingerprintGeneratedMediaManifest(manifest: GeneratedMediaManifest): string {
+  return sha256(canonicalJson(manifest));
+}
+
 /** Validates the strict, provider-neutral Phase 5 manifest semantics. */
-export function validateGeneratedMediaManifest(value: unknown, workspace: Pick<ValidatedWorkspace, 'storyRunId' | 'storyFingerprint' | 'clipPlanFingerprint' | 'template'>, units: readonly GeneratedMediaUnit[]): GeneratedMediaManifest {
+export function validateGeneratedMediaManifest(value: unknown, workspace: Pick<ValidatedPlannedWorkspace, 'storyRunId' | 'storyFingerprint' | 'clipPlanFingerprint' | 'template'>, units: readonly GeneratedMediaUnit[]): GeneratedMediaManifest {
   const manifest = object(value, 'Generated-media manifest');
   rejectExtra(manifest, ['schemaVersion', 'storyRunId', 'storyFingerprint', 'clipPlanFingerprint', 'template', 'referenceImages', 'assets'], 'Generated-media manifest');
   if (manifest.schemaVersion !== GENERATED_MEDIA_SCHEMA_VERSION || manifest.storyRunId !== workspace.storyRunId || manifest.storyFingerprint !== workspace.storyFingerprint || manifest.clipPlanFingerprint !== workspace.clipPlanFingerprint) throw invalidMedia('Generated-media manifest identity does not match the workspace.');
@@ -254,7 +271,11 @@ export function validateGeneratedMediaManifest(value: unknown, workspace: Pick<V
   return { schemaVersion: GENERATED_MEDIA_SCHEMA_VERSION, storyRunId: workspace.storyRunId, storyFingerprint: workspace.storyFingerprint, clipPlanFingerprint: workspace.clipPlanFingerprint, template: { id: workspace.template.id, version: workspace.template.version }, referenceImages, assets };
 }
 
-async function loadValidatedWorkspace(directoryInput: string, getTemplate: (id: string) => AssemblyTemplate): Promise<ValidatedWorkspace> {
+/**
+ * Loads the producer-owned story and ClipPlan artifacts without creating or
+ * changing anything. Consumers must use this instead of re-parsing semantics.
+ */
+export async function loadValidatedPlannedWorkspace(directoryInput: string, getTemplate: (id: string) => AssemblyTemplate = getAssemblyTemplate): Promise<ValidatedPlannedWorkspace> {
   if (typeof directoryInput !== 'string' || directoryInput.trim().length === 0) throw new VidGenError('invalid_argument', '--story-dir requires a non-empty directory.');
   const directory = normalize(directoryInput);
   const storyRun = object(await readJson(join(directory, STORY_RUN_ARTIFACT_NAME)), 'story-run metadata');
@@ -268,6 +289,38 @@ async function loadValidatedWorkspace(directoryInput: string, getTemplate: (id: 
   return { directory, storyRunId: stringValue(storyRun, 'storyRunId'), storyFingerprint: stringValue(storyRun, 'storyFingerprint'), template, clipPlan, clipPlanFingerprint: fingerprintClipPlan(clipPlan) };
 }
 
+/**
+ * Proves that Phase 4 reached terminal success and returns its strict
+ * provider-neutral handoff. It deliberately does not read or regenerate asset
+ * bytes; the assembly consumer performs that current-file check before use.
+ */
+export async function loadValidatedMediaReadyWorkspace(
+  directoryInput: string,
+  getTemplate: (id: string) => AssemblyTemplate = getAssemblyTemplate,
+): Promise<ValidatedMediaReadyWorkspace> {
+  const workspace = await loadValidatedPlannedWorkspace(directoryInput, getTemplate);
+  const mediaRun = validateMediaRunMetadata(
+    object(await readJson(join(workspace.directory, MEDIA_RUN_ARTIFACT_NAME)), 'Media-run metadata'),
+  );
+  if (mediaRun.storyRunId !== workspace.storyRunId || mediaRun.storyFingerprint !== workspace.storyFingerprint
+    || mediaRun.clipPlanFingerprint !== workspace.clipPlanFingerprint
+    || !sameTemplate(mediaRun.template, { id: workspace.template.id, version: workspace.template.version })) {
+    throw invalidMedia('Media-run metadata identity does not match the workspace.');
+  }
+  if (mediaRun.status !== 'media_ready') throw invalidMedia('Media-run is not media_ready.');
+  const units = resolveGeneratedMediaUnits(workspace.template, workspace.clipPlan);
+  const generatedMedia = validateGeneratedMediaManifest(
+    await readJson(join(workspace.directory, GENERATED_MEDIA_ARTIFACT_NAME)), workspace, units,
+  );
+  return {
+    ...workspace,
+    mediaRun,
+    generatedMedia,
+    generatedMediaUnits: units,
+    generatedMediaFingerprint: fingerprintGeneratedMediaManifest(generatedMedia),
+  };
+}
+
 function validateStoryRun(value: Record<string, unknown>): void {
   rejectExtra(value, ['storyRunId', 'status', 'startedAt', 'endedAt', 'engineVersion', 'articleId', 'storyFingerprint', 'sourceInputFingerprint', 'storyInputArtifact', 'template', 'generatedAssetRoles', 'standardizedAssetRoles', 'failure'], 'Story-run metadata');
   if (value.status !== 'story_ready' || !isSafeId(value.storyRunId) || !isHash(value.storyFingerprint) || !isTemplate(value.template)) throw invalidMedia('Story workspace is not a valid story_ready workspace.');
@@ -275,6 +328,24 @@ function validateStoryRun(value: Record<string, unknown>): void {
 function validateClipRun(value: Record<string, unknown>): void {
   rejectExtra(value, ['storyRunId', 'status', 'startedAt', 'endedAt', 'engineVersion', 'storyFingerprint', 'template', 'provider', 'configuredModel', 'returnedModel', 'requestId', 'clipPlanArtifact', 'failure'], 'ClipPlan-run metadata');
   if (value.status !== 'clip_plan_ready' || !isSafeId(value.storyRunId) || !isHash(value.storyFingerprint) || !isTemplate(value.template) || value.clipPlanArtifact !== CLIP_PLAN_ARTIFACT_NAME) throw invalidMedia('Workspace is not a valid clip_plan_ready workspace.');
+}
+
+function validateMediaRunMetadata(value: Record<string, unknown>): MediaRunMetadata {
+  rejectExtra(value, ['schemaVersion', 'storyRunId', 'status', 'startedAt', 'endedAt', 'engineVersion', 'storyFingerprint', 'clipPlanFingerprint', 'template', 'referenceImages', 'units', 'generatedUnitCount', 'reusedUnitCount', 'generationOperationCount', 'failure'], 'Media-run metadata');
+  if (value.schemaVersion !== GENERATED_MEDIA_SCHEMA_VERSION || !isSafeId(value.storyRunId)
+    || (value.status !== 'running' && value.status !== 'media_ready' && value.status !== 'failed')
+    || typeof value.startedAt !== 'string' || value.startedAt.trim().length === 0
+    || typeof value.engineVersion !== 'string' || value.engineVersion.trim().length === 0
+    || (value.status === 'media_ready' && (typeof value.endedAt !== 'string' || value.endedAt.trim().length === 0))
+    || !isHash(value.storyFingerprint) || !isHash(value.clipPlanFingerprint) || !isTemplate(value.template)
+    || !Array.isArray(value.referenceImages) || !Array.isArray(value.units)
+    || !Number.isSafeInteger(value.generatedUnitCount) || (value.generatedUnitCount as number) < 0
+    || !Number.isSafeInteger(value.reusedUnitCount) || (value.reusedUnitCount as number) < 0
+    || !Number.isSafeInteger(value.generationOperationCount) || (value.generationOperationCount as number) < 0
+    || value.units.length !== (value.generatedUnitCount as number) + (value.reusedUnitCount as number)) {
+    throw invalidMedia('Media-run metadata is malformed.');
+  }
+  return value as MediaRunMetadata;
 }
 
 async function loadReferences(paths: readonly string[], maxBytes: number): Promise<readonly LoadedReference[]> {
@@ -297,7 +368,7 @@ async function loadReferences(paths: readonly string[], maxBytes: number): Promi
   return loaded;
 }
 
-function effectiveFingerprint(workspace: ValidatedWorkspace, unit: GeneratedMediaUnit, references: readonly ReferenceImageIdentity[], video?: VideoGenerationClient, speech?: SpeechGenerationClient): string {
+function effectiveFingerprint(workspace: ValidatedPlannedWorkspace, unit: GeneratedMediaUnit, references: readonly ReferenceImageIdentity[], video?: VideoGenerationClient, speech?: SpeechGenerationClient): string {
   const isSpeech = unit.role.kind === 'voiceover';
   const client = isSpeech ? speech : video;
   if (client === undefined) throw new VidGenError('configuration', 'Required generated-media client is unavailable.');
@@ -317,7 +388,7 @@ async function persistGeneratedResult(directory: string, unit: GeneratedMediaUni
   return { unitId: unit.unitId, segment: unit.segment, role: unit.role, effectiveGenerationInputFingerprint: fingerprint, status: 'ready', provenance: 'generated', assetPath, sha256: sha256(result.bytes), byteSize: result.bytes.byteLength, mimeType: result.mimeType, provider, configuredModel, returnedModel: result.model, ...(unit.role.kind === 'voiceover' ? { voice: (result as SpeechGenerationResult).voice } : {}), ...(result.requestId === undefined ? {} : { requestId: result.requestId }), ...(result.operationId === undefined ? {} : { operationId: result.operationId }), ...('operationIds' in result && result.operationIds !== undefined ? { operationIds: result.operationIds } : {}), ...('generationOperationCount' in result && result.generationOperationCount !== undefined ? { generationOperationCount: result.generationOperationCount } : {}), ...(result.durationSeconds === undefined ? {} : { durationSeconds: result.durationSeconds }) };
 }
 
-function reusablePriorRecord(prior: unknown, workspace: ValidatedWorkspace, unit: GeneratedMediaUnit, fingerprint: string): MediaUnitRecord | undefined {
+function reusablePriorRecord(prior: unknown, workspace: ValidatedPlannedWorkspace, unit: GeneratedMediaUnit, fingerprint: string): MediaUnitRecord | undefined {
   // A failed attempt may still have honestly persisted ready records from
   // earlier units. Their own identity and byte checks remain the authority.
   if (prior === undefined || !isRecord(prior) || (prior.status !== 'media_ready' && prior.status !== 'failed' && prior.status !== 'running') || prior.storyRunId !== workspace.storyRunId || prior.storyFingerprint !== workspace.storyFingerprint || prior.clipPlanFingerprint !== workspace.clipPlanFingerprint || !sameTemplate(prior.template, { id: workspace.template.id, version: workspace.template.version }) || !Array.isArray(prior.units)) return undefined;
