@@ -137,8 +137,13 @@ export interface VideoGenerationResult {
   readonly model: string;
   readonly requestId?: string;
   readonly operationId?: string;
+  /** Ordered provider operation identifiers, including deterministic extensions. */
+  readonly operationIds?: readonly string[];
+  /** Number of provider generation operations used to produce these raw bytes. */
+  readonly generationOperationCount?: number;
   readonly mimeType: string;
   readonly bytes: Uint8Array;
+  /** Raw provider coverage, not a claim about final assembled media timing. */
   readonly durationSeconds?: number;
 }
 
