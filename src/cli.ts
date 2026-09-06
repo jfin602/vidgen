@@ -7,6 +7,7 @@ import {
   createStoryWorkspace,
 } from './app/story-workspace.ts';
 import { planStoryWorkspace } from './app/clip-plan-workflow.ts';
+import { generateStoryMedia } from './app/media-workflow.ts';
 import { isVidGenError, VidGenError } from './core/error.ts';
 
 export const helpText = `VidGen
@@ -16,12 +17,14 @@ Usage:
   vidgen run [--artifacts-root <directory>]
   vidgen story --input-file <manifest.json> --article-id <articleId> [--template <templateId>] [--artifacts-root <directory>]
   vidgen plan --input-file <manifest.json> --article-id <articleId> [--template <templateId>] [--artifacts-root <directory>]
+  vidgen media --story-dir <directory> [--anchor-reference <image-path> ...]
 
 Available commands:
   help, --help, -h  Show this help message.
   run              Acquire one manifest and persist its CanonicalInput.
   story            Create one selected story development workspace from a local manifest.
   plan             Create one selected story workspace and generate its ClipPlan.
+  media            Generate raw story-local media from an existing ClipPlan.
 
 Run options:
   --artifacts-root <directory>  Write runs here (default: ${DEFAULT_ARTIFACTS_ROOT}).
@@ -38,6 +41,12 @@ Plan options:
   --template <templateId>       Assembly template (default: default-news-40s).
   --artifacts-root <directory>  Write story workspaces here (default: ${DEFAULT_STORY_ARTIFACTS_ROOT}).
   Model credentials and model selection are read from the runtime environment.
+
+Media options:
+  --story-dir <directory>          Required existing planned story workspace.
+  --anchor-reference <image-path>  Approved local presenter image; repeat up to three times.
+  Provider credentials, models, and voice are read from the runtime environment.
+  Media writes raw generated assets only; FFmpeg assembly happens later.
 `;
 
 export interface HelpCommand {
@@ -65,7 +74,13 @@ export interface PlanCommand {
   readonly artifactsRoot?: string;
 }
 
-export type CliCommand = HelpCommand | RunCommand | StoryCommand | PlanCommand;
+export interface MediaCommand {
+  readonly kind: 'media';
+  readonly storyDirectory: string;
+  readonly anchorReferencePaths: readonly string[];
+}
+
+export type CliCommand = HelpCommand | RunCommand | StoryCommand | PlanCommand | MediaCommand;
 
 export interface CliOutput {
   writeStdout(text: string): void;
@@ -105,6 +120,10 @@ export function parseCliArgs(args: readonly string[]): CliCommand {
     return { ...parseStoryCommand(rest, 'Plan'), kind: 'plan' };
   }
 
+  if (command === 'media') {
+    return parseMediaCommand(rest);
+  }
+
   throw invalidArgument(`Unknown command: ${JSON.stringify(command)}.`);
 }
 
@@ -112,6 +131,7 @@ export interface CliDependencies {
   readonly runInput?: typeof runPhase1Input;
   readonly createStory?: typeof createStoryWorkspace;
   readonly planStory?: typeof planStoryWorkspace;
+  readonly generateMedia?: typeof generateStoryMedia;
 }
 
 export async function runCli(
@@ -154,6 +174,20 @@ export async function runCli(
       return 0;
     }
 
+    if (command.kind === 'media') {
+      const result = await (dependencies.generateMedia ?? generateStoryMedia)({
+        storyDirectory: command.storyDirectory,
+        anchorReferencePaths: command.anchorReferencePaths,
+      });
+      output.writeStdout(
+        `Story ${result.storyRunId} is media_ready.\n`
+        + `generated: ${result.generatedUnitCount}\n`
+        + `reused: ${result.reusedUnitCount}\n`
+        + `generatedMedia: ${result.manifestPath}\n`,
+      );
+      return 0;
+    }
+
     const result = await (dependencies.createStory ?? createStoryWorkspace)({
       inputFile: command.inputFile,
       articleId: command.articleId,
@@ -175,6 +209,31 @@ export async function runCli(
     output.writeStderr(`Run failed [${category}]: ${message} Run "vidgen --help" for usage.\n`);
     return 2;
   }
+}
+
+function parseMediaCommand(args: readonly string[]): MediaCommand {
+  let storyDirectory: string | undefined;
+  const anchorReferencePaths: string[] = [];
+  for (let index = 0; index < args.length;) {
+    const option = args[index];
+    const value = args[index + 1];
+    if (option !== '--story-dir' && option !== '--anchor-reference') {
+      throw invalidArgument(`Unknown media argument: ${JSON.stringify(option)}.`);
+    }
+    if (value === undefined || value.trim().length === 0) {
+      throw invalidArgument(`${option} requires exactly one value.`);
+    }
+    if (option === '--story-dir') {
+      if (storyDirectory !== undefined) throw invalidArgument('Media option --story-dir must not be repeated.');
+      storyDirectory = value;
+    } else {
+      if (anchorReferencePaths.length >= 3) throw invalidArgument('Media accepts at most three --anchor-reference values.');
+      anchorReferencePaths.push(value);
+    }
+    index += 2;
+  }
+  if (storyDirectory === undefined) throw invalidArgument('Media requires --story-dir <directory>.');
+  return { kind: 'media', storyDirectory, anchorReferencePaths };
 }
 
 function parseRunCommand(args: readonly string[]): RunCommand {

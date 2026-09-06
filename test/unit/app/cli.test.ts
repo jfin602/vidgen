@@ -33,6 +33,11 @@ test('CLI parses its help, run, manual story, and manual planning surfaces', () 
     templateId: 'default-news-40s',
     artifactsRoot: 'tmp/stories',
   });
+  assert.deepEqual(parseCliArgs([
+    'media', '--story-dir', 'tmp/stories/planned', '--anchor-reference', 'anchor-a.png', '--anchor-reference', 'anchor-b.png',
+  ]), {
+    kind: 'media', storyDirectory: 'tmp/stories/planned', anchorReferencePaths: ['anchor-a.png', 'anchor-b.png'],
+  });
 });
 
 test('CLI renders help without performing work', async () => {
@@ -75,6 +80,24 @@ test('CLI rejects unknown commands and invalid arguments deterministically', () 
     (error: unknown) => error instanceof VidGenError
       && error.publicMessage === '--artifacts-root requires exactly one directory argument.',
   );
+  assert.throws(() => parseCliArgs(['media']), /Media requires --story-dir/);
+  assert.throws(() => parseCliArgs(['media', '--story-dir', 'story', '--anchor-reference', 'a', '--anchor-reference', 'b', '--anchor-reference', 'c', '--anchor-reference', 'd']), /at most three/);
+});
+
+test('CLI delegates media generation and reports safe counts', async () => {
+  const stdout: string[] = [];
+  const code = await runCli(['media', '--story-dir', 'workspace', '--anchor-reference', 'anchor.png'], {
+    writeStdout: (text) => stdout.push(text), writeStderr: () => undefined,
+  }, {
+    generateMedia: async (dependencies) => {
+      assert.deepEqual(dependencies.anchorReferencePaths, ['anchor.png']);
+      return { status: 'media_ready', storyRunId: 'media-123', generatedUnitCount: 2, reusedUnitCount: 3, manifestPath: 'workspace/generated-media.json' };
+    },
+  });
+  assert.equal(code, 0);
+  assert.match(stdout.join(''), /media_ready/);
+  assert.match(stdout.join(''), /generated: 2/);
+  assert.match(helpText, /raw generated assets/i);
 });
 
 test('CLI delegates manual planning and exposes the persisted ClipPlan location', async () => {
