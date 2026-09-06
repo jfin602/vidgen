@@ -8,7 +8,7 @@ Phase 4 owner closeout: 0.4.4
 Phase 5 owner closeout: 0.5.3
 Current baseline: 0.5.3
 
-This roadmap was rebased on 2026-09-05 after Phase 1. The original edition/newscast phases were intentionally removed in favor of the smallest useful single-story clip pipeline.
+This roadmap was rebased on 2026-09-05 after Phase 1. The original edition/newscast phases were intentionally removed in favor of a single-story clip engine. On 2026-09-06 the owner prioritized a still simpler presenter-headline production path before live fan-out while explicitly preserving the implemented cinematic template pipeline.
 
 ## Cross-phase MVP constraints
 
@@ -19,14 +19,16 @@ The roadmap assumes:
 - manual sample input using VidGen's validated post-adapter input shape;
 - each supplied ngest story is already production-worthy;
 - no VidGen ranking, clustering, or story-selection stage;
-- one story = one independent artifact/package boundary;
-- one validated ClipPlan creative stage;
-- declarative assembly templates own structure/timing/media-slot requirements;
-- independently optional standardized premade intro/outro wrapper assets under the approved post-Phase-5 correction; omission inserts no placeholder media;
+- one story remains one independent production boundary;
+- StoryInput is the shared boundary for downstream production;
+- the Phase 6 simple path branches directly from StoryInput and does not require AssemblyTemplate, ClipPlan, cinematic GeneratedMediaUnit resolution, or cinematic AssemblyPlan;
+- the preserved cinematic path continues to use one validated ClipPlan creative stage and declarative assembly templates for structure/timing/media-slot requirements;
+- independently optional standardized premade intro/outro wrapper assets remain part of the preserved cinematic path under the approved post-Phase-5 correction; omission inserts no placeholder media;
 - Google-first generated media behind thin replaceable adapters;
 - Veo as the initial presenter/video direction;
-- FFmpeg for MVP assembly and finishing;
+- FFmpeg/FFprobe for deterministic finishing/qualification of the simple path and assembly/qualification of the preserved cinematic path;
 - 1080x1920 9:16 H.264 MP4 at 30 fps as the initial output target;
+- simple-path `maxSeconds` configurable from 4 through 20 seconds inclusive as a hard output ceiling, not a target duration;
 - no Remotion, approval state machine, global cache, database, queue, or distributed runtime in the initial pipeline.
 
 No downstream stage may consume raw/unvalidated model output.
@@ -251,20 +253,63 @@ Phase 5 non-goals remained:
 
 ## Approved post-Phase-5 corrections
 
-Before ordinary Phase 6 work, the owner approved bounded Phase 5 corrections:
+The owner approved these bounded Phase 5 corrections:
 
 1. `c5-mvp-refactor` — COMPLETE. Behavior-preserving simplification only; observable product behavior, durable artifact meanings, trust boundaries, retry/failure semantics, and provider/render behavior were preserved.
 2. `c5-optional-assets` — COMPLETE. Intro and outro are independently optional deterministic wrapper assets. Omission inserts no placeholder media or silence; only supplied wrappers are probed/qualified, included in expected duration and assembly identity, and recorded in durable provenance. Social-first output may begin directly with the story hook.
-3. `c5-config-fix` — OWNER-APPROVED / PLANNED. Transitional live-development ingress will consume ngest's existing authenticated Distribution v1 Profile endpoint using base URL + Profile key + bearer configuration, validate and adapt the complete bounded snapshot into the existing VidGen input shape with neutral VidGen-owned controls, and add an Article-URL helper that writes validated one-Article sample fixtures.
+3. `c5-config-fix` — OWNER-APPROVED / DEFERRED. Transitional live-development ingress may later consume ngest's existing authenticated Distribution v1 Profile endpoint using base URL + Profile key + bearer configuration, validate and adapt the complete bounded snapshot into the existing VidGen input shape with neutral VidGen-owned controls, and add an Article-URL helper that writes validated one-Article sample fixtures. It no longer blocks Phase 6.
 
 The Distribution-v1 path is transitional. It must remain isolated behind the ngest adapter so the future dedicated Profile-bound VidGen feed-plus-controls endpoint can replace it without changing downstream CanonicalInput, StoryInput, provider, or assembly contracts.
 
-## Phase 6 — Live ngest fan-out and operational hardening
+## Phase 6 — Simple presenter headline clips
 
-Status: NEXT ROADMAP PHASE / AFTER C5-CONFIG-FIX
+Status: NEXT ROADMAP PHASE
 
 Goal:
-Connect the proven story pipeline back to live curated ngest input and process supplied stories independently.
+Add the smallest useful production path for the current client requirement while preserving the completed cinematic pipeline unchanged.
+
+Conceptual contract:
+
+    StoryInput
+        |
+        v
+  bounded presenter copy
+        |
+        v
+  one presenter video
+        |
+        v
+ deterministic lower third
+   headline + source
+        |
+        v
+ qualification / finishing
+        |
+        v
+   MP4 + JSON sidecar
+
+Required direction:
+- one continuous presenter clip per selected story;
+- no B-roll, separate TTS voiceover, standardized intro/outro, ClipPlan, AssemblyTemplate, cinematic GeneratedMediaUnit resolution, or cinematic AssemblyPlan requirement;
+- headline and source display name rendered deterministically after generation rather than delegated to model-generated on-screen text;
+- configurable `maxSeconds` from 4 through 20 seconds inclusive;
+- `maxSeconds` is a hard final-output ceiling, not a target duration;
+- prefer the shortest useful provider-supported duration that does not exceed the ceiling;
+- keep provider-specific duration granularity behind the provider boundary;
+- fail rather than publish a qualified final clip whose duration exceeds the configured ceiling;
+- pair each final MP4 with article/provenance JSON containing the governed Article metadata and enough production identity to inspect or publish the clip safely;
+- reuse existing CanonicalInput/StoryInput, provider boundaries, local reference-image safety, FFmpeg/FFprobe, hashing, and atomic-publication patterns where appropriate;
+- preserve existing `vidgen story`, `vidgen plan`, `vidgen media`, and `vidgen assemble` behavior and cinematic durable artifact meanings;
+- no live fan-out, publisher retrieval, database/queue work, automated publishing, or cinematic refactor as part of this phase.
+
+Phase 6 planning owns the exact CLI spelling, presenter-copy contract, provider-duration capability mapping, runtime anchor/font configuration, output naming, and durable JSON sidecar schema.
+
+## Phase 7 — Live ngest fan-out and operational hardening
+
+Status: DEFERRED UNTIL AFTER PHASE 6
+
+Goal:
+Connect the proven production paths back to live curated ngest input and process supplied stories independently through the shared CanonicalInput/StoryInput boundary.
 
 Conceptual contract:
 
@@ -277,23 +322,24 @@ Conceptual contract:
         v     v     v
      story A story B story C
         |     |     |
-        + independent story pipelines
+        + independent selected production paths
 
 Likely concerns:
-- complete one owner-media generated story render, final post-probe, and human playback review before treating the Phase 5 assembly path as fully operationally qualified; the deployment VPS has already qualified FFmpeg/FFprobe, libx264, AAC, and required filter availability;
-- add bounded publisher-page retrieval fallback before live operation if real ngest stories can lack sufficient normalized context; keep broader web research deferred;
-- live authentication/integration qualification of the transitional adapter and later dedicated endpoint as applicable;
+- resume or complete `c5-config-fix` if the transitional Distribution-v1 development adapter is still needed;
+- complete live authentication/integration qualification of the applicable ngest adapter;
 - story fan-out without editorial selection;
 - sequential processing first unless workload evidence justifies concurrency;
 - failure isolation between stories;
 - retries/resume;
-- story-local provider-job/asset recovery;
+- provider-job/asset recovery;
 - idempotency and duplicate-production policy;
 - artifact retention;
 - CLI observability;
 - provider spend limits;
 - secret-leak review;
-- end-to-end provenance.
+- end-to-end provenance;
+- add bounded publisher-page retrieval fallback only if real governed stories demonstrate insufficient normalized context;
+- retain separate runtime qualification evidence for both the simple and cinematic paths rather than treating one as proof of the other.
 
 ## Deferred until evidence requires them
 
@@ -313,11 +359,12 @@ Likely concerns:
 
 ## Immediate next action
 
-Run the owner-approved correction stack:
+Plan the new Phase 6 simple presenter-headline path:
 
-    npm run codex:phase:validate -- c5-config-fix
-    npm run codex:phase -- c5-config-fix
+    /prompt-ass
+    -> /prompt-plan
+    -> /prompt-write p6
 
-The correction keeps package/engine version 0.5.3 unchanged. It may resolve bounded Distribution-v1 transport acquisition and sample-fixture generation, but it must not implement Phase 6 production fan-out or silently promote the transitional Distribution endpoint into the permanent VidGen integration contract.
+Do not require `c5-config-fix` before Phase 6. It remains an approved deferred ingress correction and may be resumed later.
 
-After `c5-config-fix` closes, complete the first real owner-media story qualification on the deployment VPS, then proceed to ordinary Phase 6 planning for live story fan-out and operational hardening.
+Phase 6 must explicitly regression-protect the completed cinematic pipeline and must not claim live provider/render qualification unless the corresponding execution was actually observed.
