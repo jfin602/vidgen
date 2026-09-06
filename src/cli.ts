@@ -8,6 +8,7 @@ import {
 } from './app/story-workspace.ts';
 import { planStoryWorkspace } from './app/clip-plan-workflow.ts';
 import { generateStoryMedia } from './app/media-workflow.ts';
+import { assembleStoryWorkspace } from './app/assembly-workflow.ts';
 import { isVidGenError, VidGenError } from './core/error.ts';
 
 export const helpText = `VidGen
@@ -18,6 +19,7 @@ Usage:
   vidgen story --input-file <manifest.json> --article-id <articleId> [--template <templateId>] [--artifacts-root <directory>]
   vidgen plan --input-file <manifest.json> --article-id <articleId> [--template <templateId>] [--artifacts-root <directory>]
   vidgen media --story-dir <directory> [--anchor-reference <image-path> ...]
+  vidgen assemble --story-dir <directory> --intro <intro-video-path> --outro <outro-video-path> [--font-file <font-path>]
 
 Available commands:
   help, --help, -h  Show this help message.
@@ -25,6 +27,7 @@ Available commands:
   story            Create one selected story development workspace from a local manifest.
   plan             Create one selected story workspace and generate its ClipPlan.
   media            Generate raw story-local media from an existing ClipPlan.
+  assemble         Assemble an existing media-ready story and write final/clip.mp4.
 
 Run options:
   --artifacts-root <directory>  Write runs here (default: ${DEFAULT_ARTIFACTS_ROOT}).
@@ -47,6 +50,13 @@ Media options:
   --anchor-reference <image-path>  Approved local presenter image; repeat up to three times.
   Provider credentials, models, and voice are read from the runtime environment.
   Media writes raw generated assets only; FFmpeg assembly happens later.
+
+Assemble options:
+  --story-dir <directory>  Required existing media-ready story workspace.
+  --intro <video-path>     Required local standardized intro video.
+  --outro <video-path>     Required local standardized outro video.
+  --font-file <font-path>  Required only when the selected assembly has display text.
+  Assemble consumes an existing media-ready story and writes final/clip.mp4.
 `;
 
 export interface HelpCommand {
@@ -80,7 +90,15 @@ export interface MediaCommand {
   readonly anchorReferencePaths: readonly string[];
 }
 
-export type CliCommand = HelpCommand | RunCommand | StoryCommand | PlanCommand | MediaCommand;
+export interface AssembleCommand {
+  readonly kind: 'assemble';
+  readonly storyDirectory: string;
+  readonly introPath: string;
+  readonly outroPath: string;
+  readonly fontPath?: string;
+}
+
+export type CliCommand = HelpCommand | RunCommand | StoryCommand | PlanCommand | MediaCommand | AssembleCommand;
 
 export interface CliOutput {
   writeStdout(text: string): void;
@@ -124,6 +142,10 @@ export function parseCliArgs(args: readonly string[]): CliCommand {
     return parseMediaCommand(rest);
   }
 
+  if (command === 'assemble') {
+    return parseAssembleCommand(rest);
+  }
+
   throw invalidArgument(`Unknown command: ${JSON.stringify(command)}.`);
 }
 
@@ -132,6 +154,7 @@ export interface CliDependencies {
   readonly createStory?: typeof createStoryWorkspace;
   readonly planStory?: typeof planStoryWorkspace;
   readonly generateMedia?: typeof generateStoryMedia;
+  readonly assembleStory?: typeof assembleStoryWorkspace;
 }
 
 export async function runCli(
@@ -188,6 +211,23 @@ export async function runCli(
       return 0;
     }
 
+    if (command.kind === 'assemble') {
+      const result = await (dependencies.assembleStory ?? assembleStoryWorkspace)({
+        storyDirectory: command.storyDirectory,
+        introPath: command.introPath,
+        outroPath: command.outroPath,
+        ...(command.fontPath === undefined ? {} : { fontPath: command.fontPath }),
+      });
+      output.writeStdout(
+        `Story ${result.storyRunId} is final_ready.\n`
+        + `assemblyRunId: ${result.assemblyRunId}\n`
+        + `final: ${result.finalPath}\n`
+        + `sha256: ${result.finalSha256}\n`
+        + `durationSeconds: ${result.durationSeconds}\n`,
+      );
+      return 0;
+    }
+
     const result = await (dependencies.createStory ?? createStoryWorkspace)({
       inputFile: command.inputFile,
       articleId: command.articleId,
@@ -234,6 +274,26 @@ function parseMediaCommand(args: readonly string[]): MediaCommand {
   }
   if (storyDirectory === undefined) throw invalidArgument('Media requires --story-dir <directory>.');
   return { kind: 'media', storyDirectory, anchorReferencePaths };
+}
+
+function parseAssembleCommand(args: readonly string[]): AssembleCommand {
+  const values: Partial<Record<'storyDirectory' | 'introPath' | 'outroPath' | 'fontPath', string>> = {};
+  const optionNames: Record<string, keyof typeof values> = {
+    '--story-dir': 'storyDirectory', '--intro': 'introPath', '--outro': 'outroPath', '--font-file': 'fontPath',
+  };
+  for (let index = 0; index < args.length; index += 2) {
+    const option = args[index];
+    const key = optionNames[option ?? ''];
+    if (key === undefined) throw invalidArgument(`Unknown assemble argument: ${JSON.stringify(option)}.`);
+    if (values[key] !== undefined) throw invalidArgument(`Assemble option ${option} must not be repeated.`);
+    const value = args[index + 1];
+    if (value === undefined || value.trim().length === 0) throw invalidArgument(`${option} requires exactly one non-empty value.`);
+    values[key] = value;
+  }
+  if (values.storyDirectory === undefined) throw invalidArgument('Assemble requires --story-dir <directory>.');
+  if (values.introPath === undefined) throw invalidArgument('Assemble requires --intro <intro-video-path>.');
+  if (values.outroPath === undefined) throw invalidArgument('Assemble requires --outro <outro-video-path>.');
+  return { kind: 'assemble', storyDirectory: values.storyDirectory, introPath: values.introPath, outroPath: values.outroPath, ...(values.fontPath === undefined ? {} : { fontPath: values.fontPath }) };
 }
 
 function parseRunCommand(args: readonly string[]): RunCommand {

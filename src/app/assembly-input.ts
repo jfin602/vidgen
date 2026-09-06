@@ -55,6 +55,8 @@ export interface AssemblyPlan {
   readonly storyFingerprint: string;
   readonly clipPlanFingerprint: string;
   readonly generatedMediaFingerprint: string;
+  /** Durable template identity retained for final assembly provenance. */
+  readonly template: { readonly id: string; readonly version: string };
   readonly output: AssemblyTemplateOutput;
   readonly standardizedAssets: {
     readonly intro: QualifiedMediaFile;
@@ -155,6 +157,7 @@ export function buildAssemblyPlan(
     storyFingerprint: workspace.storyFingerprint,
     clipPlanFingerprint: workspace.clipPlanFingerprint,
     generatedMediaFingerprint: workspace.generatedMediaFingerprint,
+    template: { id: workspace.template.id, version: workspace.template.version },
     output: workspace.template.output,
     standardizedAssets,
     storyDurationSeconds,

@@ -4,7 +4,7 @@ import test from 'node:test';
 import { helpText, parseCliArgs, runCli } from '../../../src/cli.ts';
 import { VidGenError } from '../../../src/core/error.ts';
 
-test('CLI parses its help, run, manual story, and manual planning surfaces', () => {
+test('CLI parses its help, run, manual story, planning, media, and assembly surfaces', () => {
   assert.deepEqual(parseCliArgs([]), { kind: 'help' });
   assert.deepEqual(parseCliArgs(['help']), { kind: 'help' });
   assert.deepEqual(parseCliArgs(['--help']), { kind: 'help' });
@@ -22,6 +22,9 @@ test('CLI parses its help, run, manual story, and manual planning surfaces', () 
     articleId: 'article-2',
     templateId: 'default-news-40s',
     artifactsRoot: 'tmp/stories',
+  });
+  assert.deepEqual(parseCliArgs(['assemble', '--story-dir', 'tmp/stories/ready', '--intro', 'intro.mp4', '--outro', 'outro.mp4', '--font-file', 'font.ttf']), {
+    kind: 'assemble', storyDirectory: 'tmp/stories/ready', introPath: 'intro.mp4', outroPath: 'outro.mp4', fontPath: 'font.ttf',
   });
   assert.deepEqual(parseCliArgs([
     'plan', '--input-file', 'fixture.json', '--article-id', 'article-2',
@@ -81,7 +84,22 @@ test('CLI rejects unknown commands and invalid arguments deterministically', () 
       && error.publicMessage === '--artifacts-root requires exactly one directory argument.',
   );
   assert.throws(() => parseCliArgs(['media']), /Media requires --story-dir/);
+  assert.throws(() => parseCliArgs(['assemble', '--story-dir', 'story', '--intro', 'intro.mp4']), /Assemble requires --outro/);
   assert.throws(() => parseCliArgs(['media', '--story-dir', 'story', '--anchor-reference', 'a', '--anchor-reference', 'b', '--anchor-reference', 'c', '--anchor-reference', 'd']), /at most three/);
+});
+
+test('CLI delegates assembly and reports only final safe facts', async () => {
+  const stdout: string[] = [];
+  const code = await runCli(['assemble', '--story-dir', 'workspace', '--intro', 'intro.mp4', '--outro', 'outro.mp4'], { writeStdout: (text) => stdout.push(text), writeStderr: () => undefined }, {
+    assembleStory: async (input) => {
+      assert.deepEqual(input, { storyDirectory: 'workspace', introPath: 'intro.mp4', outroPath: 'outro.mp4' });
+      return { status: 'final_ready', storyRunId: 'story-123', assemblyRunId: 'assembly-123', finalPath: 'final/clip.mp4', finalSha256: 'a'.repeat(64), durationSeconds: 45 };
+    },
+  });
+  assert.equal(code, 0);
+  assert.match(stdout.join(''), /final_ready/);
+  assert.match(stdout.join(''), /final\/clip\.mp4/);
+  assert.match(helpText, /consumes an existing media-ready story/i);
 });
 
 test('CLI delegates media generation and reports safe counts', async () => {
