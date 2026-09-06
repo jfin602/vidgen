@@ -4,7 +4,8 @@ Status: CURRENT MVP DIRECTION / PROVISIONAL PHASE BOUNDARIES
 Phase 1 completion: 0.1.5
 Phase 2 completion: 0.2.5
 Phase 3 owner closeout: 0.3.4
-Current baseline: 0.4.0
+Phase 4 owner closeout: 0.4.4
+Current baseline: 0.5.0
 
 This roadmap was rebased on 2026-09-05 after Phase 1. The original edition/newscast phases were intentionally removed in favor of the smallest useful single-story clip pipeline.
 
@@ -172,7 +173,7 @@ There is no FeedAnalysis, EditorialPlan, separate Script, or ProductionPlan stag
 
 ## Phase 4 — Generated story media
 
-Status: CURRENT / PLANNING BASELINE 0.4.0
+Status: COMPLETE / OWNER-CLOSED AT 0.4.4
 
 Goal:
 Realize the generated media required by the selected template without building a generalized media platform.
@@ -183,28 +184,36 @@ For the default template, the target is approximately:
 - off-screen voiceover for the content clip;
 - anchor/presenter clip #2 when required by the locked template.
 
-Likely concerns:
-- deterministic resolution of generated asset-role inputs from AssemblyTemplate relationships plus ClipPlan slot values;
-- for the default template: opening-anchor <- hook + headline; content-video/content-voiceover <- narration; supporting-anchor <- supporting-information + closing;
-- thin provider-neutral request/result contracts;
-- Veo presenter generation from scripted text plus approved/reference imagery;
-- Veo or qualified generated-video path for the content clip;
-- selection/qualification of the off-screen narration/voiceover mechanism before implementation;
-- provider job IDs/status where necessary;
-- bounded retries/timeouts;
-- malformed/partial provider responses;
-- asset identity/hashes;
-- effective-generation-input identity for story-local reuse;
-- provider cost observability;
-- source/provenance metadata;
-- mocked orchestration proof;
-- limited live-provider qualification.
+Implemented capabilities:
+- deterministic GeneratedMediaUnit resolution with one unit per template segment/generated-role reference;
+- stable engine-owned unit IDs plus exact segment timing/role/content linkage;
+- strict durable ClipPlan validation against expected storyFingerprint + template identity;
+- provider-neutral video and speech generation client/result contracts;
+- approved in-memory presenter reference-image values with SHA-256 identity and no remote URL boundary;
+- Google Veo REST adapter for presenter/content video with bounded operation polling, reference-image support, deterministic extension, prompt-safe failures, and immediate bounded media download;
+- Google Gemini TTS REST adapter for exact template-declared voiceover text with bounded response/audio handling and deterministic PCM-to-WAV wrapping;
+- manual `vidgen media` CLI workflow operating only on an existing successful planned story workspace;
+- explicit local presenter-reference loading with signature validation, byte bounds, safe provenance, and no publisher image retrieval;
+- deterministic clipPlanFingerprint and effective-generation-input fingerprints;
+- atomic story-local generated asset persistence;
+- resumable `media-run.json` state with per-unit progress/provenance;
+- strict provider-neutral `generated-media.json` + JSON Schema as the Phase 5 handoff;
+- selective story-local reuse requiring matching generation identity plus current file hash/size;
+- fail-honest partial-generation/resume behavior;
+- closeout hardening for reference-file read-time size checks and terminal success-metadata failure invalidation.
+
+Owner closeout note:
+- P5 executed a Phase 4 review/repair pass and produced bounded media-workflow hardening under commit subject `0.4.5`, while package/engine version remained `0.4.4`.
+- The owner explicitly approved `/closeout phase 4` on 2026-09-05 local time.
+- This roadmap transition records no additional live-provider qualification beyond evidence actually observed; owner approval is not converted into a fabricated provider-smoke claim.
 
 Standardized intro/outro assets are not regenerated per story.
 
 A separate generated-graphic subsystem is out of scope unless real clips demonstrate a need.
 
 ## Phase 5 — FFmpeg assembly and first complete clip
+
+Status: CURRENT / PLANNING BASELINE 0.5.0
 
 Goal:
 Produce the first complete, postable vertical story clip from standardized and generated assets.
@@ -300,6 +309,6 @@ Use:
 
     /prompt-ass
     -> /prompt-plan
-    -> /prompt-write p4
+    -> /prompt-write p5
 
-Phase 4 planning should consume the already validated ClipPlan plus AssemblyTemplate, deterministically resolve only the generated asset-role inputs required by the selected template, and add the smallest provider-neutral media-generation boundary needed for presenter/video/voiceover realization. Keep publisher retrieval, FFmpeg final assembly, live fan-out, and generalized media-platform work out of scope unless current evidence requires them.
+Phase 5 planning should consume the validated AssemblyTemplate, ClipPlan, generated-media.json, and story-local generated assets without reinterpreting story meaning. It should qualify the real standardized intro/outro assets, probe generated/standardized media, normalize/trim them to the template contract, mux/replace voiceover where declared, and perform the smallest deterministic FFmpeg assembly needed for the first complete 1080x1920 H.264 MP4 clip. Keep publisher retrieval, live ngest fan-out, databases/queues, and programmable composition out of scope.
