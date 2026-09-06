@@ -1,6 +1,6 @@
 {
   "name": "vidgen",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "type": "module",
   "engines": {
     "node": ">=24.10.0 <25"
@@ -9,7 +9,7 @@
     "vidgen": "node src/cli.ts",
     "test": "npm run test:runner && npm run test:app",
     "test:runner": "node --test test/unit/codex-phase-prompt-grammar.test.ts test/unit/codex-phase-runner.test.ts",
-    "test:app": "node --test test/unit/app/cli.test.ts test/unit/app/media-workflow.test.ts test/unit/app/assembly-input.test.ts test/unit/app/phase-1-input-run.test.ts test/unit/app/story-workspace.test.ts test/unit/app/clip-plan-workflow.test.ts test/unit/app/json.test.ts test/unit/app/canonical-input.test.ts test/unit/app/story-input.test.ts test/unit/app/assembly-template.test.ts test/unit/app/clip-plan.test.ts test/unit/app/generated-media.test.ts test/unit/app/google-gemini-structured-text-model.test.ts test/unit/app/google-gemini-speech-generation-client.test.ts test/unit/app/google-veo-video-generation-client.test.ts test/unit/app/error.test.ts test/unit/integrations/ffprobe.test.ts test/unit/integrations/ngest-vidgen-manifest.test.ts test/unit/integrations/ngest-local-manifest-file.test.ts",
+    "test:app": "node --test test/unit/app/cli.test.ts test/unit/app/media-workflow.test.ts test/unit/app/assembly-input.test.ts test/unit/app/phase-1-input-run.test.ts test/unit/app/story-workspace.test.ts test/unit/app/clip-plan-workflow.test.ts test/unit/app/json.test.ts test/unit/app/canonical-input.test.ts test/unit/app/story-input.test.ts test/unit/app/assembly-template.test.ts test/unit/app/clip-plan.test.ts test/unit/app/generated-media.test.ts test/unit/app/google-gemini-structured-text-model.test.ts test/unit/app/google-gemini-speech-generation-client.test.ts test/unit/app/google-veo-video-generation-client.test.ts test/unit/app/error.test.ts test/unit/integrations/ffprobe.test.ts test/unit/integrations/ffmpeg-renderer.test.ts test/unit/integrations/ngest-vidgen-manifest.test.ts test/unit/integrations/ngest-local-manifest-file.test.ts",
     "docs:snapshot": "node scripts/create-docs-snapshot.mjs",
     "codex:phase": "node scripts/codex-phase.mjs",
     "codex:phase:validate": "node scripts/validate-codex-phase.mjs",

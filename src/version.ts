@@ -1,2 +1,2 @@
 /** Version of the VidGen engine that produced durable run artifacts. */
-export const VIDGEN_ENGINE_VERSION = '0.5.1';
+export const VIDGEN_ENGINE_VERSION = '0.5.2';
