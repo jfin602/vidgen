@@ -12,6 +12,7 @@ export type VidGenErrorCode =
   | 'story_selection'
   | 'assembly_template'
   | 'clip_plan'
+  | 'simple_clip'
   | 'generated_media'
   | 'assembly'
   | 'text_model'
