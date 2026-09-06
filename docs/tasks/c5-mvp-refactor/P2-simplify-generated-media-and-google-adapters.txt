@@ -1,0 +1,52 @@
+TASK: Correction 5 / P2 — Simplify generated media and Google adapters
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.5.3`.
+
+GOAL
+
+Simplify the existing generated-media path and Google provider adapters without changing provider, artifact, retry, or reuse behavior.
+
+Read BOOT.md plus the current P1 result and current code/tests in scope. Prefer deletion and direct reuse. Do not create a provider framework merely to remove repeated lines.
+
+SCOPE
+
+Primary scope:
+- `src/core/generated-media.ts`;
+- `src/app/media-workflow.ts`;
+- `src/integrations/google/gemini-interactions.ts`;
+- `src/integrations/google/gemini-speech-generation.ts`;
+- `src/integrations/google/veo-video-generation.ts`.
+
+A small existing/shared helper may be reused or simplified when it clearly reduces current code across real consumers. Do not broaden the abstraction surface.
+
+MUST REMAIN TRUE
+
+- GeneratedMediaUnit resolution, ordering, segment/role identity, fingerprints, and provider-neutral request/result contracts remain unchanged.
+- `media-run.json` and `generated-media.json` wire shapes, readiness semantics, provenance, asset paths, hash/size checks, resumability, and selective story-local reuse remain unchanged.
+- Provider failures remain bounded, safe, and fail-honest; terminal metadata failure cannot leave a false success manifest.
+- Gemini structured-text behavior remains compatible with the P1 planning workflow.
+- Gemini TTS still speaks exactly the assigned voiceover text, validates config, bounds responses/audio, and wraps the same PCM contract as WAV.
+- Veo still preserves presenter reference-image rules, dialogue partitioning, extension behavior, polling/timeouts, bounded downloads, allowed Google download hosts, and credential safety.
+- Existing provider endpoints, environment-variable names, configured model/voice semantics, and public error boundaries remain unchanged.
+- Do not add retries, caches, provider discovery, a generalized HTTP client layer, new dependencies, or new product behavior.
+- Existing durable schemas remain unchanged.
+- `package.json` and `src/version.ts` stay at 0.5.3.
+
+PROOF
+
+Run focused generated-media/media-workflow and all three Google adapter test files, then:
+- `npm run check`;
+- `node src/cli.ts --help`;
+- `git diff --check`.
+
+Downstream-required capability -> owning implementation/export -> focused proof:
+
+strict media-ready workspace plus generated-media manifest -> `loadValidatedMediaReadyWorkspace` / generated-media contracts -> existing assembly-input tests.
+
+FINAL RESPONSE
+
+State what became simpler, how provider and durable behavior stayed unchanged, tests actually run, and any safety-related complexity intentionally retained.
