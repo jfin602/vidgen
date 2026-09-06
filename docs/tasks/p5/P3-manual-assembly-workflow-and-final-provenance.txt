@@ -1,0 +1,419 @@
+TASK: Phase 5 / P3 — Manual assembly workflow, final clip provenance, and CLI
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- This prompt's assigned project version is `0.5.3`.
+
+CONTEXT
+
+Read BOOT.md first, then README.md, docs/architecture.md, docs/template-system.md, docs/roadmap/initial-roadmap.md, P1-P2, the current CLI/media-workflow persistence patterns, atomic JSON helper, and all Phase 5 focused tests before editing.
+
+P1 should provide:
+- strict Phase 4 handoff/workspace validation;
+- local file identities;
+- qualified intro/outro/generated media;
+- one deterministic AssemblyPlan;
+- generated-media manifest fingerprint;
+- FFprobe adapter.
+
+P2 should provide:
+- a bounded no-shell FFmpeg renderer;
+- version/capability evidence;
+- one temporary technically normalized candidate MP4;
+- a versioned assembly policy descriptor.
+
+P3 owns the durable story-level assembly lifecycle.
+
+GOAL
+
+Add a manual `vidgen assemble` workflow that consumes an existing `media_ready` story workspace plus explicit local intro/outro/font inputs, performs one deterministic P1+P2 assembly, re-probes the result, validates the final technical contract, atomically publishes `final/clip.mp4`, and persists honest assembly/final provenance.
+
+SCOPE
+
+Implement:
+- CLI assemble surface;
+- explicit local intro/outro/font input handling;
+- assembly-run.json;
+- strict final-clip.json + JSON Schema;
+- assemblyFingerprint;
+- temporary work lifecycle;
+- FFmpeg render invocation through P2;
+- post-render FFprobe verification through P1;
+- final output hashing and atomic publication;
+- failure honesty/cleanup;
+- deterministic fake-adapter workflow tests;
+- version/test wiring.
+
+Do not implement:
+- provider generation;
+- new ClipPlan;
+- publisher retrieval;
+- live ngest fan-out;
+- global render cache;
+- automated publishing;
+- Remotion.
+
+IMPLEMENTATION REQUIREMENTS
+
+1. CLI surface.
+   Preserve:
+   - vidgen run;
+   - vidgen story;
+   - vidgen plan;
+   - vidgen media.
+
+   Add:
+
+       vidgen assemble --story-dir <directory> \
+         --intro <intro-video-path> \
+         --outro <outro-video-path> \
+         [--font-file <font-path>]
+
+   Requirements:
+   - story-dir required;
+   - intro required;
+   - outro required;
+   - font-file is required by the workflow only when the selected template/AssemblyPlan contains display text;
+   - if no display text exists, reject an unnecessary font-file or define one deterministic permissive behavior and test it;
+   - no FFmpeg arbitrary flag passthrough;
+   - no provider/model credentials or endpoints on CLI;
+   - help text clearly states that assemble consumes an existing media-ready story and writes final/clip.mp4.
+
+2. Existing workspace only.
+   - Assemble must not call createStoryWorkspace;
+   - must not call planStoryWorkspace;
+   - must not call generateStoryMedia;
+   - must not construct text/video/speech provider clients;
+   - must not mutate upstream story/plan/media JSON artifacts;
+   - it operates on one explicit existing story directory.
+
+3. Validate before rendering.
+   Before constructing/running the default FFmpeg renderer:
+   - load/validate Phase 2-4 workspace through P1;
+   - validate media-run=media_ready;
+   - validate generated-media manifest and current generated asset hashes;
+   - qualify intro/outro with P1;
+   - build AssemblyPlan;
+   - determine whether display text exists;
+   - qualify font when required;
+   - compute all safe input identities needed for assemblyFingerprint.
+
+   Malformed/stale local state must fail before FFmpeg render activity.
+
+4. Local font qualification.
+   When display text exists:
+   - font-file must be an explicit local regular file;
+   - reject HTTP(S)/file URLs/directories/devices/blank values;
+   - allow a small supported extension set such as .ttf and .otf;
+   - bound font file byte size;
+   - compute SHA-256 over exact bytes;
+   - return safe identity:
+     * basename;
+     * sha256;
+     * byteSize;
+   - absolute source path remains execution-only;
+   - do not persist raw font bytes;
+   - do not copy a font into the story package as a durable public artifact.
+   - P2 may stage it into an engine-owned temporary render directory.
+
+5. Assembly fingerprint.
+   Compute a deterministic SHA-256 over all generation-independent assembly semantics that can change final output.
+
+   Include at minimum:
+   - explicit assembly input contract version;
+   - storyFingerprint;
+   - clipPlanFingerprint;
+   - generatedMediaFingerprint;
+   - template id/version/output;
+   - logical story segment timing/mapping identity from AssemblyPlan;
+   - intro safe identity hash/byte size + probed technical facts used by assembly;
+   - outro safe identity hash/byte size + probed technical facts used by assembly;
+   - font sha256 when display text exists;
+   - P2 assembly policy descriptor/version;
+   - FFmpeg version/build identity returned by the selected renderer where stable enough for reproducibility.
+
+   Exclude:
+   - timestamps;
+   - absolute local paths;
+   - temporary work paths;
+   - child PIDs;
+   - raw FFmpeg stderr/stdout;
+   - API keys/provider secrets;
+   - current final output path.
+
+6. assembly-run.json.
+   Persist a small strict run artifact inside the story directory, with status:
+   - running;
+   - final_ready;
+   - failed.
+
+   Include safe fields such as:
+   - schemaVersion;
+   - assemblyRunId;
+   - storyRunId;
+   - startedAt/endedAt;
+   - engineVersion;
+   - storyFingerprint;
+   - clipPlanFingerprint;
+   - generatedMediaFingerprint;
+   - assemblyFingerprint;
+   - template identity;
+   - standardized intro/outro safe identity/probe summaries;
+   - font identity when used;
+   - FFmpeg version/policy identity;
+   - expectedDurationSeconds;
+   - final artifact path/hash/size/probe summary only when terminal success;
+   - safe failure code/message on failure.
+
+   Do not include absolute input paths or raw subprocess output.
+
+7. final-clip.json success manifest.
+   Add a strict JSON Schema and runtime validator.
+
+   The final manifest is the durable Phase 6 handoff and should contain only successful final evidence, conceptually:
+   - schemaVersion;
+   - storyRunId;
+   - storyFingerprint;
+   - clipPlanFingerprint;
+   - generatedMediaFingerprint;
+   - assemblyFingerprint;
+   - template {id,version};
+   - standardizedAssets:
+     * roleId/placement;
+     * safe basename/hash/byteSize;
+     * probed duration/container/video/audio summary;
+   - font safe identity if used;
+   - assembly policy/version;
+   - FFmpeg version;
+   - output:
+     * relative path exactly final/clip.mp4;
+     * sha256;
+     * byteSize;
+     * probed duration;
+     * width;
+     * height;
+     * fps;
+     * videoCodec;
+     * pixelFormat;
+     * audioCodec;
+     * audioSampleRate;
+     * audioChannels.
+
+   Keep strict additionalProperties:false semantics.
+   Do not put raw FFprobe/FFmpeg envelopes into the manifest.
+
+8. Expected final duration.
+   Compute:
+   - P1 intro probed duration
+   + AssemblyPlan logical story duration
+   + P1 outro probed duration.
+
+   Persist expected duration.
+   Do not add intro/outro duration into AssemblyTemplate.
+
+9. Work directory.
+   - Create one engine-owned temporary directory under the story's final boundary, e.g. final/.assembly-<safe-id>;
+   - use engine-owned names only;
+   - P2 renderer writes candidate output there;
+   - display text/font staging lives there;
+   - cleanup work directory on success/failure where possible;
+   - never derive temp directory names from article/template/display text.
+
+10. Candidate render.
+    - Run exactly one P2 render attempt in the normal path;
+    - no automatic render retry;
+    - provider generation must not occur;
+    - renderer failure ends assembly failed.
+
+11. Post-render FFprobe validation.
+    Probe the candidate through P1 before it can become durable final output.
+
+    Require:
+    - exactly one video stream;
+    - exactly one audio stream;
+    - MP4-compatible container;
+    - width exactly template.output.width;
+    - height exactly template.output.height;
+    - H.264 video codec;
+    - fps exactly template.output.fps within strict rational equivalence, not a broad approximation;
+    - pixel format yuv420p unless current encoder output requires a deliberately documented equivalent;
+    - AAC audio;
+    - audio sample rate 48000;
+    - stereo/2 channels;
+    - positive duration;
+    - duration within a small explicit technical tolerance of expected final duration (prefer a frame-scale tolerance such as <=2 output frames plus normal container timestamp rounding).
+
+    If any technical check fails, do not publish final/clip.mp4.
+
+12. Final byte identity.
+    After successful candidate probe:
+    - enforce final file max size bound;
+    - compute SHA-256 and exact byte size;
+    - use those exact bytes as the final artifact identity.
+
+13. Atomic final publication.
+    - durable output path is exactly `final/clip.mp4`;
+    - candidate is rendered inside same story/final filesystem boundary so rename can be atomic;
+    - publish by rename after technical validation;
+    - do not stream FFmpeg directly into the authoritative final path.
+
+14. Success publication ordering.
+    Preserve failure honesty.
+
+    A safe sequence is conceptually:
+    - invalidate/remove old final-clip.json before new render;
+    - write assembly-run running;
+    - render candidate;
+    - probe/validate candidate;
+    - hash candidate;
+    - atomically rename candidate to final/clip.mp4;
+    - write final-clip.json atomically;
+    - write assembly-run final_ready atomically.
+
+    If final-clip.json or terminal final_ready publication fails:
+    - remove/invalidate final-clip.json;
+    - remove the newly published final/clip.mp4 where possible so no untracked new clip appears authoritative;
+    - write assembly-run failed where possible.
+
+    A prior final clip may be discarded on a failed rerun; final rendering is cheap/reproducible relative to provider generation and no final cache is required.
+
+15. No final render cache.
+    - Every explicit assemble invocation performs a fresh deterministic render.
+    - Do not skip FFmpeg merely because assemblyFingerprint matches a previous run.
+    - Story-local generated media remain reusable upstream; final composition may be regenerated.
+    - Do not build a global or final-render cache.
+
+16. Upstream artifact immutability.
+    Assert in tests that assemble never changes:
+    - story.json;
+    - story-run.json;
+    - clip-plan.json;
+    - clip-plan-run.json;
+    - media-run.json;
+    - generated-media.json;
+    - generated presenter/video/audio assets.
+
+17. CLI success output.
+    On success report only useful safe facts:
+    - storyRunId;
+    - status final_ready;
+    - final path;
+    - final SHA-256;
+    - duration;
+    - perhaps assemblyRunId.
+
+    Do not print full local intro/outro/font paths or FFmpeg command/filtergraph.
+
+18. CLI failure output.
+    Preserve current safe VidGen error rendering.
+    Do not leak:
+    - display text;
+    - absolute paths;
+    - FFmpeg stderr;
+    - binary data;
+    - provider secrets.
+
+19. Error category.
+    Reuse P1's assembly error code.
+    Distinguish:
+    - invalid argument/local input;
+    - configuration/executable capability;
+    - assembly/render/technical validation;
+    - artifact persistence.
+
+20. Test injection.
+    - inject P1 handoff/qualification and P2 renderer boundaries where practical;
+    - fake normal tests must not require system ffmpeg/ffprobe;
+    - use tiny local fake files for identity/atomic-publish behavior;
+    - inject clock/run IDs;
+    - inject terminal JSON persistence failures to prove success-manifest invalidation.
+
+21. Version/test wiring.
+    - Set package.json and src/version.ts to 0.5.3.
+    - Keep package-lock.json absent.
+    - Add assembly workflow/schema/CLI tests to the normal test path.
+
+FOCUSED TESTS
+
+Prove:
+- CLI parses assemble story-dir/intro/outro/font options and preserves all prior commands;
+- missing required assemble options fail deterministically;
+- font is required only when AssemblyPlan contains display text;
+- malformed/stale Phase 4 workspace fails before renderer construction/call;
+- assemble never invokes story/planning/media/provider workflows;
+- intro/outro/font identities are safe and absolute paths are absent from durable JSON;
+- assemblyFingerprint is stable for identical inputs;
+- changing intro/outro bytes changes assemblyFingerprint;
+- changing generatedMediaFingerprint changes assemblyFingerprint;
+- changing font bytes changes assemblyFingerprint when display text exists;
+- changing P2 assembly policy identity changes assemblyFingerprint;
+- a normal workflow invokes P2 renderer exactly once;
+- post-render probe rejects wrong size/fps/codec/pixel-format/audio/sample-rate/channel-count/duration;
+- expected duration equals intro probe + template story duration + outro probe;
+- valid candidate atomically becomes final/clip.mp4;
+- final-clip.json validates strictly and records exact final hash/size/probe facts;
+- upstream Phase 2-4 JSON/generated asset bytes remain unchanged;
+- renderer failure leaves assembly-run failed and no final success manifest;
+- candidate post-probe failure leaves no final success manifest;
+- terminal final-clip.json/final_ready persistence failure cannot leave a new authoritative final clip;
+- repeated assemble invocation calls renderer again rather than using a final render cache;
+- no raw subprocess output, absolute paths, ClipPlan display text, or secrets are persisted.
+
+REGRESSION COVERAGE
+
+Run:
+- P3 assembly workflow/final manifest/CLI tests;
+- P2 renderer tests;
+- P1 FFprobe/AssemblyPlan tests;
+- Phase 4 media workflow/generated-media tests;
+- ClipPlan/AssemblyTemplate/story workspace tests;
+- inherited Phase 1-4 tests;
+- runner tests;
+- npm test;
+- npm run check;
+- node src/cli.ts --help;
+- git diff --check.
+
+PRODUCER / CONSUMER BOUNDARY
+
+Downstream-required capability:
+one technically qualified self-contained final story clip plus reproducible provenance that later live fan-out can treat as the terminal single-story artifact
+
+Owning implementation/export:
+manual existing-workspace assembly service + assembly-run.json + strict final-clip.json/schema + CLI assemble
+
+Focused proof:
+fake-boundary end-to-end tests proving pre-render validation, single deterministic render, post-render technical qualification, atomic final publication, strict provenance, and failure honesty
+
+PRESERVED BEHAVIOR
+
+- Existing run/story/plan/media workflows remain unchanged.
+- No provider calls occur in assemble.
+- Template/ClipPlan/generated-media artifacts remain immutable.
+- Standardized files are explicit local inputs and remain outside the story package; their identities/probe facts are recorded.
+- final/clip.mp4 is the only durable rendered video output.
+- Final rendering always uses P2's fixed policy.
+- No Remotion.
+- No global cache/database/queue.
+- No live feed fan-out.
+
+NON-GOALS
+
+Do not implement:
+- media regeneration;
+- ClipPlan regeneration;
+- provider retry;
+- publisher retrieval;
+- live ngest orchestration;
+- multiple output aspect ratios;
+- animated graphics;
+- new caption generation;
+- stock/media search;
+- automated upload/publishing;
+- database/queue/global cache.
+
+COMPLETION
+
+Leave version 0.5.3 with a manually invokable `vidgen assemble` workflow that consumes an existing media-ready story, explicit local standardized/font inputs, produces one technically validated final/clip.mp4, and persists strict final provenance without compromising upstream artifacts or failure honesty.
