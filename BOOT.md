@@ -173,11 +173,11 @@ Run artifacts are written under .codex-runs/ and ignored by Git.
 - Standardized intro/outro roles declare supported deterministic wrapper positions; the approved post-Phase-5 contract allows either role to be omitted at assembly time, with no placeholder media inserted.
 - ClipPlan generation consumes StoryInput plus the selected AssemblyTemplate directly; insufficient story context fails clearly rather than triggering an implicit research subsystem.
 - Keep provider-specific behavior behind thin explicit adapters.
-- Preserve provenance and reproducibility inside each story package.
+- Preserve provenance and reproducibility in each production path's durable artifact boundary.
 - Treat URLs, publisher content, administrator guidance, model output, and provider responses as untrusted input.
 - Publisher retrieval permission does not imply media-reuse permission.
 - Prefer story-local asset reuse over a global cache until evidence requires more.
-- FFmpeg owns MVP assembly; do not introduce Remotion without a demonstrated need.
+- FFmpeg owns deterministic simple-path finishing and cinematic-path assembly; do not introduce Remotion without a demonstrated need.
 - Do not claim provider/runtime/render behavior unless actually observed.
 
 ## Current next action
