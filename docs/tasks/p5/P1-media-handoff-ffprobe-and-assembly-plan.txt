@@ -1,0 +1,348 @@
+TASK: Phase 5 / P1 — Generated-media handoff, FFprobe qualification, and deterministic assembly plan
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- This prompt's assigned project version is `0.5.1`.
+
+CONTEXT
+
+Read BOOT.md first, then README.md, AGENTS.md, docs/README.md, docs/architecture.md, docs/template-system.md, docs/roadmap/initial-roadmap.md, the completed Phase 4 implementation/tests, the AssemblyTemplate/ClipPlan/generated-media contracts, and current official FFprobe documentation before editing.
+
+Official documentation to verify at implementation time:
+- https://ffmpeg.org/ffprobe.html
+
+Phase 5 consumes existing successful Phase 2-4 story artifacts. It must not create a new story, regenerate ClipPlan, call Google/media providers, or reinterpret story meaning.
+
+The repository currently contains no standardized intro/outro media files. Do not invent their filenames, duration, codecs, hashes, availability, or location. They will be supplied explicitly as local assembly inputs and measured at runtime.
+
+The default template's logical story timing remains 0-40 seconds. Its standardized roles are:
+
+    intro  -> before-story
+    outro  -> after-story
+
+Therefore the standardized files wrap the logical story. Their real probed durations contribute to final clip duration but do not alter the template's 0-40 story segment timing.
+
+Phase 4's strict generated-media handoff contains five default units:
+
+    u01 hook    / opening-anchor    / presenter / 5 sec
+    u02 content / content-video     / video     / 10 sec
+    u03 content / content-voiceover / voiceover / 10 sec
+    u04 support / supporting-anchor / presenter / 13 sec
+    u05 closing / supporting-anchor / presenter / 12 sec
+
+Phase 5 must derive its visual/audio mapping from template + validated handoff data, not from these hard-coded IDs.
+
+GOAL
+
+Create the strict local-media consumer and probe boundary for Phase 5:
+
+- load and revalidate an existing Phase 4 media-ready story workspace;
+- verify generated-media.json and current local asset bytes;
+- qualify explicit local standardized intro/outro files with FFprobe;
+- probe generated video/audio files with FFprobe;
+- deterministically resolve one in-memory AssemblyPlan from AssemblyTemplate + ClipPlan + generated-media assets + probe facts;
+- expose only validated local-media facts to the FFmpeg renderer that P2 will implement.
+
+No FFmpeg render is performed in P1.
+
+IMPLEMENTATION REQUIREMENTS
+
+1. Reuse producer-owned Phase 4 semantics.
+   - Do not duplicate ClipPlan/generated-media validation rules in a new Phase 5 parser.
+   - Reuse/export/refactor the existing Phase 4 validators/loaders narrowly where needed.
+   - A Phase 5 consumer must be able to obtain a validated planned workspace containing:
+     * storyRunId;
+     * storyFingerprint;
+     * validated AssemblyTemplate;
+     * validated ClipPlan;
+     * clipPlanFingerprint.
+   - It must then validate:
+     * media-run.json exists and is terminal `media_ready`;
+     * media-run identity agrees with story/template/clipPlan identity;
+     * generated-media.json exists;
+     * generated-media.json passes the existing strict runtime validator for the current resolved GeneratedMediaUnits;
+     * every generated asset file still exists at the safe workspace-relative path recorded by the manifest;
+     * current byte size and SHA-256 match the manifest before the asset can be assembled.
+   - A stale/corrupt generated asset must fail assembly input qualification; do not silently regenerate it in Phase 5.
+
+2. Narrow shared exports.
+   - If the current `loadValidatedWorkspace()` / ready-record helpers in `src/app/media-workflow.ts` are private, expose or extract the smallest reusable producer-owned capability rather than cloning those rules.
+   - Preserve all current `vidgen media` behavior and Phase 4 tests.
+   - Do not turn this into a broad artifact repository framework.
+
+3. FFprobe process boundary.
+   Add a thin local FFprobe adapter, likely under `src/integrations/ffmpeg/`.
+
+   Requirements:
+   - use Node child-process APIs with an argv array; never invoke a shell;
+   - default executable name may be `ffprobe`, with a narrow injectable/configurable local executable path if useful;
+   - no network URL is accepted as a media input;
+   - all probed inputs must first be explicit regular local files;
+   - use a local-file-only protocol posture where supported, e.g. `-protocol_whitelist file`;
+   - request machine-readable JSON;
+   - request only fields needed by VidGen, such as:
+     * container/format name;
+     * duration;
+     * stream type;
+     * codec name;
+     * width/height;
+     * pixel format;
+     * average/rational frame rate;
+     * sample rate;
+     * channels/channel layout;
+   - do not request packet/frame payload dumps;
+   - bound runtime timeout;
+   - bound stdout/stderr bytes;
+   - reject non-zero exit, timeout, malformed JSON, missing required fields, nonsensical numeric/rational values, and unexpectedly huge output;
+   - keep executable/process injection easy for focused tests.
+
+4. Probe contract.
+   Define a small VidGen-owned media probe result, conceptually:
+   - durationSeconds;
+   - container names as reported/normalized;
+   - exactly described video stream when present;
+   - exactly described audio stream when present;
+   - no raw FFprobe JSON envelope.
+
+   Parse rational frame rates safely; never use `eval` or floating expression parsing.
+
+5. Stream strictness.
+   For Phase 5 inputs:
+   - generated presenter/video MP4:
+     * exactly one video stream;
+     * at most one audio stream;
+     * no subtitle/data/attachment streams;
+   - generated voiceover WAV:
+     * exactly one audio stream;
+     * no video/subtitle/data/attachment streams;
+   - standardized intro/outro:
+     * exactly one video stream;
+     * at most one audio stream;
+     * no subtitle/data/attachment streams.
+
+   Reject ambiguous multi-video/multi-audio inputs instead of relying on FFmpeg automatic stream selection.
+
+6. Local file identity.
+   Create/reuse a bounded local-file identity helper:
+   - explicit local regular file only;
+   - reject HTTP(S), file URLs, pipes, directories, device-like non-files, and blank paths;
+   - stat before read/hash;
+   - enforce configurable reasonable max byte size;
+   - hash exact current bytes with SHA-256 using streaming where practical instead of reading arbitrarily large video files fully into memory;
+   - recheck size as part of hashing/consumption so obvious replacement races cannot bypass the configured byte limit;
+   - return only safe identity facts:
+     * basename;
+     * byteSize;
+     * sha256.
+   - absolute input paths may exist in in-memory execution objects but must not become durable provenance.
+
+7. Standardized asset qualification.
+   Add a narrow request such as:
+   - introPath;
+   - outroPath.
+
+   Resolve it against `template.standardizedAssetRoles`, not by inventing more standardized roles.
+
+   Requirements:
+   - require exactly the currently declared intro/before-story and outro/after-story inputs;
+   - each must be a distinct explicit local regular video file;
+   - compute safe local identity;
+   - FFprobe each;
+   - require positive finite duration;
+   - do not require the files to already be 1080x1920/30/H.264; P2 will normalize them;
+   - record measured media properties in the in-memory qualified standardized-asset value;
+   - do not mutate AssemblyTemplate with concrete filenames/durations.
+
+8. Generated media qualification.
+   - Re-verify manifest byte size/hash before FFprobe.
+   - FFprobe every generated asset actually required by the current resolved units.
+   - Require positive finite duration.
+   - Treat provider-reported `durationSeconds` from Phase 4 as provenance only; FFprobe's local-file measurement is the Phase 5 technical authority.
+   - Do not trust MIME/path extension alone as proof of decodable media.
+
+9. Deterministic assembly support boundary.
+   Build an in-memory `AssemblyPlan` from template + validated ClipPlan + generated-media manifest + probe facts.
+
+   For the current MVP, support only templates where EACH logical story segment resolves to:
+   - exactly one visual generated-media unit whose role kind is `presenter` or `video`;
+   - zero or one `voiceover` generated-media unit.
+
+   Fail clearly when a template segment has:
+   - zero visual units;
+   - more than one visual unit;
+   - more than one voiceover unit.
+
+   This is a Phase 5 assembly capability boundary, not a change to the generic AssemblyTemplate validator.
+
+10. Segment mapping.
+    Resolve by segment identity/timing, never by hard-coded unit/role IDs.
+
+    Each AssemblyPlan story segment should contain:
+    - segment id/start/end;
+    - exact targetDurationSeconds from template;
+    - visual generated asset + probe facts;
+    - optional voiceover generated asset + probe facts;
+    - ordered display text values from the segment's template contentSlots whose usage is `display`.
+
+    Spoken content does not become an overlay merely because it exists.
+    Display text does not become narration.
+
+11. Default mapping proof.
+    For default-news-40s, AssemblyPlan must derive:
+
+        hook    5s  visual=u01 presenter  display=headline
+        content 10s visual=u02 video      voiceover=u03
+        support 13s visual=u04 presenter
+        closing 12s visual=u05 presenter
+
+    Derive this from the template/manifest; core assembly-plan code must not contain `u01`, `u02`, `u03`, `u04`, `u05`, `hook`, `content-video`, etc.
+
+12. Duration qualification.
+    - A visual asset must have enough probed coverage for its target segment, allowing only a tiny explicit frame-scale tolerance for container/probe rounding.
+    - If probed visual duration is materially shorter than targetDurationSeconds, fail instead of freeze-framing or stretching it.
+    - Longer visual media is valid input; P2 will trim it deterministically.
+    - If a voiceover is present and its probed duration exceeds the target segment by more than a tiny explicit tolerance, fail rather than silently cutting spoken words.
+    - Shorter voiceover is valid; P2 may pad silence after the narration to the segment boundary.
+    - Standardized intro/outro preserve their own full probed durations.
+
+13. Story duration.
+    - Derive logical story duration from the final template segment end.
+    - For default-news-40s it remains exactly 40 seconds.
+    - Expected final duration is conceptually:
+      `probed intro duration + template story duration + probed outro duration`.
+    - Do not bake intro/outro duration into the template.
+
+14. Output target.
+    Carry the existing template output contract directly into AssemblyPlan:
+    - 1080x1920;
+    - 30 fps;
+    - MP4;
+    - H.264.
+
+    Do not change AssemblyTemplate schema/output in this task.
+
+15. Generated-media manifest fingerprint.
+    Add a deterministic SHA-256 identity over the fully validated provider-neutral generated-media manifest using existing canonicalJson conventions.
+    This will be an input to P3 assembly provenance.
+    Do not hash generated asset bytes twice into the canonical JSON; their manifest hashes already identify them.
+
+16. Errors.
+    - Add a narrow `assembly` error code only if callers need a stable Phase 5 recovery category.
+    - Distinguish invalid local media/assembly semantics from artifact persistence and executable configuration where useful.
+    - Public errors must not dump absolute paths, FFprobe raw JSON, binary content, ClipPlan text, or child-process stderr.
+
+17. No rendering.
+    P1 must not:
+    - invoke `ffmpeg`;
+    - transcode;
+    - trim;
+    - mux;
+    - create overlays;
+    - create final/clip.mp4;
+    - call a model/provider;
+    - bind standardized media globally.
+
+18. Version/test wiring.
+    - Set package.json and src/version.ts to 0.5.1.
+    - Keep package-lock.json absent.
+    - Add focused tests to the normal `npm test` / `npm run check` path.
+
+FOCUSED TESTS
+
+Prove:
+- current Phase 4 media-ready workspace loads through producer-owned validators without semantic duplication;
+- non-media_ready/mismatched/corrupt generated-media state fails before FFprobe;
+- a generated asset whose current byte hash/size differs from generated-media.json fails before assembly;
+- FFprobe uses argv/no-shell execution and local-only input posture;
+- timeout/non-zero/oversized stdout/oversized stderr/invalid JSON/malformed stream data fail safely;
+- rational frame-rate parsing is bounded and deterministic;
+- multi-video, multi-audio, subtitle/data/attachment ambiguity is rejected;
+- local standardized input rejects URL/directory/non-file/oversize cases;
+- default template derives the exact four visual segments + one content voiceover listed above without hard-coded default IDs;
+- display headline is attached only to the hook segment as display text and never becomes spoken text;
+- repeated supporting-anchor units remain separate support/closing visual assets;
+- arbitrary non-default/non-40-second templates work when each segment satisfies the one-visual/optional-one-voiceover assembly subset;
+- unsupported zero/multiple visual or multiple voiceover segment shapes fail clearly;
+- too-short visual fails;
+- materially overlong voiceover fails;
+- shorter voiceover is accepted for later silence padding;
+- intro/outro measured durations wrap rather than modify logical story timing;
+- generated-media fingerprint is stable and changes when a generation-relevant manifest field changes;
+- no FFmpeg render/provider call occurs.
+
+REGRESSION COVERAGE
+
+Run:
+- new assembly-input/FFprobe tests;
+- media-workflow tests;
+- generated-media tests;
+- AssemblyTemplate/ClipPlan tests;
+- CLI tests;
+- Phase 1-4 application/integration tests;
+- runner tests;
+- npm test;
+- npm run check;
+- git diff --check.
+
+PRODUCER / CONSUMER BOUNDARIES
+
+Downstream-required capability:
+a Phase 5 consumer can prove Phase 4 success and current generated asset identity without duplicating producer-owned manifest semantics
+
+Owning implementation/export:
+narrow reusable Phase 4 validated-workspace/generated-media handoff loader + generated-media manifest validator/fingerprint
+
+Focused proof:
+tests showing media-run/generated-media/workspace identity agreement plus current file hash/size verification, with existing vidgen media behavior unchanged
+
+Downstream-required capability:
+deterministic, local technical media facts from untrusted generated/standardized files
+
+Owning implementation/export:
+bounded no-shell FFprobe adapter + local file identity/qualification boundary
+
+Focused proof:
+fake process tests covering stream strictness, numeric parsing, timeout/size/error safety, and local-only input behavior
+
+Downstream-required capability:
+a renderer-ready mapping that does not invent story or template semantics
+
+Owning implementation/export:
+AssemblyTemplate + ClipPlan + validated generated-media handoff + standardized probe facts -> in-memory AssemblyPlan
+
+Focused proof:
+default and synthetic-template tests proving exact segment/visual/voiceover/display mapping and unsupported-shape fail-closed behavior
+
+PRESERVED BEHAVIOR
+
+- Phase 4 generated-media.json remains provider-neutral.
+- story.json, story-run.json, clip-plan.json, clip-plan-run.json, media-run.json, and generated-media.json are not mutated.
+- Generated assets are never regenerated by assembly.
+- Template segment timing remains authoritative.
+- Intro/outro remain shared standardized inputs outside template concrete media facts.
+- No publisher retrieval or web research.
+- No Google/provider call.
+- No Remotion.
+- No global cache/database/queue.
+- Existing `vidgen run/story/plan/media` behavior remains unchanged.
+
+NON-GOALS
+
+Do not implement:
+- FFmpeg rendering;
+- final clip output;
+- captions beyond carrying display text into AssemblyPlan;
+- font handling;
+- audio loudness processing;
+- concat/transcode;
+- media regeneration;
+- provider qualification;
+- publisher retrieval;
+- live ngest fan-out;
+- automated publishing.
+
+COMPLETION
+
+Leave version 0.5.1 with a strict, testable Phase 5 media-consumer boundary: producer-owned Phase 4 validation is reused, every current local input is technically qualified with FFprobe, and one deterministic in-memory AssemblyPlan is ready for P2's FFmpeg renderer.
