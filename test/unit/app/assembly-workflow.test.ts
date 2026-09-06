@@ -59,6 +59,7 @@ test('workflow persists only supplied wrappers in canonical v2 provenance', asyn
       assert.throws(() => validateFinalClipManifest({ ...manifest, schemaVersion: '1' }), (error: unknown) => error instanceof VidGenError && error.code === 'assembly');
       if (expectedRoles.length === 2) {
         assert.throws(() => validateFinalClipManifest({ ...manifest, standardizedAssets: [manifest.standardizedAssets[0], manifest.standardizedAssets[0]] }), (error: unknown) => error instanceof VidGenError && error.code === 'assembly');
+        assert.throws(() => validateFinalClipManifest({ ...manifest, standardizedAssets: [manifest.standardizedAssets[1], manifest.standardizedAssets[0]] }), (error: unknown) => error instanceof VidGenError && error.code === 'assembly');
         assert.throws(() => validateFinalClipManifest({ ...manifest, standardizedAssets: [{ ...manifest.standardizedAssets[0], placement: 'after-story' }, manifest.standardizedAssets[1]] }), (error: unknown) => error instanceof VidGenError && error.code === 'assembly');
       }
     }
