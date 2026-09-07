@@ -1,68 +1,75 @@
-# Google Video Generation Integration
+# Google Agent Platform Video Integration
 
-Status: CURRENT PROVIDER DIRECTION / VERTEX BACKEND OWNER-APPROVED FOR PHASE 6 CORRECTION
+Status: CURRENT PROVIDER DIRECTION / AGENT PLATFORM ONLY
 
 ## Purpose
 
-VidGen is Google-first for generated video, but video-generation workflows must depend on provider-neutral contracts rather than one Google transport.
+Gemini Enterprise Agent Platform is VidGen's sole supported Google model platform.
 
-The existing Gemini Developer API Veo backend remains supported and must not be replaced or destabilized by the Vertex addition.
-
-The owner-approved `c6-vertex-adapter` correction adds Vertex AI Veo as a parallel backend at the same provider-neutral video boundaries.
+VidGen remains Google-first but must keep text, video, and speech behind thin provider-neutral capability boundaries so the platform can be replaced later without changing StoryInput, ClipPlan, generated-media, assembly, or publication contracts.
 
 Conceptually:
 
-    VideoGenerationClient / PresenterVideoGenerationClient
-                    |
-             backend selection
-              /          \
-             v            v
-    Developer API      Vertex AI
-       Veo                Veo
-             \            /
-              v          v
-          provider-neutral result
+    provider-neutral capability boundary
                     |
                     v
-         existing VidGen workflows
+      Gemini Enterprise Agent Platform
+          /          |          \
+         v           v           v
+       text         video       speech
+         \           |          /
+          \          |         /
+           v         v        v
+              neutral results
+                    |
+                    v
+             existing VidGen flows
 
-Backend selection is runtime configuration. It is not StoryInput, CanonicalControl, ClipPlan, template, model-output, or ngest state.
+The earlier product direction that treated Gemini Developer API and Vertex AI as parallel supported VidGen backends is superseded.
 
-## Existing Developer API backend
+## Current implementation status
 
-The existing Google Veo Developer API adapter is the current working implementation.
+The repository currently contains legacy Google transport code for both Developer API Veo and Vertex-style Veo access. That split is transitional implementation state, not a compatibility contract.
 
-Its behavior, authentication, request semantics, duration handling, polling, download safety, provenance, and cinematic/simple-path contracts are regression-sensitive and must remain supported.
+The historical `c6-vertex-adapter` task records remain valid history and should not be rewritten. Current owner-directed work is the bounded `c6-agent-platform` correction at package/engine version 0.6.5.
 
-Current authentication uses:
+The correction should remove the product-facing Developer/Vertex backend distinction and reconcile Google model access through Agent Platform while preserving the existing provider-neutral contracts and downstream behavior.
 
-    GEMINI_API_KEY
+## Capability-specific integration
 
-Current model/runtime configuration remains owned by VidGen rather than templates or upstream controls.
+Agent Platform is one supported platform, but its capabilities do not need to share one transport or authentication mechanism.
 
-The Vertex correction must not silently redirect existing Developer API configuration to Vertex.
+Keep separate boundaries for:
+- structured text generation;
+- presenter/content video generation;
+- speech generation.
 
-## Vertex AI backend
+Do not build one large Google client merely because the capabilities belong to the same platform.
 
-Vertex AI is an alternate Google Veo transport intended to let VidGen use Google Cloud project billing/credits while preserving the same provider-neutral VidGen boundaries.
+Each capability may own:
+- its supported endpoint shape;
+- authentication acquisition;
+- project/location/model configuration;
+- request and polling behavior;
+- bounded response parsing;
+- output retrieval or staging;
+- capability checks;
+- safe provider provenance.
 
-Initial direction:
-- use Application Default Credentials rather than `GEMINI_API_KEY`;
-- use an explicitly configured Google Cloud project;
-- use an explicitly configured supported region, initially `us-central1`;
-- keep the Vertex model runtime-configurable;
-- prefer a Veo 3.1 model that supports the existing approved presenter-reference contract;
-- treat Lite variants that do not support required presenter asset references as incompatible configuration rather than silently omitting references;
-- preserve the current simple-path 8-second reference-image generation and bounded extension semantics where the selected Vertex model supports them;
-- preserve cinematic generation semantics only where the selected Vertex model supports the required request.
+These details remain runtime/integration concerns rather than StoryInput, CanonicalControl, ClipPlan, template, or model-output semantics.
 
-Exact environment-variable names are implementation-planning decisions. Configuration should remain grouped by backend rather than forcing Vertex credentials into Developer API settings.
+## Authentication
 
-## Authentication boundary
+Authentication is capability-specific runtime state.
 
-Vertex authentication is a runtime credential concern.
+A successful credential path for one Agent Platform capability must not be treated as proof that the same credential path is valid for another capability.
 
-Application Default Credentials and any underlying service-account or user credential material must never enter:
+Observed qualification:
+- an owner-run Agent Platform Gemini text request using the configured API-key path completed successfully on 2026-09-07;
+- no Agent Platform Veo generation qualification is claimed yet;
+- no render or human-playback qualification is implied by the text smoke.
+
+Credentials, access tokens, service-account material, and API keys must never enter:
 - StoryInput or CanonicalInput;
 - prompts;
 - fingerprints;
@@ -71,30 +78,26 @@ Application Default Credentials and any underlying service-account or user crede
 - logs or public error text;
 - rendered output.
 
-The adapter should acquire credentials through supported Google Cloud authentication mechanisms rather than inventing a credential file format.
+Use only authentication mechanisms supported by the selected Agent Platform capability. Do not invent credential formats or silently copy credentials between capability adapters.
 
-## Cloud Storage staging boundary
+## Video direction
 
-Vertex may use Google Cloud Storage for generated-video output staging.
+Veo remains the initial Google video model family for VidGen presenter/content generation.
 
-That storage is provider staging, not VidGen's durable artifact store.
+The video adapter must preserve the existing provider-neutral VidGen semantics where the selected Agent Platform Veo model supports them:
+- one to three approved local presenter reference images;
+- portrait 9:16 generation;
+- exact assigned presenter dialogue;
+- bounded initial generation and extension behavior required by the simple path;
+- cinematic presenter/content generation required by the preserved template path;
+- bounded polling and output retrieval;
+- safe operation provenance.
 
-The Vertex adapter must:
-- use an explicitly configured bucket/prefix owned for VidGen provider staging;
-- treat every provider-returned URI/object name as untrusted;
-- accept only objects inside the configured staging boundary;
-- bound download size and time;
-- validate expected media type/signature before crossing the provider-neutral result boundary;
-- avoid exposing signed URLs, access tokens, bucket credentials, or absolute credential paths in durable artifacts;
-- define bounded cleanup/lifecycle behavior so provider staging does not accumulate indefinitely.
-
-Reference images should continue to originate from VidGen's existing approved local-reference boundary. Do not require publisher-image retrieval or broaden media rights to support Vertex.
+If a selected model or supported API path cannot satisfy a required VidGen capability, fail configuration or generation clearly rather than dropping references, changing dialogue semantics, or silently routing through a legacy backend.
 
 ## Provider-neutral behavior
 
-Above the adapter, backend choice must be invisible to production logic.
-
-The backend must not change:
+Platform transport must not change:
 - StoryInput or CanonicalInput;
 - simple presenter-copy semantics;
 - simple duration planning;
@@ -105,53 +108,91 @@ The backend must not change:
 - output naming;
 - success/failure publication semantics.
 
-Provider-specific request shapes, authentication, polling, output retrieval, and Cloud Storage handling remain inside the adapter.
+The Agent Platform adapter layer returns only the neutral media/model result required by the existing production workflow.
 
-Do not create a large generalized provider framework merely because there are now two Google transports.
+## Runtime configuration
 
-## Backend selection and failure semantics
+Runtime configuration may include capability-specific model, project, location, credential, timeout, polling, and staging settings.
 
-Initial backend selection should be explicit.
+Configuration names are implementation decisions owned by `c6-agent-platform`.
 
-Conceptually:
+Do not preserve `developer` and `vertex` as long-term user-facing VidGen backend choices merely because the transitional source currently exposes them.
 
-    developer
-    vertex
+Provider/model selections remain VidGen runtime configuration, not template or upstream control data.
 
-Do not automatically fall back from Vertex to Developer API, or from Developer API to Vertex, when a generation fails.
+## Output and staging safety
 
-Silent fallback would make billing, provenance, reproducibility, model behavior, and debugging ambiguous.
+Any provider-returned URI, operation identifier, object name, or media response is untrusted.
 
-Failures should distinguish configuration/authentication, provider request/poll failure, unsafe output location, bounded-download failure, malformed media, unsupported model capability, and normal downstream VidGen validation failures where practical.
+When a capability requires remote staging or retrieval, the adapter must:
+- constrain access to explicitly configured/expected provider boundaries;
+- bound response and download size;
+- bound request and polling time;
+- reject redirects unless explicitly required and safely constrained;
+- validate expected media type/signature before returning neutral media;
+- avoid persisting credentials, signed URLs, unrestricted storage paths, or raw provider responses;
+- define bounded cleanup/lifecycle behavior where staging objects are created.
+
+Reference images continue to originate from VidGen's approved local-reference boundary. Agent Platform migration does not authorize publisher-media retrieval or reuse.
+
+## Failure semantics
+
+Do not silently fall back to legacy Developer API or Vertex backends when an Agent Platform capability fails.
+
+Failures should distinguish, where practical:
+- configuration;
+- authentication/authorization;
+- unsupported model capability;
+- provider request or polling failure;
+- unsafe or malformed provider output;
+- bounded retrieval failure;
+- normal downstream VidGen validation failure.
+
+A failed provider run must not appear successful or publish incomplete artifacts.
 
 ## Provenance
 
-Durable provider provenance must make the effective backend distinguishable while remaining provider-neutral to consumers.
+Durable provider provenance should record only safe identifiers needed to reproduce and inspect generation, such as:
+- Agent Platform/provider identity;
+- configured/effective model;
+- bounded request or operation identity when available.
 
-Record only safe identifiers needed to understand generation, such as provider/backend identity, configured/effective model, and bounded request/operation identity when available.
-
-Never persist raw Vertex responses, credentials, access tokens, signed URLs, or unrestricted Cloud Storage paths.
+Never persist credentials, access tokens, API keys, raw provider responses, signed URLs, or unrestricted provider storage paths.
 
 ## Qualification
 
-Mocked deterministic tests prove orchestration and safety boundaries but do not prove live Vertex behavior.
+Mocked deterministic tests prove orchestration and safety boundaries but do not prove live Agent Platform capability behavior.
 
-The correction should include one explicitly observed live Vertex qualification when project access, quota, credentials, staging storage, and model availability permit it.
+Qualification must be capability-specific.
 
-Live qualification should separately verify:
-- authentication;
-- model availability;
+For text, the owner has observed a successful live Agent Platform API-key request.
+
+Before claiming live Veo support, directly observe at least:
+- authentication/authorization;
+- selected model availability;
 - presenter reference-image support;
 - initial generation;
 - extension behavior when exercised;
 - bounded output retrieval;
 - downstream FFmpeg compatibility.
 
-Do not treat a live Developer API run as proof of Vertex behavior or vice versa.
+A successful text call is not evidence of video behavior. A successful video call is not evidence of speech behavior.
+
+## Migration constraint
+
+The `c6-agent-platform` correction should make the smallest safe implementation change that:
+- removes the supported Developer/Vertex backend split;
+- retains provider-neutral core interfaces;
+- preserves simple and cinematic behavior outside the Google transport boundary;
+- keeps existing durable artifact meanings and failure honesty;
+- adds focused tests for the new configuration/authentication path;
+- removes or retires legacy adapter code only when no active consumer requires it.
+
+Historical task files and prior commit history should remain unchanged.
 
 ## Non-goals
 
-The Vertex correction does not include:
+The Agent Platform correction does not include:
 - Flow/browser automation;
 - reverse-engineering private Google consumer endpoints;
 - a generalized multi-provider framework;
@@ -160,4 +201,5 @@ The Vertex correction does not include:
 - database/queue work;
 - automated publishing;
 - new creative stages;
-- publisher media retrieval.
+- publisher media retrieval;
+- changes to FFmpeg finishing/assembly semantics.
