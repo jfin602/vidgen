@@ -22,7 +22,7 @@ import type {
 } from '../core/structured-text-model.ts';
 import { getAssemblyTemplate } from '../core/template-registry.ts';
 import type { JsonObject } from '../shared/json.ts';
-import { GoogleGeminiStructuredTextModelClient } from '../integrations/google/gemini-interactions.ts';
+import { GoogleGeminiStructuredTextModelClient } from '../integrations/google/gemini-agent-platform.ts';
 import {
   prettyJson,
   type AtomicJsonFilesystem,

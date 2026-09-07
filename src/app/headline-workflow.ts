@@ -9,7 +9,7 @@ import { planPresenterVideoDuration, type PresenterVideoGenerationClient, type P
 import { buildStoryInput, type StoryInput } from '../core/story-input.ts';
 import type { StructuredTextModelClient } from '../core/structured-text-model.ts';
 import { LocalSimpleClipFinisher, SIMPLE_CLIP_DURATION_TOLERANCE_SECONDS, SIMPLE_CLIP_FINISHING_POLICY, validateSimpleLowerThird } from '../integrations/ffmpeg/simple-clip-finisher.ts';
-import { GoogleGeminiStructuredTextModelClient } from '../integrations/google/gemini-interactions.ts';
+import { GoogleGeminiStructuredTextModelClient } from '../integrations/google/gemini-agent-platform.ts';
 import { createConfiguredVideoClient } from '../integrations/google/video-client-factory.ts';
 import { loadNgestVidGenManifestFile } from '../integrations/ngest/local-manifest-file.ts';
 import { writeJsonAtomically } from '../shared/atomic-json.ts';

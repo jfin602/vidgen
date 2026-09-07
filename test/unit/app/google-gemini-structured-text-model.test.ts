@@ -3,19 +3,25 @@ import test from 'node:test';
 
 import { VidGenError } from '../../../src/core/error.ts';
 import type { JsonObject } from '../../../src/shared/json.ts';
+import { readFileSync } from 'node:fs';
+
 import {
   DEFAULT_GOOGLE_GEMINI_MAX_RESPONSE_BYTES,
-  GOOGLE_GEMINI_INTERACTIONS_ENDPOINT,
+  buildGoogleGeminiAgentPlatformEndpoint,
   GoogleGeminiStructuredTextModelClient,
   type FetchImplementation,
   type GoogleGeminiEnvironment,
-} from '../../../src/integrations/google/gemini-interactions.ts';
+} from '../../../src/integrations/google/gemini-agent-platform.ts';
 
 const apiKey = 'gemini-test-key-never-surface';
 const storyText = 'story text that must never appear in public errors';
 const responseSchema: JsonObject = { type: 'object', properties: { slots: { type: 'array' } } };
 
-test('Google Gemini adapter sends one current stateless Interactions structured-output request', async () => {
+const project = 'vidgen-test-project';
+const model = 'gemini-test-model';
+const endpoint = buildGoogleGeminiAgentPlatformEndpoint(project, model);
+
+test('Google Gemini adapter sends one project/global Agent Platform structured-output request', async () => {
   let called = 0;
   let requestUrl: string | URL | Request | undefined;
   let init: RequestInit | undefined;
@@ -23,7 +29,7 @@ test('Google Gemini adapter sends one current stateless Interactions structured-
     called += 1;
     requestUrl = input;
     init = requestInit;
-    return jsonResponse(completedInteraction());
+    return jsonResponse(completedGenerateContentResponse());
   });
 
   const result = await client.generateStructuredJson({
@@ -33,88 +39,97 @@ test('Google Gemini adapter sends one current stateless Interactions structured-
   });
 
   assert.equal(called, 1);
-  assert.equal(GOOGLE_GEMINI_INTERACTIONS_ENDPOINT, 'https://generativelanguage.googleapis.com/v1beta/interactions');
-  assert.equal(String(requestUrl), GOOGLE_GEMINI_INTERACTIONS_ENDPOINT);
+  assert.equal(endpoint, 'https://aiplatform.googleapis.com/v1/projects/vidgen-test-project/locations/global/publishers/google/models/gemini-test-model:generateContent');
+  assert.equal(String(requestUrl), endpoint);
   assert.equal(init?.method, 'POST');
   assert.equal(init?.redirect, 'error');
   assert.equal(new Headers(init?.headers).get('content-type'), 'application/json');
   assert.equal(new Headers(init?.headers).get('x-goog-api-key'), apiKey);
   const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
   assert.deepEqual(body, {
-    model: 'gemini-test-model',
-    store: false,
-    system_instruction: 'Follow the supplied schema.',
-    input: storyText,
-    response_format: [{
-      type: 'text',
-      mime_type: 'application/json',
-      schema: responseSchema,
-    }],
+    systemInstruction: { parts: [{ text: 'Follow the supplied schema.' }] },
+    contents: [{ role: 'user', parts: [{ text: storyText }] }],
+    generationConfig: {
+      candidateCount: 1,
+      responseMimeType: 'application/json',
+      responseSchema,
+    },
   });
   for (const prohibited of [
-    'previous_interaction_id', 'tools', 'background', 'agent', 'agent_config', 'web_search', 'stream',
+    'model', 'store', 'input', 'response_format', 'tools', 'stream',
   ]) {
     assert.equal(Object.hasOwn(body, prohibited), false, `${prohibited} must not be sent`);
   }
   assert.deepEqual(result, {
-    provider: 'google-gemini',
+    provider: 'google-agent-platform',
     model: 'gemini-provider-model',
-    requestId: 'interaction-123',
+    requestId: 'response-123',
     outputText: '{"slots":[]}',
   });
 });
 
-test('Google Gemini adapter returns configured model and safely joins consecutive text blocks', async () => {
+test('Google Gemini adapter returns neutral provenance and ignores provider-only part metadata', async () => {
   const client = clientFor(async () => jsonResponse({
-    status: 'completed',
-    steps: [{
-      type: 'model_output',
-      content: [
-        { type: 'text', text: '{"slots":' },
-        { type: 'text', text: '[]}' },
-      ],
-    }],
+    candidates: [{ content: { parts: [{ text: '{"slots":[]}', thoughtSignature: 'do-not-persist' }] } }],
+    responseId: 'response-123',
+    modelVersion: 'gemini-provider-model',
+    usageMetadata: { promptTokenCount: 99 },
   }));
 
   const result = await client.generateStructuredJson(validRequest());
   assert.deepEqual(result, {
-    provider: 'google-gemini',
-    model: 'gemini-test-model',
+    provider: 'google-agent-platform',
+    model: 'gemini-provider-model',
+    requestId: 'response-123',
     outputText: '{"slots":[]}',
   });
 });
 
-test('missing Google Gemini key or model fails before fetch activity', () => {
+test('missing, blank, or unsafe Agent Platform project, key, or model fails before fetch activity', () => {
   let calls = 0;
   const fakeFetch: FetchImplementation = async () => {
     calls += 1;
-    return jsonResponse(completedInteraction());
+    return jsonResponse(completedGenerateContentResponse());
   };
 
   assert.throws(
     () => new GoogleGeminiStructuredTextModelClient({
-      environment: { VIDGEN_TEXT_MODEL: 'gemini-test-model' }, fetch: fakeFetch,
+      environment: { GOOGLE_CLOUD_PROJECT: project, VIDGEN_TEXT_MODEL: model }, fetch: fakeFetch,
     }),
     hasCode('configuration'),
   );
   assert.throws(
     () => new GoogleGeminiStructuredTextModelClient({
-      environment: { GEMINI_API_KEY: apiKey }, fetch: fakeFetch,
+      environment: { GEMINI_API_KEY: apiKey, GOOGLE_CLOUD_PROJECT: project }, fetch: fakeFetch,
     }),
     hasCode('configuration'),
   );
   assert.throws(
     () => new GoogleGeminiStructuredTextModelClient({
-      environment: { GEMINI_API_KEY: '  ', VIDGEN_TEXT_MODEL: 'gemini-test-model' }, fetch: fakeFetch,
+      environment: { GEMINI_API_KEY: apiKey, VIDGEN_TEXT_MODEL: model }, fetch: fakeFetch,
     }),
     hasCode('configuration'),
   );
   assert.throws(
     () => new GoogleGeminiStructuredTextModelClient({
-      environment: { GEMINI_API_KEY: apiKey, VIDGEN_TEXT_MODEL: '  ' }, fetch: fakeFetch,
+      environment: { GEMINI_API_KEY: '  ', GOOGLE_CLOUD_PROJECT: project, VIDGEN_TEXT_MODEL: model }, fetch: fakeFetch,
     }),
     hasCode('configuration'),
   );
+  assert.throws(
+    () => new GoogleGeminiStructuredTextModelClient({
+      environment: { GEMINI_API_KEY: apiKey, GOOGLE_CLOUD_PROJECT: project, VIDGEN_TEXT_MODEL: '  ' }, fetch: fakeFetch,
+    }),
+    hasCode('configuration'),
+  );
+  for (const environment of [
+    { GEMINI_API_KEY: apiKey, GOOGLE_CLOUD_PROJECT: '  ', VIDGEN_TEXT_MODEL: model },
+    { GEMINI_API_KEY: apiKey, GOOGLE_CLOUD_PROJECT: 'bad/project', VIDGEN_TEXT_MODEL: model },
+    { GEMINI_API_KEY: 'bad key', GOOGLE_CLOUD_PROJECT: project, VIDGEN_TEXT_MODEL: model },
+    { GEMINI_API_KEY: apiKey, GOOGLE_CLOUD_PROJECT: project, VIDGEN_TEXT_MODEL: '../unsafe-model' },
+  ]) {
+    assert.throws(() => new GoogleGeminiStructuredTextModelClient({ environment, fetch: fakeFetch }), hasCode('configuration'));
+  }
   assert.equal(calls, 0);
 });
 
@@ -150,16 +165,19 @@ test('Google Gemini adapter fails safely for redirects, HTTP failures, and inval
   }
 });
 
-test('Google Gemini adapter rejects oversized bodies and malformed/non-text completed interactions', async (context) => {
+test('Google Gemini adapter rejects blocked, missing, empty, multi, ambiguous, malformed, and oversized responses', async (context) => {
   await context.test('oversized body', async () => {
     const client = clientFor(async () => new Response('x'.repeat(DEFAULT_GOOGLE_GEMINI_MAX_RESPONSE_BYTES + 1)));
     await assert.rejects(client.generateStructuredJson(validRequest()), hasCode('text_model'));
   });
 
   for (const [name, payload] of [
-    ['missing model output', { status: 'completed', steps: [] }],
-    ['non-text model output', { status: 'completed', steps: [{ type: 'model_output', content: [{ type: 'function_call', name: 'unsafe' }] }] }],
-    ['blank model output', { status: 'completed', steps: [{ type: 'model_output', content: [{ type: 'text', text: '  ' }] }] }],
+    ['blocked', { candidates: [{ finishReason: 'SAFETY', content: { parts: [{ text: '{"slots":[]}' }] } }] }],
+    ['missing model output', { candidates: [] }],
+    ['empty model output', { candidates: [{ content: { parts: [{ text: '  ' }] } }] }],
+    ['multiple candidates', { candidates: [candidate(), candidate()] }],
+    ['ambiguous content', { candidates: [{ content: { parts: [{ text: '{"slots":' }, { text: '[]}' }] } }] }],
+    ['malformed model output', { candidates: [{ content: { parts: [{ inlineData: { data: 'unsafe' } }] } }] }],
   ]) {
     await context.test(name, async () => {
       const client = clientFor(async () => jsonResponse(payload));
@@ -168,16 +186,9 @@ test('Google Gemini adapter rejects oversized bodies and malformed/non-text comp
   }
 });
 
-test('Google Gemini adapter never accepts incomplete, failed, or action-required interactions', async (context) => {
-  for (const status of ['requires_action', 'incomplete', 'failed'] as const) {
-    await context.test(status, async () => {
-      const client = clientFor(async () => jsonResponse({
-        status,
-        steps: [{ type: 'model_output', content: [{ type: 'text', text: '{"slots":[]}' }] }],
-      }));
-      await assert.rejects(client.generateStructuredJson(validRequest()), hasCode('text_model'));
-    });
-  }
+test('active structured-text adapter contains no legacy Gemini Developer endpoint', () => {
+  const source = readFileSync('src/integrations/google/gemini-agent-platform.ts', 'utf8');
+  assert.equal(source.includes('generativelanguage.googleapis.com'), false);
 });
 
 function clientFor(
@@ -194,7 +205,8 @@ function clientFor(
 function environment(overrides: GoogleGeminiEnvironment = {}): GoogleGeminiEnvironment {
   return {
     GEMINI_API_KEY: apiKey,
-    VIDGEN_TEXT_MODEL: 'gemini-test-model',
+    GOOGLE_CLOUD_PROJECT: project,
+    VIDGEN_TEXT_MODEL: model,
     ...overrides,
   };
 }
@@ -207,13 +219,16 @@ function validRequest() {
   };
 }
 
-function completedInteraction(): object {
+function completedGenerateContentResponse(): object {
   return {
-    id: 'interaction-123',
-    model: 'gemini-provider-model',
-    status: 'completed',
-    steps: [{ type: 'model_output', content: [{ type: 'text', text: '{"slots":[]}' }] }],
+    responseId: 'response-123',
+    modelVersion: 'gemini-provider-model',
+    candidates: [candidate()],
   };
+}
+
+function candidate() {
+  return { content: { parts: [{ text: '{"slots":[]}' }] } };
 }
 
 function jsonResponse(payload: object): Response {

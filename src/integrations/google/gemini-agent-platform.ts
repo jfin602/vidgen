@@ -7,8 +7,9 @@ import type {
 import { assertJsonValue, type JsonObject } from '../../shared/json.ts';
 
 export const GEMINI_API_KEY_ENV = 'GEMINI_API_KEY';
+export const GOOGLE_CLOUD_PROJECT_ENV = 'GOOGLE_CLOUD_PROJECT';
 export const VIDGEN_TEXT_MODEL_ENV = 'VIDGEN_TEXT_MODEL';
-export const GOOGLE_GEMINI_INTERACTIONS_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/interactions';
+export const GOOGLE_GEMINI_AGENT_PLATFORM_LOCATION = 'global';
 export const DEFAULT_GOOGLE_GEMINI_TIMEOUT_MS = 10_000;
 export const DEFAULT_GOOGLE_GEMINI_MAX_RESPONSE_BYTES = 1_000_000;
 
@@ -18,6 +19,7 @@ export type FetchImplementation = typeof fetch;
 /** Runtime-only credentials and model selection for the Google text boundary. */
 export interface GoogleGeminiRuntimeConfig {
   readonly apiKey: string;
+  readonly project: string;
   readonly model: string;
 }
 
@@ -33,20 +35,27 @@ export function loadGoogleGeminiRuntimeConfig(
   environment: GoogleGeminiEnvironment = process.env,
 ): GoogleGeminiRuntimeConfig {
   return {
-    apiKey: requiredEnvironmentValue(environment, GEMINI_API_KEY_ENV),
-    model: requiredEnvironmentValue(environment, VIDGEN_TEXT_MODEL_ENV),
+    apiKey: requiredSafeEnvironmentValue(environment, GEMINI_API_KEY_ENV, /^[A-Za-z0-9_-]+$/),
+    project: requiredSafeEnvironmentValue(environment, GOOGLE_CLOUD_PROJECT_ENV, /^(?:[a-z][a-z0-9-]{4,28}[a-z0-9]|[0-9]{6,30})$/),
+    model: requiredSafeEnvironmentValue(environment, VIDGEN_TEXT_MODEL_ENV, /^[A-Za-z0-9._-]+$/),
   };
 }
 
+/** Builds the sole supported project-scoped Gemini text endpoint. */
+export function buildGoogleGeminiAgentPlatformEndpoint(project: string, model: string): string {
+  return `https://aiplatform.googleapis.com/v1/projects/${project}/locations/${GOOGLE_GEMINI_AGENT_PLATFORM_LOCATION}/publishers/google/models/${model}:generateContent`;
+}
+
 /**
- * Stateless Google Gemini Interactions API adapter. It deliberately has no
+ * Stateless Agent Platform Gemini text adapter. It deliberately has no
  * conversation, tools, background execution, or provider response exposure.
  */
 export class GoogleGeminiStructuredTextModelClient implements StructuredTextModelClient {
-  readonly provider = 'google-gemini';
+  readonly provider = 'google-agent-platform';
   readonly model: string;
 
   private readonly apiKey: string;
+  private readonly endpoint: string;
   private readonly fetchImplementation: FetchImplementation;
   private readonly timeoutMs: number;
   private readonly maxResponseBytes: number;
@@ -55,6 +64,7 @@ export class GoogleGeminiStructuredTextModelClient implements StructuredTextMode
     const config = loadGoogleGeminiRuntimeConfig(options.environment);
     this.apiKey = config.apiKey;
     this.model = config.model;
+    this.endpoint = buildGoogleGeminiAgentPlatformEndpoint(config.project, config.model);
     this.fetchImplementation = options.fetch ?? fetch;
     this.timeoutMs = positiveSafeInteger(
       options.timeoutMs ?? DEFAULT_GOOGLE_GEMINI_TIMEOUT_MS,
@@ -67,12 +77,12 @@ export class GoogleGeminiStructuredTextModelClient implements StructuredTextMode
   }
 
   async generateStructuredJson(request: StructuredTextModelRequest): Promise<StructuredTextModelResult> {
-    const body = buildRequestBody(this.model, request);
+    const body = buildRequestBody(request);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
     try {
-      const response = await this.fetchImplementation(GOOGLE_GEMINI_INTERACTIONS_ENDPOINT, {
+      const response = await this.fetchImplementation(this.endpoint, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -103,25 +113,20 @@ export class GoogleGeminiStructuredTextModelClient implements StructuredTextMode
   }
 }
 
-function buildRequestBody(model: string, request: StructuredTextModelRequest): JsonObject {
+function buildRequestBody(request: StructuredTextModelRequest): JsonObject {
   if (typeof request.systemInstruction !== 'string' || typeof request.input !== 'string') {
     throw new VidGenError('invalid_argument', 'Structured text-model instructions and input must be strings.');
   }
   assertJsonValue(request.responseSchema);
 
-  // Google currently documents v1beta Interactions structured output as a
-  // top-level response_format array. Keep this provider-specific wire shape
-  // confined to the adapter.
   return {
-    model,
-    store: false,
-    system_instruction: request.systemInstruction,
-    input: request.input,
-    response_format: [{
-      type: 'text',
-      mime_type: 'application/json',
-      schema: request.responseSchema,
-    }],
+    systemInstruction: { parts: [{ text: request.systemInstruction }] },
+    contents: [{ role: 'user', parts: [{ text: request.input }] }],
+    generationConfig: {
+      candidateCount: 1,
+      responseMimeType: 'application/json',
+      responseSchema: request.responseSchema,
+    },
   };
 }
 
@@ -174,35 +179,36 @@ function extractStructuredTextResult(
   provider: string,
   configuredModel: string,
 ): StructuredTextModelResult {
-  const interaction = asRecord(payload);
-  if (interaction === undefined || interaction.status !== 'completed') {
-    throw providerFailure('Google Gemini text-model response was not a completed interaction.');
+  const response = asRecord(payload);
+  if (response === undefined) {
+    throw providerFailure('Google Gemini text-model response was malformed.');
   }
 
-  const requestId = optionalNonBlankString(interaction.id);
-  if (Object.hasOwn(interaction, 'id') && requestId === undefined) {
-    throw providerFailure('Google Gemini text-model response had an invalid interaction identifier.');
+  const requestId = optionalSafeProviderIdentifier(response.responseId);
+  if (Object.hasOwn(response, 'responseId') && requestId === undefined) {
+    throw providerFailure('Google Gemini text-model response had an invalid response identifier.');
   }
-  const actualModel = optionalNonBlankString(interaction.model);
-  if (Object.hasOwn(interaction, 'model') && actualModel === undefined) {
+  const actualModel = optionalSafeProviderIdentifier(response.modelVersion);
+  if (Object.hasOwn(response, 'modelVersion') && actualModel === undefined) {
     throw providerFailure('Google Gemini text-model response had an invalid model identifier.');
   }
 
-  if (!Array.isArray(interaction.steps)) {
+  if (!Array.isArray(response.candidates) || response.candidates.length !== 1) {
     throw providerFailure('Google Gemini text-model response did not include model output.');
   }
-  const modelOutput = interaction.steps.findLast(
-    (step): step is Record<string, unknown> => asRecord(step)?.type === 'model_output',
-  );
-  if (modelOutput === undefined || !Array.isArray(modelOutput.content) || modelOutput.content.length === 0) {
+  const candidate = asRecord(response.candidates[0]);
+  const content = candidate === undefined || (candidate.finishReason !== undefined && candidate.finishReason !== 'STOP')
+    ? undefined
+    : asRecord(candidate.content);
+  if (content === undefined || !Array.isArray(content.parts) || content.parts.length !== 1) {
     throw providerFailure('Google Gemini text-model response did not include model output.');
   }
 
-  const textBlocks = modelOutput.content.map(asRecord);
-  if (textBlocks.some((block) => block?.type !== 'text' || typeof block.text !== 'string')) {
+  const part = asRecord(content.parts[0]);
+  if (part === undefined || typeof part.text !== 'string') {
     throw providerFailure('Google Gemini text-model response did not include text-only model output.');
   }
-  const outputText = textBlocks.map((block) => block.text).join('');
+  const outputText = part.text;
   if (outputText.trim().length === 0) {
     throw providerFailure('Google Gemini text-model response included empty model output.');
   }
@@ -212,9 +218,13 @@ function extractStructuredTextResult(
     : { provider, model: actualModel ?? configuredModel, requestId, outputText };
 }
 
-function requiredEnvironmentValue(environment: GoogleGeminiEnvironment, name: string): string {
+function requiredSafeEnvironmentValue(
+  environment: GoogleGeminiEnvironment,
+  name: string,
+  pattern: RegExp,
+): string {
   const value = environment[name]?.trim();
-  if (value === undefined || value.length === 0) {
+  if (value === undefined || value.length === 0 || !pattern.test(value)) {
     throw new VidGenError('configuration', `Google Gemini ${name} configuration is required.`);
   }
   return value;
@@ -233,8 +243,10 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
-function optionalNonBlankString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
+function optionalSafeProviderIdentifier(value: unknown): string | undefined {
+  return typeof value === 'string' && /^(?!\/)(?![A-Za-z]:[\\/])(?!file:)[A-Za-z0-9._:/@ -]{1,256}$/i.test(value)
+    ? value
+    : undefined;
 }
 
 function providerFailure(publicMessage: string, cause?: unknown): VidGenError {
