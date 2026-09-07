@@ -277,29 +277,30 @@ Current implementation:
 - provider jobs/assets retain story-local provenance, hashes, request/operation identity where safe, and effective-generation-input identity;
 - provider model/voice selections remain runtime configuration rather than template semantics.
 
-The owner-approved `c6-vertex-adapter` correction adds Vertex AI Veo as a parallel Google video backend without replacing the working Developer API path:
+The prior `c6-vertex-adapter` direction is superseded. Gemini Enterprise Agent Platform is the sole supported Google model platform:
 
-    VideoGenerationClient / PresenterVideoGenerationClient
+    provider-neutral capability boundaries
                     |
-             backend selection
-              /          \
-             v            v
-    Developer API      Vertex AI
-       Veo                Veo
-             \            /
-              v          v
-          provider-neutral result
+                    v
+      Gemini Enterprise Agent Platform
+          /          |          \
+         v           v           v
+       text         video       speech
+         \           |          /
+          \          |         /
+           v         v        v
+              neutral results
                     |
                     v
          existing VidGen workflows
 
-Backend selection is runtime configuration. It must not enter StoryInput, CanonicalControl, ClipPlan, AssemblyTemplate, generated model output, or ngest state.
+Platform choice must not enter StoryInput, CanonicalControl, ClipPlan, AssemblyTemplate, generated model output, or ngest state. The current Developer/Vertex split in source is transitional implementation state and must not become a long-term compatibility contract.
 
-The Vertex adapter owns its own authentication, request/poll transport, supported-model capability checks, and any bounded Cloud Storage staging/download behavior. The existing Developer API adapter keeps its current API-key path and behavior.
+Each Agent Platform capability owns its supported authentication, request/poll transport, model capability checks, and any bounded output/staging behavior. Authentication proven for one capability must not be assumed to prove another.
 
-Do not silently fall back between backends. A selected backend failure should remain attributable to that backend so billing, provenance, reproducibility, and debugging are unambiguous.
+Do not silently route around Agent Platform failures through a legacy backend. Failures must remain attributable so billing, provenance, reproducibility, and debugging are unambiguous.
 
-Do not build a large generalized provider framework merely because VidGen now has two Google transports. Preserve the current neutral contracts and add only the backend-specific adapter/selection needed.
+Do not build a large generalized provider framework merely because the Google integration is being reconciled. Preserve the current neutral contracts and keep capability-specific adapters thin.
 
 See docs/integrations/google-video.md.
 
