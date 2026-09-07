@@ -1,0 +1,65 @@
+TASK: Correction 6 / P1 — Agent Platform response-schema adaptation
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Repair the Agent Platform structured-text request boundary so VidGen's provider-neutral JSON Schema can be sent through Google `generationConfig.responseSchema` without leaking the root JSON Schema dialect marker that Google rejects.
+
+Read BOOT.md, docs/integrations/google-video.md, the structured-text contract and Google adapter, both current response-schema producers (simple presenter copy and ClipPlan), and their focused tests before editing.
+
+LIVE ROOT-CAUSE EVIDENCE
+
+The deployment VPS has already established:
+- the project/global Agent Platform `generateContent` endpoint succeeds with `x-goog-api-key` and `gemini-3.6-flash`;
+- the current simple presenter schema sent through `responseSchema` returns HTTP 400 specifically because `$schema` is an unknown field;
+- the same request with only the root `$schema` member removed returns HTTP 200 with valid structured JSON.
+
+MUST REMAIN TRUE
+
+- Keep the provider-neutral `StructuredTextModelRequest.responseSchema` contract and both producer-owned schema builders unchanged. They may continue to identify themselves as JSON Schema Draft 2020-12 and must retain all validation constraints.
+- The Google adapter owns provider-wire adaptation. When building `generationConfig.responseSchema`, omit only the root `$schema` dialect member if present.
+- Preserve every other schema field and nested value exactly. Current producers rely on fields including `title`, `type`, `additionalProperties`, `required`, `properties`, `items`, `enum`, `minItems`, `maxItems`, `minLength`, and `maxLength`.
+- Do not mutate the caller's original response-schema object.
+- Do not recursively strip arbitrary `$`-prefixed fields, silently weaken constraints, reinterpret schema semantics, or invent a generalized schema translator.
+- A response schema without root `$schema` must retain its existing provider-wire shape.
+- Keep `responseMimeType: application/json`, one candidate, system/user content, endpoint, API-key auth, runtime configuration, timeout/response bounds, response parsing, provider identity, and safe provenance unchanged.
+- Preserve ClipPlan and simple presenter-copy runtime validation after model output; provider-side schema enforcement does not replace VidGen validation.
+- Preserve headline workflow, cinematic planning behavior, StoryInput, ngest, Veo, TTS, FFmpeg, CLI grammar, durable schemas, and package/engine version 0.6.5.
+
+PROOF
+
+Focused tests must prove:
+- a neutral schema containing root `$schema` produces a Google request whose `generationConfig.responseSchema` omits that root member;
+- every remaining current simple-copy schema field is preserved exactly;
+- a real ClipPlan producer schema preserves its nested array/object constraints, enum, min/max item counts, and min/max text lengths while omitting only root `$schema`;
+- the original neutral schema object remains unchanged after request construction/call;
+- a schema that does not contain root `$schema` is sent unchanged;
+- endpoint/auth/request-body behavior and safe response/provenance behavior remain green;
+- focused simple-copy, ClipPlan, ClipPlan workflow, and headline workflow tests remain green.
+
+Update any prior Google-adapter test that incorrectly requires the provider wire to equal the neutral schema including `$schema`; the new assertion must distinguish producer-neutral schema from Google wire schema without weakening producer tests.
+
+Run the focused Google structured-text, simple-copy, ClipPlan/ClipPlan-workflow, and headline tests, `npm run check`, `node src/cli.ts --help`, and `git diff --check`.
+
+Downstream-required capability -> owning implementation/export -> focused proof:
+
+provider-neutral JSON Schema -> Google structured-text adapter request builder -> provider wire omits only root `$schema` and preserves all remaining constraints.
+
+current schema producers -> unchanged simple-copy/ClipPlan schema builders -> producer tests still prove full neutral schemas while adapter tests prove Google-compatible wire shape.
+
+NON-GOALS
+
+Do not switch to `responseJsonSchema`, change producer schema contracts, remove `$schema` from core schema builders, add a generalized JSON-Schema/OpenAPI conversion framework, change authentication/endpoints/models, modify video/speech behavior, begin Phase 7, or change package/engine version.
+
+LIVE QUALIFICATION
+
+Codex does not need owner credentials or a live provider call. Do not claim full headline/provider qualification from mocks. After human review, the owner will rerun the same live ngest + Bill headline smoke; that runtime run is the next qualification step.
+
+FINAL RESPONSE
+
+Report the exact provider-wire adaptation, preservation of all producer-owned constraints, immutability proof, focused/broad validation, preserved consumers, and confirmation that version 0.6.5 is unchanged.
