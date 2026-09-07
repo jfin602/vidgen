@@ -35,7 +35,7 @@ Implemented foundation:
 - `assembly-run.json`, strict `final-clip.json`, post-render technical validation, and atomic `final/clip.mp4` publication;
 - fail-closed handling for unsupported ngest continuation in the original Phase 1 client.
 
-Phase 3 implemented the cinematic creative-planning stage. Phase 4 implemented cinematic generated-media realization and story-local raw media/provenance. Phase 5 implemented standardized asset qualification plus deterministic FFmpeg assembly and final-clip provenance. `c5-optional-assets` subsequently made intro and outro independently optional without placeholders. The deployment VPS has qualified the required FFmpeg/FFprobe capabilities, while one complete owner-media generated cinematic story render and playback review remain unclaimed. Phase 6 implementation has reached the 0.6.5 baseline: the simpler StoryInput-based presenter-headline path uses a configurable 4-20 second maximum-duration ceiling and paired MP4/JSON output while preserving the cinematic path. The owner-approved `c6-vertex-adapter` correction will add Vertex AI Veo as a parallel Google video backend without replacing the existing Developer API backend. `c5-config-fix` remains owner-approved but deferred; live fan-out remains Phase 7 work.
+Phase 3 implemented the cinematic creative-planning stage. Phase 4 implemented cinematic generated-media realization and story-local raw media/provenance. Phase 5 implemented standardized asset qualification plus deterministic FFmpeg assembly and final-clip provenance. `c5-optional-assets` subsequently made intro and outro independently optional without placeholders. The deployment VPS has qualified the required FFmpeg/FFprobe capabilities, while one complete owner-media generated cinematic story render and playback review remain unclaimed. Phase 6 implementation has reached the 0.6.5 baseline: the simpler StoryInput-based presenter-headline path uses a configurable 4-20 second maximum-duration ceiling and paired MP4/JSON output while preserving the cinematic path. The prior `c6-vertex-adapter` direction has been superseded. Gemini Enterprise Agent Platform is now the sole supported Google model platform, and the current Developer/Vertex implementation split is transitional pending `c6-agent-platform`. `c5-config-fix` remains owner-approved but deferred; live fan-out remains Phase 7 work.
 
 ## Core architectural standards
 
@@ -213,7 +213,7 @@ The MVP remains Google-first behind thin replaceable boundaries.
 
 Current implementation:
 - deterministic per-segment GeneratedMediaUnits resolve directly from template role references plus validated ClipPlan content;
-- the existing Google Veo Developer API backend performs presenter/content-video generation using the current neutral video contracts;
+- current Google video implementation still contains legacy Developer/Vertex transport paths, but those paths are transitional rather than supported product choices;
 - presenter generation uses exact spoken text plus explicit approved local reference imagery;
 - content video uses deterministic unit context;
 - Gemini TTS produces exact off-screen voiceover from template-declared voiceover text;
@@ -221,7 +221,7 @@ Current implementation:
 - standardized premade intro/outro clips remain outside generated-media production and, when supplied, are qualified by the assembly path;
 - supporting text/graphics, if needed outside generated media, remain deterministic rather than another creative reasoning stage.
 
-The owner-approved `c6-vertex-adapter` correction adds Vertex AI Veo as a second Google transport behind the same neutral video-generation boundaries. It must preserve the existing Developer API backend, keep backend selection in runtime configuration, use its own supported Google Cloud authentication/staging boundaries, and make effective backend provenance inspectable without leaking credentials or provider-private response data.
+Gemini Enterprise Agent Platform is the only supported Google model platform. The `c6-agent-platform` correction should reconcile the current Developer/Vertex split behind the existing neutral video-generation boundaries rather than preserve both as product-facing backends. Text, video, and speech remain separate capability boundaries; authentication and transport may differ by capability and must be qualified independently. Provider provenance must remain inspectable without leaking credentials or provider-private response data.
 
 Provider model, backend, and voice selections remain runtime configuration rather than durable template or upstream-control semantics. See docs/integrations/google-video.md.
 
