@@ -165,6 +165,17 @@ test('Agent Platform provider identity invalidates legacy cinematic reuse withou
   });
 });
 
+test('Agent Platform speech provider identity invalidates legacy voiceover reuse', async () => {
+  await withWorkspace(async (directory) => {
+    const reference = join(directory, 'anchor.png'); await writeFile(reference, png(1));
+    await generateStoryMedia({ storyDirectory: directory, anchorReferencePaths: [reference], ...fakes('video-v1', 'speech-v1', 'voice-a', 'google-agent-platform-veo', 'legacy-google-gemini-tts'), now: clock() });
+    const agentPlatform = fakes('video-v1', 'speech-v1', 'voice-a', 'google-agent-platform-veo', 'google-agent-platform-gemini-tts');
+    await generateStoryMedia({ storyDirectory: directory, anchorReferencePaths: [reference], ...agentPlatform, now: clock() });
+    assert.deepEqual(agentPlatform.videoUnits, []);
+    assert.deepEqual(agentPlatform.speechUnits, ['u03']);
+  });
+});
+
 test('shared approved anchor references retain local MIME, byte, and hash validation for cinematic and simple clients', async () => {
   await withWorkspace(async (directory) => {
     const reference = join(directory, 'anchor.png');
@@ -180,10 +191,10 @@ test('shared approved anchor references retain local MIME, byte, and hash valida
   });
 });
 
-function fakes(videoModel = 'video-v1', speechModel = 'speech-v1', voice = 'voice-a', videoProvider = 'fake-video') {
+function fakes(videoModel = 'video-v1', speechModel = 'speech-v1', voice = 'voice-a', videoProvider = 'fake-video', speechProvider = 'fake-speech') {
   const videoUnits: string[] = []; const speechUnits: string[] = [];
   const video: VideoGenerationClient = { provider: videoProvider, model: videoModel, generateVideo: async (request) => { videoUnits.push(request.unit.unitId); return videoResult(request.unit.unitId, videoProvider); } };
-  const speech: SpeechGenerationClient = { provider: 'fake-speech', model: speechModel, voice, generateSpeech: async (request) => { speechUnits.push(request.unit.unitId); return { provider: 'fake-speech', model: speechModel, voice, requestId: `s-${request.unit.unitId}`, mimeType: 'audio/wav', bytes: new Uint8Array([82, 73, 70, 70, 1]), durationSeconds: 1 }; } };
+  const speech: SpeechGenerationClient = { provider: speechProvider, model: speechModel, voice, generateSpeech: async (request) => { speechUnits.push(request.unit.unitId); return { provider: speechProvider, model: speechModel, voice, requestId: `s-${request.unit.unitId}`, mimeType: 'audio/wav', bytes: new Uint8Array([82, 73, 70, 70, 1]), durationSeconds: 1 }; } };
   return { video, speech, videoUnits, speechUnits, createVideoClient: () => video, createSpeechClient: () => speech };
 }
 function videoResult(unitId: string, provider = 'fake-video') { return { provider, model: 'returned-video', requestId: `v-${unitId}`, mimeType: 'video/mp4', bytes: new Uint8Array([0, 0, 0, 16, 102, 116, 121, 112]), durationSeconds: 8 }; }

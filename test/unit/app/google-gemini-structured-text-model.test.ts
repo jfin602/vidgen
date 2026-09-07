@@ -188,7 +188,7 @@ test('Google Gemini adapter rejects blocked, missing, empty, multi, ambiguous, m
 
 test('active structured-text adapter contains no legacy Gemini Developer endpoint', () => {
   const source = readFileSync('src/integrations/google/gemini-agent-platform.ts', 'utf8');
-  assert.equal(source.includes('generativelanguage.googleapis.com'), false);
+  assert.equal(source.includes(['generativelanguage', 'googleapis.com'].join('.')), false);
 });
 
 function clientFor(

@@ -1,4 +1,5 @@
 import { VidGenError } from '../../core/error.ts';
+import { defaultGoogleCloudAccessToken, type GoogleCloudAccessTokenProvider } from './google-cloud-auth.ts';
 import type { ApprovedReferenceImage, VideoGenerationClient, VideoGenerationRequest, VideoGenerationResult } from '../../core/generated-media.ts';
 import {
   assertPresenterVideoGenerationRequest,
@@ -30,7 +31,7 @@ const SAFE_ACCESS_TOKEN = /^[A-Za-z0-9._~-]{1,16384}$/;
 
 export type GoogleAgentPlatformVeoEnvironment = Readonly<Record<string, string | undefined>>;
 export type FetchImplementation = typeof fetch;
-export type GoogleAgentPlatformAccessTokenProvider = () => Promise<string>;
+export type GoogleAgentPlatformAccessTokenProvider = GoogleCloudAccessTokenProvider;
 
 export interface GoogleAgentPlatformVeoRuntimeConfig {
   readonly project: string;
@@ -88,7 +89,7 @@ export class GoogleAgentPlatformVeoVideoGenerationClient implements VideoGenerat
     this.project = config.project;
     this.model = config.model;
     this.fetchImplementation = options.fetch ?? fetch;
-    this.getAccessToken = options.getAccessToken ?? defaultAccessToken;
+    this.getAccessToken = options.getAccessToken ?? defaultGoogleCloudAccessToken;
     this.now = options.now ?? Date.now;
     this.sleep = options.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
     this.pollIntervalMs = positiveSafeInteger(options.pollIntervalMs ?? DEFAULT_GOOGLE_AGENT_PLATFORM_VEO_POLL_INTERVAL_MS, 'Agent Platform Veo poll interval must be a positive whole number of milliseconds.');
@@ -306,13 +307,6 @@ async function readBoundedBytes(response: Response, maxBytes: number): Promise<U
   catch (cause) { if (cause instanceof VidGenError) throw cause; throw providerFailure('Agent Platform Veo video service returned an unreadable response.', cause); }
   finally { reader.releaseLock(); }
   const bytes = new Uint8Array(size); let offset = 0; for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; } return bytes;
-}
-
-async function defaultAccessToken(): Promise<string> {
-  const { GoogleAuth } = await import('google-auth-library');
-  const token = await new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/cloud-platform'] }).getAccessToken();
-  if (token === null) throw new Error('missing token');
-  return token;
 }
 
 function requiredEnvironmentValue(environment: GoogleAgentPlatformVeoEnvironment, name: string): string { const value = environment[name]?.trim(); if (value === undefined || value.length === 0) throw new VidGenError('configuration', `Agent Platform Veo ${name} configuration is required.`); return value; }

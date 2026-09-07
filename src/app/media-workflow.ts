@@ -22,7 +22,7 @@ import {
   type ReferenceImageIdentity,
 } from '../core/anchor-reference.ts';
 import { getAssemblyTemplate } from '../core/template-registry.ts';
-import { GoogleGeminiSpeechGenerationClient } from '../integrations/google/gemini-speech-generation.ts';
+import { GoogleAgentPlatformSpeechGenerationClient } from '../integrations/google/agent-platform-speech-generation.ts';
 import { createConfiguredVideoClient } from '../integrations/google/video-client-factory.ts';
 import { writeJsonAtomically, prettyJson } from '../shared/atomic-json.ts';
 import { canonicalJson } from '../shared/canonical-json.ts';
@@ -156,7 +156,7 @@ export async function generateStoryMedia(dependencies: MediaWorkflowDependencies
   const hasVideo = units.some((unit) => unit.role.kind !== 'voiceover');
   const hasSpeech = units.some((unit) => unit.role.kind === 'voiceover');
   const video = hasVideo ? (dependencies.createVideoClient ?? createConfiguredVideoClient)() : undefined;
-  const speech = hasSpeech ? (dependencies.createSpeechClient ?? (() => new GoogleGeminiSpeechGenerationClient()))() : undefined;
+  const speech = hasSpeech ? (dependencies.createSpeechClient ?? (() => new GoogleAgentPlatformSpeechGenerationClient()))() : undefined;
   if (video === undefined && hasVideo) throw new VidGenError('configuration', 'Video generation client is unavailable.');
   if (speech === undefined && hasSpeech) throw new VidGenError('configuration', 'Speech generation client is unavailable.');
 
