@@ -1,0 +1,48 @@
+TASK: Correction 6 / P2 — API-key handling closeout
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra Medium`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Review P1 as the bounded Agent Platform text-configuration repair that removes VidGen's unsupported API-key character assumption. Inspect the actual diff, producer/consumer boundary, and tests beyond the happy path; do not approve merely because tests pass.
+
+ACCEPTANCE
+
+Confirm:
+- `GEMINI_API_KEY` is accepted as an opaque present/non-blank runtime secret after surrounding-whitespace normalization, with no guessed character whitelist;
+- punctuation-bearing keys, including the regression case containing `.`, reach the existing `x-goog-api-key` header unchanged after normalization;
+- missing/blank keys still fail before network activity;
+- `GOOGLE_CLOUD_PROJECT` and `VIDGEN_TEXT_MODEL` retain strict safe identifier validation;
+- the API key cannot appear in neutral results/provenance, artifacts, logs, prompts, fingerprints, or public errors;
+- the Agent Platform project/global endpoint, request schema, timeout/size/error behavior, and safe provider/model/request provenance are unchanged;
+- ClipPlan and headline consumers retain the same StructuredTextModelClient contract;
+- no Veo, TTS, ngest, FFmpeg, CLI, schemas, cinematic behavior, or Phase 7 work changed;
+- package and engine remain 0.6.5.
+
+VALIDATION
+
+Run:
+- `npm run codex:phase:validate -- c6-api-key`;
+- focused structured-text, ClipPlan, and headline workflow tests;
+- `npm test`;
+- `npm run check`;
+- `node src/cli.ts --help`;
+- `git diff --check`.
+
+Inspect the focused configuration tests specifically to ensure they no longer encode a replacement guessed API-key syntax.
+
+LIVE QUALIFICATION
+
+A live provider call is not required for this local correction closeout because the Codex environment should not require owner secrets. Do not infer live success. The owner will rerun the same VPS ngest + Bill headline command after pulling the correction; that is the required runtime evidence for clearing the observed blocker.
+
+BOUNDED REPAIRS
+
+Repair only defects directly inside the structured-text API-key configuration behavior and focused regression coverage. Do not broaden authentication architecture or provider behavior.
+
+FINAL RESPONSE
+
+Report review findings, any bounded repair, exact validation, opaque-key regression result, preserved secret/project/model safety, unchanged 0.6.5 state, and whether `c6-api-key` is ready for human review.
