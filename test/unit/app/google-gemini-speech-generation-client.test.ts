@@ -13,7 +13,10 @@ import {
 const token = 'tts-test-token-never-surface';
 const project = 'vidgen-test-project';
 const narration = 'The exact validated narration belongs to this voiceover.';
-const base64 = Buffer.from([1, 0, 2, 0]).toString('base64');
+// These are raw 16-bit PCM bytes, not a WAV. Their RIFF-looking prefix makes
+// the data-chunk boundary observable if the adapter ever wraps it twice.
+const rawPcm = new Uint8Array([0x52, 0x49, 0x46, 0x46]);
+const base64 = Buffer.from(rawPcm).toString('base64');
 
 test('Agent Platform Gemini TTS submits exactly the supplied voiceover narration and wraps documented PCM as WAV', async () => {
   let call: { url: string | URL | Request; init: RequestInit } | undefined;
@@ -26,12 +29,17 @@ test('Agent Platform Gemini TTS submits exactly the supplied voiceover narration
   assert.equal(headers.get('x-goog-user-project'), project);
   assert.equal(headers.get('x-goog-api-key'), null);
   const body = JSON.parse(String(call?.init.body)) as Record<string, unknown>;
-  assert.deepEqual(body, { input: { text: narration }, voice: { languageCode: 'en-US', name: 'Kore', modelName: 'gemini-tts-test' }, audioConfig: { audioEncoding: 'LINEAR16', sampleRateHertz: 24000, audioChannelCount: 1 } });
+  assert.deepEqual(body, { input: { text: narration }, voice: { languageCode: 'en-US', name: 'Kore', modelName: 'gemini-tts-test' }, audioConfig: { audioEncoding: 'PCM', sampleRateHertz: 24000 } });
   assert.equal(JSON.stringify(body).includes('A display-only headline'), false);
-  assert.deepEqual(result, { provider: 'google-agent-platform-gemini-tts', model: 'gemini-tts-test', voice: 'Kore', mimeType: 'audio/wav', bytes: wav([1, 0, 2, 0]), durationSeconds: 4 / 48_000 });
+  const { bytes, ...metadata } = result;
+  assert.deepEqual(metadata, { provider: 'google-agent-platform-gemini-tts', model: 'gemini-tts-test', voice: 'Kore', mimeType: 'audio/wav', durationSeconds: rawPcm.byteLength / 48_000 });
+  assert.equal(result.bytes.byteLength, 44 + rawPcm.byteLength);
   const view = new DataView(result.bytes.buffer, result.bytes.byteOffset, result.bytes.byteLength);
-  assert.equal(Buffer.from(result.bytes.subarray(0, 4)).toString(), 'RIFF'); assert.equal(view.getUint32(24, true), 24_000);
-  assert.equal(view.getUint16(22, true), 1); assert.equal(view.getUint16(34, true), 16); assert.equal(view.getUint32(40, true), 4);
+  assert.equal(Buffer.from(result.bytes.subarray(0, 4)).toString(), 'RIFF'); assert.equal(Buffer.from(result.bytes.subarray(8, 12)).toString(), 'WAVE');
+  assert.equal(Buffer.from(result.bytes.subarray(12, 16)).toString(), 'fmt '); assert.equal(view.getUint32(16, true), 16); assert.equal(view.getUint16(20, true), 1);
+  assert.equal(view.getUint32(24, true), 24_000); assert.equal(view.getUint32(28, true), 48_000); assert.equal(view.getUint16(32, true), 2); assert.equal(view.getUint16(34, true), 16);
+  assert.equal(Buffer.from(result.bytes.subarray(36, 40)).toString(), 'data'); assert.equal(view.getUint32(40, true), rawPcm.byteLength);
+  assert.deepEqual(result.bytes.subarray(44), rawPcm);
 });
 
 test('Agent Platform Gemini TTS rejects non-voiceover units and missing/path-shaped runtime config before provider work', async () => {
@@ -51,7 +59,7 @@ test('Agent Platform Gemini TTS fails safely for auth, malformed, non-audio, ove
   const cases: readonly [string, FetchImplementation, ClientOptions?][] = [
     ['auth', async () => audioResponse(), { getAccessToken: async () => { throw new Error(`${token} ${narration}`); } }], ['redirect', async () => new Response('', { status: 302 }), undefined], ['HTTP', async () => new Response(`${token} ${narration}`, { status: 503 }), undefined],
     ['invalid JSON', async () => new Response('{bad'), undefined], ['incomplete', async () => json({ status: 'in_progress', output_audio: { data: base64 } }), undefined],
-    ['missing audio', async () => json({}), undefined], ['blank audio', async () => json({ audioContent: '' }), undefined],
+    ['missing audio', async () => json({}), undefined], ['empty PCM', async () => json({ audioContent: Buffer.alloc(0).toString('base64') }), undefined],
     ['malformed base64', async () => json({ audioContent: '###' }), undefined], ['unaligned PCM', async () => json({ audioContent: Buffer.from([1]).toString('base64') }), undefined],
     ['oversized body', async () => new Response('12345'), { maxResponseBytes: 4 }], ['oversized audio', async () => audioResponse(), { maxAudioBytes: 3 }],
   ];
@@ -75,7 +83,6 @@ function clientFor(fetch: FetchImplementation, options: ClientOptions = {}): Goo
 function voiceoverUnit(): GeneratedMediaUnit { return { unitId: 'u03', segment: { id: 'content', startSeconds: 5, endSeconds: 15 }, role: { id: 'content-voiceover', kind: 'voiceover' }, targetDurationSeconds: 10, content: [{ slotId: 'narration', usage: 'spoken', text: narration }, { slotId: 'headline', usage: 'display', text: 'A display-only headline' }], spokenText: narration }; }
 function audioResponse(): Response { return json({ audioContent: base64 }); }
 function json(payload: unknown): Response { return new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } }); }
-function wav(pcm: number[]): Uint8Array { const result = new Uint8Array(44 + pcm.length); const view = new DataView(result.buffer); Buffer.from('RIFF').copy(result, 0); view.setUint32(4, 36 + pcm.length, true); Buffer.from('WAVEfmt ').copy(result, 8); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true); view.setUint32(24, 24000, true); view.setUint32(28, 48000, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true); Buffer.from('data').copy(result, 36); view.setUint32(40, pcm.length, true); result.set(pcm, 44); return result; }
 function hasConfiguration(error: unknown): boolean { return error instanceof VidGenError && error.code === 'configuration'; }
 function hasGeneratedMedia(error: unknown): boolean { return error instanceof VidGenError && error.code === 'generated_media'; }
 function safeError(error: unknown): boolean { const message = error instanceof Error ? error.message : String(error); assert.equal(message.includes(token), false); assert.equal(message.includes(narration), false); assert.equal(message.includes(base64), false); return hasGeneratedMedia(error); }

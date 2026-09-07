@@ -96,7 +96,7 @@ export class GoogleAgentPlatformSpeechGenerationClient implements SpeechGenerati
         body: JSON.stringify({
           input: { text: request.unit.spokenText },
           voice: { languageCode: this.languageCode, name: this.voice, modelName: this.model },
-          audioConfig: { audioEncoding: 'LINEAR16', sampleRateHertz: PCM_SAMPLE_RATE, audioChannelCount: PCM_CHANNELS },
+          audioConfig: { audioEncoding: 'PCM', sampleRateHertz: PCM_SAMPLE_RATE },
         }),
         redirect: 'error', signal: controller.signal,
       });
