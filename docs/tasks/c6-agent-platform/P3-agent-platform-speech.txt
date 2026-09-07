@@ -1,0 +1,57 @@
+TASK: Correction 6 / P3 — Agent Platform speech and legacy cleanup
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Move cinematic Gemini TTS off the legacy Interactions endpoint onto Google's current Agent Platform-compatible Gemini-TTS path, then remove remaining active legacy Google transport/configuration residue from the correction.
+
+Read P1-P2 resulting source/tests, docs/integrations/google-video.md, the neutral speech contract, current TTS adapter/media workflow, generated-media reuse/provenance, and package test wiring before editing.
+
+MUST REMAIN TRUE
+
+- Preserve SpeechGenerationClient and the cinematic voiceover contract; no speech concern may leak into StoryInput, ClipPlan, templates, or assembly semantics.
+- Use the documented Gemini-TTS capability through Cloud Text-to-Speech `v1/text:synthesize` with supported Google Cloud ADC bearer auth and `x-goog-user-project`.
+- Runtime speech configuration is `GOOGLE_CLOUD_PROJECT`, `VIDGEN_TTS_MODEL`, `VIDGEN_TTS_VOICE`, and a required `VIDGEN_TTS_LANGUAGE_CODE`. Keep configuration safe and runtime-only.
+- Send the exact resolved voiceover text as synthesis input. Use the configured model/voice/language and request mono 24 kHz PCM so the existing deterministic PCM-to-WAV artifact behavior and duration calculation can be preserved.
+- Reuse a small shared ADC/access-token helper from P2 if one exists; otherwise extract only the narrow reusable auth boundary needed by video and speech. Do not build a generalized provider SDK/framework.
+- Bound auth, request time, response size, Base64 decoding, and audio size; reject malformed/empty/oversized responses safely. Secrets, tokens, raw responses, project-private data, and synthesis prompts must not leak into public errors or durable artifacts.
+- Use a stable Agent Platform speech provider identity so existing generic provider/model/voice fingerprints invalidate incompatible prior audio reuse without changing durable schemas.
+- Remove or retire active legacy Google files/tests/configuration only after tracing consumers. Historical task records under `docs/tasks/c6-vertex-adapter/` remain unchanged.
+- After this prompt, active application/test/package wiring must not depend on `generativelanguage.googleapis.com`, `VIDGEN_VIDEO_BACKEND`, `VIDGEN_VERTEX_VIDEO_MODEL`, or active Developer/Vertex-named video adapter classes. Historical docs/tasks are exempt from this implementation sweep.
+- Preserve simple headline behavior, cinematic media-run resume/failure semantics, generated-media schema, FFmpeg assembly, CLI grammar, ngest behavior, and all Phase 6 product contracts.
+- Package and engine version remain 0.6.5.
+
+PROOF
+
+Focused tests must prove:
+- missing/blank/unsafe project/model/voice/language configuration fails before provider work;
+- the TTS call targets `texttospeech.googleapis.com/v1/text:synthesize`, uses injected/mockable ADC Bearer auth plus the configured quota-project header, and never uses `GEMINI_API_KEY`;
+- exact input text, configured language/voice/model, PCM encoding, and 24000 Hz request settings are preserved;
+- one valid bounded `audioContent` response becomes the same deterministic WAV technical shape and correct duration;
+- auth, timeout, HTTP, malformed JSON/Base64, missing/empty audio, and oversized responses fail safely without secret/text leakage;
+- provider/model/voice identity safely drives existing audio provenance and reuse invalidation;
+- media workflow resume/retry and generated-media tests remain green;
+- an active-source/test/package sweep confirms the retired legacy endpoints/backend variables/adapter names are gone from executable paths.
+
+Run focused TTS/media/generated-media tests, `npm test`, `npm run check`, `node src/cli.ts --help`, and `git diff --check`.
+
+Downstream-required capability -> owning implementation/export -> focused proof:
+
+Agent Platform-compatible Gemini TTS -> Google speech adapter implementing SpeechGenerationClient -> auth/request/audio tests.
+
+24 kHz PCM provider output -> existing deterministic WAV artifact -> byte/duration tests.
+
+effective Agent Platform speech identity -> existing generated-media fingerprint/provenance -> reuse/media tests.
+
+NON-GOALS
+
+Do not redesign voices, add multi-speaker narration, change cinematic templates, add live ngest fan-out, alter FFmpeg policy, add publishing/database/queue work, or rewrite historical task records.
+
+FINAL RESPONSE
+
+Report TTS runtime/auth/request contract, WAV/provenance behavior, legacy active-code cleanup, exact validation run, preserved workflows, and confirmation that 0.6.5 is unchanged.
