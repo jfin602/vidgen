@@ -279,7 +279,7 @@ function partitionCinematicSpeech(text: string, chunks: number): readonly string
 }
 
 function requiredExtensionCount(seconds: number): number { return Math.max(0, Math.ceil((seconds - INITIAL_DURATION_SECONDS) / EXTENSION_DURATION_SECONDS)); }
-function operationDone(payload: unknown): boolean { const operation = record(payload); if (operation === undefined || typeof operation.done !== 'boolean') throw providerFailure('Agent Platform Veo video service returned a malformed operation.'); if (operation.error !== undefined) throw providerFailure('Agent Platform Veo video generation failed.'); return operation.done; }
+function operationDone(payload: unknown): boolean { const operation = record(payload); if (operation === undefined || (operation.done !== undefined && typeof operation.done !== 'boolean')) throw providerFailure('Agent Platform Veo video service returned a malformed operation.'); if (operation.error !== undefined) throw providerFailure('Agent Platform Veo video generation failed.'); return operation.done === true; }
 
 function completedOperation(payload: unknown, operationName: string, maxVideoBytes: number): CompletedOperation {
   const operation = record(payload); const response = operation === undefined ? undefined : record(operation.response);

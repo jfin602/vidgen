@@ -54,12 +54,34 @@ test('Agent Platform Veo sends one to three PNG/JPEG asset references exactly an
   assert.equal(authCalls, 0); assert.equal(fetchCalls, 0);
 });
 
-test('Agent Platform Veo polls the exact returned full operation name with fetchPredictOperation', async () => {
+test('Agent Platform Veo accepts a name-only start as pending and polls its exact full operation name', async () => {
   const calls: FetchCall[] = []; const name = operationName('poll-id');
-  const client = clientFor(sequenceFetch(calls, [operation('poll-id', false), operation('poll-id', true, videoBytes([3]))]));
-  await client.generateVideo({ unit: contentUnit(8) });
+  const client = clientFor(sequenceFetch(calls, [operation('poll-id'), operation('poll-id', true, videoBytes([3]))]));
+  const result = await client.generateVideo({ unit: contentUnit(8) });
   assert.equal(String(calls[1]!.url), `${GOOGLE_AGENT_PLATFORM_VEO_API_BASE}/projects/${project}/locations/us-central1/publishers/google/models/${model}:fetchPredictOperation`);
   assert.deepEqual(body(calls[1]!), { operationName: name });
+  assert.deepEqual(result, { provider: 'google-agent-platform-veo', model, requestId: name, operationId: name, operationIds: [name], generationOperationCount: 1, mimeType: 'video/mp4', bytes: videoBytes([3]), durationSeconds: 8 });
+});
+
+test('Agent Platform Veo accepts name-only and explicit false poll responses as pending', async () => {
+  for (const [name, pending] of [
+    ['name-only', operation('pending')],
+    ['explicit false', operation('pending', false)],
+  ] as const) {
+    const calls: FetchCall[] = [];
+    const result = await clientFor(sequenceFetch(calls, [operation('start'), pending, operation('pending', true, videoBytes([4]))])).generateVideo({ unit: contentUnit(8) });
+    assert.equal(calls.length, 3, name);
+    assert.equal(result.operationId, operationName('start'), name);
+    assert.deepEqual(body(calls[1]!), { operationName: operationName('start') }, name);
+    assert.deepEqual(body(calls[2]!), { operationName: operationName('start') }, name);
+  }
+});
+
+test('Agent Platform Veo bounds indefinitely name-only pending operations', async () => {
+  const calls: FetchCall[] = [];
+  const client = clientFor(sequenceFetch(calls, [operation('pending'), operation('pending'), operation('pending')]), { totalTimeoutMs: 2, now: () => 0 });
+  await assert.rejects(client.generateVideo({ unit: contentUnit(8) }), safeError);
+  assert.equal(calls.length, 3);
 });
 
 test('Agent Platform Veo decodes only one bounded valid inline MP4 result', async (context) => {
@@ -108,7 +130,8 @@ test('Agent Platform Veo preserves cinematic extension provenance and safely rej
     ['auth', async () => operation('never', true, videoBytes([1])), { getAccessToken: async () => { throw new Error(token); } }],
     ['HTTP', async () => new Response(token, { status: 503 }), undefined],
     ['bad JSON', async () => new Response('{bad'), undefined],
-    ['malformed operation', async () => json({ name: operationName('x') }), undefined],
+    ['malformed operation done string', async () => json({ name: operationName('x'), done: 'true' }), undefined],
+    ['malformed operation done number', async () => json({ name: operationName('x'), done: 1 }), undefined],
     ['provider failure', async () => json({ name: operationName('x'), done: true, error: { message: token } }), undefined],
   ];
   for (const [name, fetch, options] of cases) await context.test(name, async () => {
