@@ -34,7 +34,7 @@ MUST REMAIN TRUE
 - Keep the lower third deterministic and bounded. It is acceptable to adjust the box geometry, font sizes, line spacing, headline line count, or wrapping limits as part of one coherent finishing policy, but do not introduce responsive browser/CSS layout or arbitrary unbounded shrinking.
 - Keep staged text files and no-shell FFmpeg argv handling. Untrusted headline/source text must never be interpolated directly into the filter expression.
 - Keep 1080x1920, 30 fps, H.264, yuv420p, AAC stereo 48 kHz, loudnorm, duration trimming, and one-input simple finishing unchanged.
-- Because the visible lower-third treatment changes, update the simple finishing policy provenance from `simple-clip-finishing-policy-v1` to a new version representing the new deterministic layout. Do not change headline sidecar schema shape.
+- Because the visible lower-third treatment changes, update the simple finishing policy provenance from `simple-clip-finishing-policy-v1` to `simple-clip-finishing-policy-v2` for the new deterministic layout. Do not change headline sidecar schema shape.
 - Preserve the current headline workflow's pre-provider lower-third failure behavior even if fit validation now needs the selected font or FFmpeg boundary.
 - Preserve simple presenter copy, Veo prompt/speech behavior, Agent Platform adapters, duration planning, operation polling, ngest, cinematic assembly, CLI grammar, and package/engine version 0.6.5.
 
