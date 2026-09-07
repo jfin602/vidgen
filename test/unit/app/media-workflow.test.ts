@@ -139,27 +139,27 @@ test('media workflow rejects an invalid local anchor reference before constructi
   });
 });
 
-test('cinematic media defaults through the backend selector while an injected client bypasses it', async () => {
+test('cinematic media defaults through the Agent Platform client while an injected client bypasses ambient configuration', async () => {
   await withWorkspace(async (directory) => {
     const reference = join(directory, 'anchor.png'); await writeFile(reference, png(1));
-    await withVideoBackend('invalid', async () => {
+    await withVideoModel('unsupported-model', async () => {
       const defaults = fakes();
-      await assert.rejects(generateStoryMedia({ storyDirectory: directory, anchorReferencePaths: [reference], createSpeechClient: defaults.createSpeechClient, now: clock() }), /VIDGEN_VIDEO_BACKEND must be "developer" or "vertex"/);
+      await assert.rejects(generateStoryMedia({ storyDirectory: directory, anchorReferencePaths: [reference], createSpeechClient: defaults.createSpeechClient, now: clock() }), /project, location, or model configuration is invalid/);
       await generateStoryMedia({ storyDirectory: directory, anchorReferencePaths: [reference], ...defaults, now: clock() });
     });
   });
 });
 
-test('video backend provider identity invalidates cinematic reuse without leaking backend configuration', async () => {
+test('Agent Platform provider identity invalidates legacy cinematic reuse without leaking configuration', async () => {
   await withWorkspace(async (directory) => {
     const reference = join(directory, 'anchor.png'); await writeFile(reference, png(1));
-    await generateStoryMedia({ storyDirectory: directory, anchorReferencePaths: [reference], ...fakes('video-v1', 'speech-v1', 'voice-a', 'google-veo'), now: clock() });
-    const vertex = fakes('video-v1', 'speech-v1', 'voice-a', 'vertex-veo');
-    await generateStoryMedia({ storyDirectory: directory, anchorReferencePaths: [reference], ...vertex, now: clock() });
-    assert.deepEqual(vertex.videoUnits, ['u01', 'u02', 'u04', 'u05']);
-    assert.deepEqual(vertex.speechUnits, []);
+    await generateStoryMedia({ storyDirectory: directory, anchorReferencePaths: [reference], ...fakes('video-v1', 'speech-v1', 'voice-a', 'legacy-google-video'), now: clock() });
+    const agentPlatform = fakes('video-v1', 'speech-v1', 'voice-a', 'google-agent-platform-veo');
+    await generateStoryMedia({ storyDirectory: directory, anchorReferencePaths: [reference], ...agentPlatform, now: clock() });
+    assert.deepEqual(agentPlatform.videoUnits, ['u01', 'u02', 'u04', 'u05']);
+    assert.deepEqual(agentPlatform.speechUnits, []);
     const manifest = await readFile(join(directory, GENERATED_MEDIA_ARTIFACT_NAME), 'utf8');
-    assert.equal(manifest.includes('vertex-veo'), true);
+    assert.equal(manifest.includes('google-agent-platform-veo'), true);
     assert.equal(manifest.includes('GOOGLE_CLOUD_PROJECT'), false);
     assert.equal(manifest.includes('secret-token'), false);
   });
@@ -190,5 +190,5 @@ function videoResult(unitId: string, provider = 'fake-video') { return { provide
 function png(last: number) { return new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, last]); }
 function clock() { return () => new Date('2026-09-05T12:00:00.000Z'); }
 async function withWorkspace(run: (directory: string) => Promise<void>) { const directory = await mkdtemp(join(tmpdir(), 'vidgen-media-')); try { await writeWorkspace(directory); await run(directory); } finally { await rm(directory, { recursive: true, force: true }); } }
-async function withVideoBackend(value: string | undefined, run: () => Promise<void>) { const prior = process.env.VIDGEN_VIDEO_BACKEND; try { if (value === undefined) delete process.env.VIDGEN_VIDEO_BACKEND; else process.env.VIDGEN_VIDEO_BACKEND = value; await run(); } finally { if (prior === undefined) delete process.env.VIDGEN_VIDEO_BACKEND; else process.env.VIDGEN_VIDEO_BACKEND = prior; } }
+async function withVideoModel(value: string, run: () => Promise<void>) { const prior = { project: process.env.GOOGLE_CLOUD_PROJECT, location: process.env.GOOGLE_CLOUD_LOCATION, model: process.env.VIDGEN_VIDEO_MODEL }; try { process.env.GOOGLE_CLOUD_PROJECT = 'vidgen-test-project'; process.env.GOOGLE_CLOUD_LOCATION = 'us-central1'; process.env.VIDGEN_VIDEO_MODEL = value; await run(); } finally { for (const [name, priorValue] of Object.entries({ GOOGLE_CLOUD_PROJECT: prior.project, GOOGLE_CLOUD_LOCATION: prior.location, VIDGEN_VIDEO_MODEL: prior.model })) if (priorValue === undefined) delete process.env[name]; else process.env[name] = priorValue; } }
 async function writeWorkspace(directory: string) { const template = getAssemblyTemplate('default-news-40s'); const plan = { schemaVersion: '1', storyFingerprint, template: { id: template.id, version: template.version }, slots: template.contentSlots.map((slot) => ({ id: slot.id, text: `${slot.id} text` })) }; const story = { storyRunId: runId, status: 'story_ready', startedAt: '2026-09-05T00:00:00.000Z', endedAt: '2026-09-05T00:00:01.000Z', engineVersion: '0.4.4', articleId: 'article', storyFingerprint, sourceInputFingerprint: 'b'.repeat(64), storyInputArtifact: 'story.json', template: { id: template.id, version: template.version }, generatedAssetRoles: [], standardizedAssetRoles: [] }; const clipRun = { storyRunId: runId, status: 'clip_plan_ready', startedAt: '2026-09-05T00:00:00.000Z', endedAt: '2026-09-05T00:00:01.000Z', engineVersion: '0.4.4', storyFingerprint, template: { id: template.id, version: template.version }, provider: 'fake', configuredModel: 'fake', clipPlanArtifact: 'clip-plan.json' }; await Promise.all([writeFile(join(directory, 'story-run.json'), JSON.stringify(story)), writeFile(join(directory, 'clip-plan-run.json'), JSON.stringify(clipRun)), writeFile(join(directory, 'clip-plan.json'), JSON.stringify(plan))]); }

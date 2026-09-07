@@ -7,43 +7,46 @@ import { VidGenError } from '../../../src/core/error.ts';
 import {
   GOOGLE_CLOUD_LOCATION_ENV,
   GOOGLE_CLOUD_PROJECT_ENV,
-  VIDGEN_VERTEX_VIDEO_MODEL_ENV,
-  VERTEX_VEO_API_BASE,
-  VertexVeoVideoGenerationClient,
+  VIDGEN_VIDEO_MODEL_ENV,
+  GOOGLE_AGENT_PLATFORM_VEO_API_BASE,
+  GoogleAgentPlatformVeoVideoGenerationClient,
   type FetchImplementation,
-  type VertexVeoEnvironment,
-  type VertexVeoVideoGenerationClientOptions,
-} from '../../../src/integrations/google/vertex-veo-video-generation.ts';
+  type GoogleAgentPlatformVeoEnvironment,
+  type GoogleAgentPlatformVeoVideoGenerationClientOptions,
+} from '../../../src/integrations/google/agent-platform-veo-video-generation.ts';
 
 const project = 'vidgen-test-project';
 const model = 'veo-3.1-generate-001';
-const token = 'vertex-test-token-never-surface';
+const token = 'agent-platform-test-token-never-surface';
 const storyText = 'A city council approved the pilot program after a public meeting.';
 const image = createApprovedReferenceImage('image/png', new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 3]));
 
-test('Vertex Veo uses injected ADC bearer auth and documented regional inline request/result shapes', async () => {
+test('Agent Platform Veo uses injected ADC bearer auth and documented regional inline request/result shapes', async () => {
   const calls: FetchCall[] = []; let authCalls = 0;
   const client = clientFor(sequenceFetch(calls, [operation('one', true, videoBytes([1]))]), { getAccessToken: async () => { authCalls += 1; return token; } });
   const result = await client.generateVideo({ unit: contentUnit(8) });
-  assert.deepEqual(result, { provider: 'vertex-veo', model, requestId: operationName('one'), operationId: operationName('one'), operationIds: [operationName('one')], generationOperationCount: 1, mimeType: 'video/mp4', bytes: videoBytes([1]), durationSeconds: 8 });
+  assert.deepEqual(result, { provider: 'google-agent-platform-veo', model, requestId: operationName('one'), operationId: operationName('one'), operationIds: [operationName('one')], generationOperationCount: 1, mimeType: 'video/mp4', bytes: videoBytes([1]), durationSeconds: 8 });
   assert.equal(authCalls, 1);
-  assert.equal(String(calls[0]!.url), `${VERTEX_VEO_API_BASE}/projects/${project}/locations/us-central1/publishers/google/models/${model}:predictLongRunning`);
+  assert.equal(String(calls[0]!.url), `${GOOGLE_AGENT_PLATFORM_VEO_API_BASE}/projects/${project}/locations/us-central1/publishers/google/models/${model}:predictLongRunning`);
   const headers = new Headers(calls[0]!.init.headers);
   assert.equal(headers.get('authorization'), `Bearer ${token}`); assert.equal(headers.get('x-goog-api-key'), null);
   assert.deepEqual(body(calls[0]!).parameters, { aspectRatio: '9:16', durationSeconds: 8, resolution: '720p', sampleCount: 1 });
+  assert.match(String((body(calls[0]!).instances as Array<Record<string, unknown>>)[0]!.prompt), /Create a portrait news B-roll video\..*Do not add dialogue or voice narration\./);
   assert.equal(JSON.stringify(body(calls[0]!)).includes('storageUri'), false);
 });
 
-test('Vertex Veo sends one to three PNG/JPEG asset references exactly and rejects WebP before ADC/network', async () => {
+test('Agent Platform Veo sends one to three PNG/JPEG asset references exactly and rejects WebP before ADC/network', async () => {
   const calls: FetchCall[] = [];
   const jpeg = createApprovedReferenceImage('image/jpeg', new Uint8Array([0xff, 0xd8, 0xff, 4]));
   const client = clientFor(sequenceFetch(calls, [operation('refs', true, videoBytes([2]))]));
-  await client.generateVideo({ unit: presenterUnit(8), referenceImages: [image, jpeg] });
+  await client.generateVideo({ unit: presenterUnit(8), referenceImages: [image, jpeg, image] });
   const references = (body(calls[0]!).instances as Array<Record<string, unknown>>)[0]!.referenceImages as Array<Record<string, unknown>>;
   assert.deepEqual(references, [
     { image: { bytesBase64Encoded: Buffer.from(image.bytes).toString('base64'), mimeType: 'image/png' }, referenceType: 'asset' },
     { image: { bytesBase64Encoded: Buffer.from(jpeg.bytes).toString('base64'), mimeType: 'image/jpeg' }, referenceType: 'asset' },
+    { image: { bytesBase64Encoded: Buffer.from(image.bytes).toString('base64'), mimeType: 'image/png' }, referenceType: 'asset' },
   ]);
+  assert.match(String((body(calls[0]!).instances as Array<Record<string, unknown>>)[0]!.prompt), new RegExp(`assigned dialogue: "${storyText}"`));
   let authCalls = 0; let fetchCalls = 0;
   const webp = createApprovedReferenceImage('image/webp', new Uint8Array([1]));
   const rejecting = clientFor(async () => { fetchCalls += 1; return operation('bad', true, videoBytes([1])); }, { getAccessToken: async () => { authCalls += 1; return token; } });
@@ -51,15 +54,15 @@ test('Vertex Veo sends one to three PNG/JPEG asset references exactly and reject
   assert.equal(authCalls, 0); assert.equal(fetchCalls, 0);
 });
 
-test('Vertex Veo polls the exact returned full operation name with fetchPredictOperation', async () => {
+test('Agent Platform Veo polls the exact returned full operation name with fetchPredictOperation', async () => {
   const calls: FetchCall[] = []; const name = operationName('poll-id');
   const client = clientFor(sequenceFetch(calls, [operation('poll-id', false), operation('poll-id', true, videoBytes([3]))]));
   await client.generateVideo({ unit: contentUnit(8) });
-  assert.equal(String(calls[1]!.url), `${VERTEX_VEO_API_BASE}/projects/${project}/locations/us-central1/publishers/google/models/${model}:fetchPredictOperation`);
+  assert.equal(String(calls[1]!.url), `${GOOGLE_AGENT_PLATFORM_VEO_API_BASE}/projects/${project}/locations/us-central1/publishers/google/models/${model}:fetchPredictOperation`);
   assert.deepEqual(body(calls[1]!), { operationName: name });
 });
 
-test('Vertex Veo decodes only one bounded valid inline MP4 result', async (context) => {
+test('Agent Platform Veo decodes only one bounded valid inline MP4 result', async (context) => {
   const cases: readonly [string, unknown, ClientOptions?][] = [
     ['malformed', { response: { videos: [{ mimeType: 'video/mp4', bytesBase64Encoded: '%%%=' }] } }, undefined],
     ['filtered', { response: { raiMediaFilteredCount: 1, videos: [{ mimeType: 'video/mp4', bytesBase64Encoded: Buffer.from(videoBytes([1])).toString('base64') }] } }, undefined],
@@ -75,9 +78,9 @@ test('Vertex Veo decodes only one bounded valid inline MP4 result', async (conte
   });
 });
 
-test('Vertex Veo preserves simple retained-window speech timing and uses exactly one extension from 9 through 15 seconds', async (context) => {
-  for (let seconds = 4; seconds <= 15; seconds += 1) await context.test(`${seconds} seconds`, async () => {
-    const words = Array.from({ length: Math.floor((seconds * 150) / 60) }, (_, index) => `word${index + 1}`).join(' ');
+test('Agent Platform Veo preserves simple retained-window speech timing and uses exactly one extension from 4 through 20 seconds', async (context) => {
+  for (let seconds = 4; seconds <= 20; seconds += 1) await context.test(`${seconds} seconds`, async () => {
+    const words = Array.from({ length: Math.floor((Math.min(seconds, 15) * 150) / 60) }, (_, index) => `word${index + 1}`).join(' ');
     const calls: FetchCall[] = []; const responses = seconds <= 8
       ? [operation(`simple-${seconds}`, true, videoBytes([1]))]
       : [operation(`simple-${seconds}-initial`, true, videoBytes([1])), operation(`simple-${seconds}-extension`, true, videoBytes([2]))];
@@ -88,17 +91,18 @@ test('Vertex Veo preserves simple retained-window speech timing and uses exactly
       assert.equal(JSON.stringify(body(calls[1]!)).includes(Buffer.from(videoBytes([1])).toString('base64')), true);
       const prompts = calls.map((call) => String((body(call).instances as Array<Record<string, unknown>>)[0]!.prompt));
       const dialogue = prompts.map(assignedDialogue).join(' '); assert.equal(dialogue, words);
-      assert.match(prompts[1]!, new RegExp(`first ${seconds - 8} seconds`));
+      assert.match(prompts[1]!, new RegExp(`first ${Math.min(seconds, 15) - 8} seconds`));
     }
   });
 });
 
-test('Vertex Veo preserves cinematic extension provenance and safely rejects auth, HTTP, malformed operation, and provider failures', async (context) => {
+test('Agent Platform Veo preserves cinematic extension provenance and safely rejects auth, HTTP, malformed operation, and provider failures', async (context) => {
   await context.test('extension provenance', async () => {
     const calls: FetchCall[] = [];
     const result = await clientFor(sequenceFetch(calls, [operation('initial', true, videoBytes([7])), operation('extension', true, videoBytes([8]))])).generateVideo({ unit: contentUnit(9) });
     assert.deepEqual(result.operationIds, [operationName('initial'), operationName('extension')]); assert.equal(result.durationSeconds, 15);
     assert.equal(JSON.stringify(body(calls[1]!)).includes(Buffer.from(videoBytes([7])).toString('base64')), true);
+    assert.match(String((body(calls[1]!).instances as Array<Record<string, unknown>>)[0]!.prompt), /Continue the same supplied visual treatment.*Do not add dialogue or voice narration\./);
   });
   const cases: readonly [string, FetchImplementation, ClientOptions?][] = [
     ['auth', async () => operation('never', true, videoBytes([1])), { getAccessToken: async () => { throw new Error(token); } }],
@@ -112,20 +116,20 @@ test('Vertex Veo preserves cinematic extension provenance and safely rejects aut
   });
 });
 
-test('unsafe Vertex configuration fails in construction before auth or network', () => {
+test('unsafe Agent Platform configuration fails in construction before auth or network', () => {
   let authCalls = 0; let fetchCalls = 0;
   for (const environment of [
-    { [GOOGLE_CLOUD_PROJECT_ENV]: project, [GOOGLE_CLOUD_LOCATION_ENV]: 'europe-west4', [VIDGEN_VERTEX_VIDEO_MODEL_ENV]: model },
-    { [GOOGLE_CLOUD_PROJECT_ENV]: '../unsafe', [GOOGLE_CLOUD_LOCATION_ENV]: 'us-central1', [VIDGEN_VERTEX_VIDEO_MODEL_ENV]: model },
-    { [GOOGLE_CLOUD_PROJECT_ENV]: project, [GOOGLE_CLOUD_LOCATION_ENV]: 'us-central1', [VIDGEN_VERTEX_VIDEO_MODEL_ENV]: 'veo-3.1-fast-generate-preview' },
-    { [GOOGLE_CLOUD_PROJECT_ENV]: project, [GOOGLE_CLOUD_LOCATION_ENV]: 'us-central1', [VIDGEN_VERTEX_VIDEO_MODEL_ENV]: 'publishers/google/models/veo-3.1-generate-001' },
+    { [GOOGLE_CLOUD_PROJECT_ENV]: project, [GOOGLE_CLOUD_LOCATION_ENV]: 'europe-west4', [VIDGEN_VIDEO_MODEL_ENV]: model },
+    { [GOOGLE_CLOUD_PROJECT_ENV]: '../unsafe', [GOOGLE_CLOUD_LOCATION_ENV]: 'us-central1', [VIDGEN_VIDEO_MODEL_ENV]: model },
+    { [GOOGLE_CLOUD_PROJECT_ENV]: project, [GOOGLE_CLOUD_LOCATION_ENV]: 'us-central1', [VIDGEN_VIDEO_MODEL_ENV]: 'veo-3.1-fast-generate-preview' },
+    { [GOOGLE_CLOUD_PROJECT_ENV]: project, [GOOGLE_CLOUD_LOCATION_ENV]: 'us-central1', [VIDGEN_VIDEO_MODEL_ENV]: 'publishers/google/models/veo-3.1-generate-001' },
   ]) assert.throws(() => clientFor(async () => { fetchCalls += 1; return operation('x', true, videoBytes([1])); }, { getAccessToken: async () => { authCalls += 1; return token; } }, environment), hasConfiguration);
   assert.equal(authCalls, 0); assert.equal(fetchCalls, 0);
 });
 
 interface FetchCall { readonly url: string | URL | Request; readonly init: RequestInit; }
-type ClientOptions = Omit<VertexVeoVideoGenerationClientOptions, 'environment' | 'fetch'>;
-function clientFor(fetch: FetchImplementation, options: ClientOptions = {}, overrides: VertexVeoEnvironment = {}): VertexVeoVideoGenerationClient { return new VertexVeoVideoGenerationClient({ environment: { [GOOGLE_CLOUD_PROJECT_ENV]: project, [GOOGLE_CLOUD_LOCATION_ENV]: 'us-central1', [VIDGEN_VERTEX_VIDEO_MODEL_ENV]: model, ...overrides }, fetch, getAccessToken: async () => token, pollIntervalMs: 1, sleep: async () => {}, ...options }); }
+type ClientOptions = Omit<GoogleAgentPlatformVeoVideoGenerationClientOptions, 'environment' | 'fetch'>;
+function clientFor(fetch: FetchImplementation, options: ClientOptions = {}, overrides: GoogleAgentPlatformVeoEnvironment = {}): GoogleAgentPlatformVeoVideoGenerationClient { return new GoogleAgentPlatformVeoVideoGenerationClient({ environment: { [GOOGLE_CLOUD_PROJECT_ENV]: project, [GOOGLE_CLOUD_LOCATION_ENV]: 'us-central1', [VIDGEN_VIDEO_MODEL_ENV]: model, ...overrides }, fetch, getAccessToken: async () => token, pollIntervalMs: 1, sleep: async () => {}, ...options }); }
 function sequenceFetch(calls: FetchCall[], responses: Response[]): FetchImplementation { return async (url, init = {}) => { calls.push({ url, init }); const response = responses.shift(); if (response === undefined) throw new Error('unexpected fetch'); return response; }; }
 function operation(id: string, done: boolean, bytes?: Uint8Array): Response { return json({ name: operationName(id), done, ...(done && bytes === undefined ? { response: { videos: [] } } : {}), ...(bytes === undefined ? {} : { response: { videos: [{ mimeType: 'video/mp4', bytesBase64Encoded: Buffer.from(bytes).toString('base64') }] } }) }); }
 function operationName(id: string): string { return `projects/${project}/locations/us-central1/publishers/google/models/${model}/operations/${id}`; }

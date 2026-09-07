@@ -11,16 +11,16 @@ import {
 
 export const GOOGLE_CLOUD_PROJECT_ENV = 'GOOGLE_CLOUD_PROJECT';
 export const GOOGLE_CLOUD_LOCATION_ENV = 'GOOGLE_CLOUD_LOCATION';
-export const VIDGEN_VERTEX_VIDEO_MODEL_ENV = 'VIDGEN_VERTEX_VIDEO_MODEL';
-export const VERTEX_VEO_LOCATION = 'us-central1';
-export const VERTEX_VEO_API_BASE = `https://${VERTEX_VEO_LOCATION}-aiplatform.googleapis.com/v1`;
-export const DEFAULT_VERTEX_VEO_POLL_INTERVAL_MS = 10_000;
-export const DEFAULT_VERTEX_VEO_TOTAL_TIMEOUT_MS = 360_000;
-export const DEFAULT_VERTEX_VEO_REQUEST_TIMEOUT_MS = 30_000;
-export const DEFAULT_VERTEX_VEO_AUTH_TIMEOUT_MS = 30_000;
-export const DEFAULT_VERTEX_VEO_MAX_RESPONSE_BYTES = 140_000_000;
-export const DEFAULT_VERTEX_VEO_MAX_VIDEO_BYTES = 100_000_000;
-export const DEFAULT_VERTEX_VEO_MAX_EXTENSION_COUNT = 3;
+export const VIDGEN_VIDEO_MODEL_ENV = 'VIDGEN_VIDEO_MODEL';
+export const GOOGLE_AGENT_PLATFORM_VEO_LOCATION = 'us-central1';
+export const GOOGLE_AGENT_PLATFORM_VEO_API_BASE = `https://${GOOGLE_AGENT_PLATFORM_VEO_LOCATION}-aiplatform.googleapis.com/v1`;
+export const DEFAULT_GOOGLE_AGENT_PLATFORM_VEO_POLL_INTERVAL_MS = 10_000;
+export const DEFAULT_GOOGLE_AGENT_PLATFORM_VEO_TOTAL_TIMEOUT_MS = 360_000;
+export const DEFAULT_GOOGLE_AGENT_PLATFORM_VEO_REQUEST_TIMEOUT_MS = 30_000;
+export const DEFAULT_GOOGLE_AGENT_PLATFORM_VEO_AUTH_TIMEOUT_MS = 30_000;
+export const DEFAULT_GOOGLE_AGENT_PLATFORM_VEO_MAX_RESPONSE_BYTES = 140_000_000;
+export const DEFAULT_GOOGLE_AGENT_PLATFORM_VEO_MAX_VIDEO_BYTES = 100_000_000;
+export const DEFAULT_GOOGLE_AGENT_PLATFORM_VEO_MAX_EXTENSION_COUNT = 3;
 
 const INITIAL_DURATION_SECONDS = 8;
 const EXTENSION_DURATION_SECONDS = 7;
@@ -28,21 +28,21 @@ const SUPPORTED_MODELS = new Set(['veo-3.1-generate-001', 'veo-3.1-fast-generate
 const SAFE_PROJECT = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
 const SAFE_ACCESS_TOKEN = /^[A-Za-z0-9._~-]{1,16384}$/;
 
-export type VertexVeoEnvironment = Readonly<Record<string, string | undefined>>;
+export type GoogleAgentPlatformVeoEnvironment = Readonly<Record<string, string | undefined>>;
 export type FetchImplementation = typeof fetch;
-export type VertexAccessTokenProvider = () => Promise<string>;
+export type GoogleAgentPlatformAccessTokenProvider = () => Promise<string>;
 
-export interface VertexVeoRuntimeConfig {
+export interface GoogleAgentPlatformVeoRuntimeConfig {
   readonly project: string;
-  readonly location: typeof VERTEX_VEO_LOCATION;
+  readonly location: typeof GOOGLE_AGENT_PLATFORM_VEO_LOCATION;
   readonly model: string;
 }
 
-export interface VertexVeoVideoGenerationClientOptions {
-  readonly environment?: VertexVeoEnvironment;
+export interface GoogleAgentPlatformVeoVideoGenerationClientOptions {
+  readonly environment?: GoogleAgentPlatformVeoEnvironment;
   readonly fetch?: FetchImplementation;
   /** Injectable so tests never need ambient ADC. */
-  readonly getAccessToken?: VertexAccessTokenProvider;
+  readonly getAccessToken?: GoogleAgentPlatformAccessTokenProvider;
   readonly now?: () => number;
   readonly sleep?: (milliseconds: number) => Promise<void>;
   readonly pollIntervalMs?: number;
@@ -54,25 +54,25 @@ export interface VertexVeoVideoGenerationClientOptions {
   readonly maxExtensionCount?: number;
 }
 
-/** Loads only Vertex runtime identity; Developer API credentials are never read here. */
-export function loadVertexVeoRuntimeConfig(environment: VertexVeoEnvironment = process.env): VertexVeoRuntimeConfig {
+/** Loads only Agent Platform runtime identity; Developer API credentials are never read here. */
+export function loadGoogleAgentPlatformVeoRuntimeConfig(environment: GoogleAgentPlatformVeoEnvironment = process.env): GoogleAgentPlatformVeoRuntimeConfig {
   const project = requiredEnvironmentValue(environment, GOOGLE_CLOUD_PROJECT_ENV);
   const location = requiredEnvironmentValue(environment, GOOGLE_CLOUD_LOCATION_ENV);
-  const model = requiredEnvironmentValue(environment, VIDGEN_VERTEX_VIDEO_MODEL_ENV);
-  if (!SAFE_PROJECT.test(project) || location !== VERTEX_VEO_LOCATION || !SUPPORTED_MODELS.has(model)) {
-    throw new VidGenError('configuration', 'Vertex Veo project, location, or model configuration is invalid.');
+  const model = requiredEnvironmentValue(environment, VIDGEN_VIDEO_MODEL_ENV);
+  if (!SAFE_PROJECT.test(project) || location !== GOOGLE_AGENT_PLATFORM_VEO_LOCATION || !SUPPORTED_MODELS.has(model)) {
+    throw new VidGenError('configuration', 'Agent Platform Veo project, location, or model configuration is invalid.');
   }
-  return { project, location: VERTEX_VEO_LOCATION, model };
+  return { project, location: GOOGLE_AGENT_PLATFORM_VEO_LOCATION, model };
 }
 
-/** Vertex REST Veo adapter. It exposes only neutral raw media and safe operation provenance. */
-export class VertexVeoVideoGenerationClient implements VideoGenerationClient, PresenterVideoGenerationClient {
-  readonly provider = 'vertex-veo';
+/** Agent Platform REST Veo adapter. It exposes only neutral raw media and safe operation provenance. */
+export class GoogleAgentPlatformVeoVideoGenerationClient implements VideoGenerationClient, PresenterVideoGenerationClient {
+  readonly provider = 'google-agent-platform-veo';
   readonly model: string;
 
   private readonly project: string;
   private readonly fetchImplementation: FetchImplementation;
-  private readonly getAccessToken: VertexAccessTokenProvider;
+  private readonly getAccessToken: GoogleAgentPlatformAccessTokenProvider;
   private readonly now: () => number;
   private readonly sleep: (milliseconds: number) => Promise<void>;
   private readonly pollIntervalMs: number;
@@ -83,21 +83,21 @@ export class VertexVeoVideoGenerationClient implements VideoGenerationClient, Pr
   private readonly maxVideoBytes: number;
   private readonly maxExtensionCount: number;
 
-  constructor(options: VertexVeoVideoGenerationClientOptions = {}) {
-    const config = loadVertexVeoRuntimeConfig(options.environment);
+  constructor(options: GoogleAgentPlatformVeoVideoGenerationClientOptions = {}) {
+    const config = loadGoogleAgentPlatformVeoRuntimeConfig(options.environment);
     this.project = config.project;
     this.model = config.model;
     this.fetchImplementation = options.fetch ?? fetch;
     this.getAccessToken = options.getAccessToken ?? defaultAccessToken;
     this.now = options.now ?? Date.now;
     this.sleep = options.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
-    this.pollIntervalMs = positiveSafeInteger(options.pollIntervalMs ?? DEFAULT_VERTEX_VEO_POLL_INTERVAL_MS, 'Vertex Veo poll interval must be a positive whole number of milliseconds.');
-    this.totalTimeoutMs = positiveSafeInteger(options.totalTimeoutMs ?? DEFAULT_VERTEX_VEO_TOTAL_TIMEOUT_MS, 'Vertex Veo total timeout must be a positive whole number of milliseconds.');
-    this.requestTimeoutMs = positiveSafeInteger(options.requestTimeoutMs ?? DEFAULT_VERTEX_VEO_REQUEST_TIMEOUT_MS, 'Vertex Veo request timeout must be a positive whole number of milliseconds.');
-    this.authTimeoutMs = positiveSafeInteger(options.authTimeoutMs ?? DEFAULT_VERTEX_VEO_AUTH_TIMEOUT_MS, 'Vertex Veo authentication timeout must be a positive whole number of milliseconds.');
-    this.maxResponseBytes = positiveSafeInteger(options.maxResponseBytes ?? DEFAULT_VERTEX_VEO_MAX_RESPONSE_BYTES, 'Vertex Veo maximum operation response size must be a positive whole number of bytes.');
-    this.maxVideoBytes = positiveSafeInteger(options.maxVideoBytes ?? DEFAULT_VERTEX_VEO_MAX_VIDEO_BYTES, 'Vertex Veo maximum video size must be a positive whole number of bytes.');
-    this.maxExtensionCount = nonNegativeSafeInteger(options.maxExtensionCount ?? DEFAULT_VERTEX_VEO_MAX_EXTENSION_COUNT, 'Vertex Veo maximum extension count must be a non-negative whole number.');
+    this.pollIntervalMs = positiveSafeInteger(options.pollIntervalMs ?? DEFAULT_GOOGLE_AGENT_PLATFORM_VEO_POLL_INTERVAL_MS, 'Agent Platform Veo poll interval must be a positive whole number of milliseconds.');
+    this.totalTimeoutMs = positiveSafeInteger(options.totalTimeoutMs ?? DEFAULT_GOOGLE_AGENT_PLATFORM_VEO_TOTAL_TIMEOUT_MS, 'Agent Platform Veo total timeout must be a positive whole number of milliseconds.');
+    this.requestTimeoutMs = positiveSafeInteger(options.requestTimeoutMs ?? DEFAULT_GOOGLE_AGENT_PLATFORM_VEO_REQUEST_TIMEOUT_MS, 'Agent Platform Veo request timeout must be a positive whole number of milliseconds.');
+    this.authTimeoutMs = positiveSafeInteger(options.authTimeoutMs ?? DEFAULT_GOOGLE_AGENT_PLATFORM_VEO_AUTH_TIMEOUT_MS, 'Agent Platform Veo authentication timeout must be a positive whole number of milliseconds.');
+    this.maxResponseBytes = positiveSafeInteger(options.maxResponseBytes ?? DEFAULT_GOOGLE_AGENT_PLATFORM_VEO_MAX_RESPONSE_BYTES, 'Agent Platform Veo maximum operation response size must be a positive whole number of bytes.');
+    this.maxVideoBytes = positiveSafeInteger(options.maxVideoBytes ?? DEFAULT_GOOGLE_AGENT_PLATFORM_VEO_MAX_VIDEO_BYTES, 'Agent Platform Veo maximum video size must be a positive whole number of bytes.');
+    this.maxExtensionCount = nonNegativeSafeInteger(options.maxExtensionCount ?? DEFAULT_GOOGLE_AGENT_PLATFORM_VEO_MAX_EXTENSION_COUNT, 'Agent Platform Veo maximum extension count must be a non-negative whole number.');
   }
 
   async generateVideo(request: VideoGenerationRequest): Promise<VideoGenerationResult> {
@@ -114,7 +114,7 @@ export class VertexVeoVideoGenerationClient implements VideoGenerationClient, Pr
 
   async generatePresenterVideo(request: PresenterVideoGenerationRequest): Promise<PresenterVideoGenerationResult> {
     assertPresenterVideoGenerationRequest(request);
-    assertVertexReferences(request.referenceImages);
+    assertAgentPlatformReferences(request.referenceImages);
     const durationPlan = planPresenterVideoDuration(request.maxSeconds);
     this.assertExtensionCount(durationPlan.extensionCount);
     const dialogue = partitionSimplePresenterSpeech(request.spokenText, request.maxSeconds);
@@ -127,7 +127,7 @@ export class VertexVeoVideoGenerationClient implements VideoGenerationClient, Pr
   }
 
   private assertExtensionCount(count: number): void {
-    if (count > this.maxExtensionCount) throw providerFailure('Vertex Veo video request exceeds the configured extension limit.');
+    if (count > this.maxExtensionCount) throw providerFailure('Agent Platform Veo video request exceeds the configured extension limit.');
   }
 
   private async generateSequence(
@@ -159,7 +159,7 @@ export class VertexVeoVideoGenerationClient implements VideoGenerationClient, Pr
       if (typeof token !== 'string' || !SAFE_ACCESS_TOKEN.test(token)) throw new Error('invalid token');
       return token;
     } catch (cause) {
-      throw providerFailure('Vertex Veo authentication failed.', cause);
+      throw providerFailure('Agent Platform Veo authentication failed.', cause);
     } finally { if (timer !== undefined) clearTimeout(timer); }
   }
 
@@ -171,8 +171,8 @@ export class VertexVeoVideoGenerationClient implements VideoGenerationClient, Pr
     let polls = 0;
     while (!operationDone(operation)) {
       this.assertBeforeDeadline(deadline);
-      if (polls >= Math.ceil(this.totalTimeoutMs / this.pollIntervalMs)) throw providerFailure('Vertex Veo video generation timed out.');
-      try { await this.sleep(this.pollIntervalMs); } catch (cause) { throw providerFailure('Vertex Veo video generation polling failed.', cause); }
+      if (polls >= Math.ceil(this.totalTimeoutMs / this.pollIntervalMs)) throw providerFailure('Agent Platform Veo video generation timed out.');
+      try { await this.sleep(this.pollIntervalMs); } catch (cause) { throw providerFailure('Agent Platform Veo video generation polling failed.', cause); }
       this.assertBeforeDeadline(deadline);
       operation = await this.requestJson(this.modelUrl(':fetchPredictOperation'), { operationName }, token);
       polls += 1;
@@ -186,21 +186,21 @@ export class VertexVeoVideoGenerationClient implements VideoGenerationClient, Pr
       response = await this.fetchWithTimeout(url, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify(body), redirect: 'error' });
     } catch (cause) {
       if (cause instanceof VidGenError) throw cause;
-      throw providerFailure('Unable to reach the Vertex Veo video service.', cause);
+      throw providerFailure('Unable to reach the Agent Platform Veo video service.', cause);
     }
-    if (!response.ok) throw providerFailure('Vertex Veo video service returned an unsuccessful response.');
+    if (!response.ok) throw providerFailure('Agent Platform Veo video service returned an unsuccessful response.');
     return parseBoundedJson(response, this.maxResponseBytes);
   }
 
   private modelUrl(suffix: ':predictLongRunning' | ':fetchPredictOperation'): string {
-    return `${VERTEX_VEO_API_BASE}/projects/${this.project}/locations/${VERTEX_VEO_LOCATION}/publishers/google/models/${this.model}${suffix}`;
+    return `${GOOGLE_AGENT_PLATFORM_VEO_API_BASE}/projects/${this.project}/locations/${GOOGLE_AGENT_PLATFORM_VEO_LOCATION}/publishers/google/models/${this.model}${suffix}`;
   }
 
   private operationNameFrom(payload: unknown): string {
     const name = record(payload)?.name;
-    const expected = `projects/${this.project}/locations/${VERTEX_VEO_LOCATION}/publishers/google/models/${this.model}/operations/`;
+    const expected = `projects/${this.project}/locations/${GOOGLE_AGENT_PLATFORM_VEO_LOCATION}/publishers/google/models/${this.model}/operations/`;
     if (typeof name !== 'string' || !name.startsWith(expected) || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/.test(name.slice(expected.length))) {
-      throw providerFailure('Vertex Veo video service returned an invalid operation identifier.');
+      throw providerFailure('Agent Platform Veo video service returned an invalid operation identifier.');
     }
     return name;
   }
@@ -208,14 +208,14 @@ export class VertexVeoVideoGenerationClient implements VideoGenerationClient, Pr
   private async fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
     const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
     try { return await this.fetchImplementation(url, { ...init, signal: controller.signal }); }
-    catch (cause) { if (controller.signal.aborted) throw providerFailure('Vertex Veo video request timed out.', cause); throw cause; }
+    catch (cause) { if (controller.signal.aborted) throw providerFailure('Agent Platform Veo video request timed out.', cause); throw cause; }
     finally { clearTimeout(timeout); }
   }
 
-  private assertBeforeDeadline(deadline: number): void { if (this.now() >= deadline) throw providerFailure('Vertex Veo video generation timed out.'); }
+  private assertBeforeDeadline(deadline: number): void { if (this.now() >= deadline) throw providerFailure('Agent Platform Veo video generation timed out.'); }
 }
 
-function resultFor(client: VertexVeoVideoGenerationClient, generated: GeneratedSequence, durationSeconds?: number): VideoGenerationResult {
+function resultFor(client: GoogleAgentPlatformVeoVideoGenerationClient, generated: GeneratedSequence, durationSeconds?: number): VideoGenerationResult {
   return { provider: client.provider, model: client.model, requestId: generated.operationIds[0], operationId: generated.operationIds.at(-1), operationIds: generated.operationIds, generationOperationCount: generated.operationIds.length, mimeType: generated.video.mimeType, bytes: generated.video.bytes, ...(durationSeconds === undefined ? {} : { durationSeconds }) };
 }
 
@@ -258,52 +258,52 @@ function toAssetReference(image: ApprovedReferenceImage): Record<string, unknown
 function toInlineVideo(video: InlineVideo): Record<string, unknown> { return { bytesBase64Encoded: Buffer.from(video.bytes).toString('base64'), mimeType: video.mimeType }; }
 
 function validateVideoRequest(request: VideoGenerationRequest): void {
-  if (request === null || typeof request !== 'object' || request.unit === undefined) throw new VidGenError('invalid_argument', 'Vertex Veo video generation request is invalid.');
-  if (!Number.isFinite(request.unit.targetDurationSeconds) || request.unit.targetDurationSeconds <= 0 || !['presenter', 'video'].includes(request.unit.role.kind) || request.unit.content.length === 0) throw new VidGenError('generated_media', 'Vertex Veo video generation request is invalid.');
+  if (request === null || typeof request !== 'object' || request.unit === undefined) throw new VidGenError('invalid_argument', 'Agent Platform Veo video generation request is invalid.');
+  if (!Number.isFinite(request.unit.targetDurationSeconds) || request.unit.targetDurationSeconds <= 0 || !['presenter', 'video'].includes(request.unit.role.kind) || request.unit.content.length === 0) throw new VidGenError('generated_media', 'Agent Platform Veo video generation request is invalid.');
   if (request.unit.role.kind === 'presenter') {
-    if (request.referenceImages === undefined || request.unit.spokenText.trim().length === 0) throw new VidGenError('generated_media', 'Vertex Veo presenter generation requires approved reference images and spoken text.');
-    assertVertexReferences(request.referenceImages);
-  } else if (request.referenceImages !== undefined && request.referenceImages.length > 0) throw new VidGenError('generated_media', 'Vertex Veo video generation does not accept presenter reference images.');
+    if (request.referenceImages === undefined || request.unit.spokenText.trim().length === 0) throw new VidGenError('generated_media', 'Agent Platform Veo presenter generation requires approved reference images and spoken text.');
+    assertAgentPlatformReferences(request.referenceImages);
+  } else if (request.referenceImages !== undefined && request.referenceImages.length > 0) throw new VidGenError('generated_media', 'Agent Platform Veo video generation does not accept presenter reference images.');
 }
 
-function assertVertexReferences(references: readonly ApprovedReferenceImage[]): void {
-  if (references.length < 1 || references.length > 3 || references.some((image) => !['image/png', 'image/jpeg'].includes(image.mimeType) || image.bytes.byteLength < 1)) throw new VidGenError('generated_media', 'Vertex Veo presenter generation requires one to three PNG or JPEG approved reference images.');
+function assertAgentPlatformReferences(references: readonly ApprovedReferenceImage[]): void {
+  if (references.length < 1 || references.length > 3 || references.some((image) => !['image/png', 'image/jpeg'].includes(image.mimeType) || image.bytes.byteLength < 1)) throw new VidGenError('generated_media', 'Agent Platform Veo presenter generation requires one to three PNG or JPEG approved reference images.');
 }
 
 function partitionCinematicSpeech(text: string, chunks: number): readonly string[] {
-  const normalized = text.trim().replace(/\s+/g, ' '); if (normalized.length === 0) throw new VidGenError('generated_media', 'Vertex Veo presenter generation requires spoken text.');
+  const normalized = text.trim().replace(/\s+/g, ' '); if (normalized.length === 0) throw new VidGenError('generated_media', 'Agent Platform Veo presenter generation requires spoken text.');
   const words = normalized.split(' '); const weight = INITIAL_DURATION_SECONDS + ((chunks - 1) * EXTENSION_DURATION_SECONDS); const result: string[] = []; let cursor = 0; let covered = 0;
   for (let index = 0; index < chunks; index += 1) { covered += index === 0 ? INITIAL_DURATION_SECONDS : EXTENSION_DURATION_SECONDS; const end = index === chunks - 1 ? words.length : Math.floor((words.length * covered) / weight); result.push(words.slice(cursor, end).join(' ')); cursor = end; }
   return result;
 }
 
 function requiredExtensionCount(seconds: number): number { return Math.max(0, Math.ceil((seconds - INITIAL_DURATION_SECONDS) / EXTENSION_DURATION_SECONDS)); }
-function operationDone(payload: unknown): boolean { const operation = record(payload); if (operation === undefined || typeof operation.done !== 'boolean') throw providerFailure('Vertex Veo video service returned a malformed operation.'); if (operation.error !== undefined) throw providerFailure('Vertex Veo video generation failed.'); return operation.done; }
+function operationDone(payload: unknown): boolean { const operation = record(payload); if (operation === undefined || typeof operation.done !== 'boolean') throw providerFailure('Agent Platform Veo video service returned a malformed operation.'); if (operation.error !== undefined) throw providerFailure('Agent Platform Veo video generation failed.'); return operation.done; }
 
 function completedOperation(payload: unknown, operationName: string, maxVideoBytes: number): CompletedOperation {
   const operation = record(payload); const response = operation === undefined ? undefined : record(operation.response);
-  if (operation === undefined || operation.error !== undefined || response === undefined || filtered(response)) throw providerFailure('Vertex Veo video generation failed or completed without a video result.');
+  if (operation === undefined || operation.error !== undefined || response === undefined || filtered(response)) throw providerFailure('Agent Platform Veo video generation failed or completed without a video result.');
   const videos = response.videos; const video = Array.isArray(videos) && videos.length === 1 ? record(videos[0]) : undefined;
-  if (video === undefined || video.mimeType !== 'video/mp4' || typeof video.bytesBase64Encoded !== 'string') throw providerFailure('Vertex Veo video generation completed without a valid inline MP4 result.');
+  if (video === undefined || video.mimeType !== 'video/mp4' || typeof video.bytesBase64Encoded !== 'string') throw providerFailure('Agent Platform Veo video generation completed without a valid inline MP4 result.');
   return { operationName, video: decodeInlineMp4(video.bytesBase64Encoded, maxVideoBytes) };
 }
 
 function filtered(response: Record<string, unknown>): boolean { return typeof response.raiMediaFilteredCount === 'number' && response.raiMediaFilteredCount > 0; }
 function decodeInlineMp4(value: string, maxBytes: number): InlineVideo {
   const maxBase64Length = 4 * Math.ceil(maxBytes / 3);
-  if (value.length === 0 || value.length > maxBase64Length || value.length % 4 !== 0 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) throw providerFailure('Vertex Veo inline video result was invalid or exceeded the supported size.');
+  if (value.length === 0 || value.length > maxBase64Length || value.length % 4 !== 0 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) throw providerFailure('Agent Platform Veo inline video result was invalid or exceeded the supported size.');
   const bytes = new Uint8Array(Buffer.from(value, 'base64'));
-  if (bytes.byteLength < 8 || bytes.byteLength > maxBytes || bytes[4] !== 0x66 || bytes[5] !== 0x74 || bytes[6] !== 0x79 || bytes[7] !== 0x70) throw providerFailure('Vertex Veo inline video result was invalid or exceeded the supported size.');
+  if (bytes.byteLength < 8 || bytes.byteLength > maxBytes || bytes[4] !== 0x66 || bytes[5] !== 0x74 || bytes[6] !== 0x79 || bytes[7] !== 0x70) throw providerFailure('Agent Platform Veo inline video result was invalid or exceeded the supported size.');
   return { mimeType: 'video/mp4', bytes };
 }
 
-async function parseBoundedJson(response: Response, maxBytes: number): Promise<unknown> { const bytes = await readBoundedBytes(response, maxBytes); try { return JSON.parse(new TextDecoder().decode(bytes)) as unknown; } catch (cause) { throw providerFailure('Vertex Veo video service returned invalid JSON.', cause); } }
+async function parseBoundedJson(response: Response, maxBytes: number): Promise<unknown> { const bytes = await readBoundedBytes(response, maxBytes); try { return JSON.parse(new TextDecoder().decode(bytes)) as unknown; } catch (cause) { throw providerFailure('Agent Platform Veo video service returned invalid JSON.', cause); } }
 async function readBoundedBytes(response: Response, maxBytes: number): Promise<Uint8Array> {
-  const length = response.headers.get('content-length'); if (length !== null && /^\d+$/.test(length) && Number(length) > maxBytes) throw providerFailure('Vertex Veo operation response exceeded the maximum supported size.');
-  if (response.body === null) throw providerFailure('Vertex Veo video service returned an unreadable response.');
+  const length = response.headers.get('content-length'); if (length !== null && /^\d+$/.test(length) && Number(length) > maxBytes) throw providerFailure('Agent Platform Veo operation response exceeded the maximum supported size.');
+  if (response.body === null) throw providerFailure('Agent Platform Veo video service returned an unreadable response.');
   const reader = response.body.getReader(); const chunks: Uint8Array[] = []; let size = 0;
-  try { while (true) { const next = await reader.read(); if (next.done) break; size += next.value.byteLength; if (size > maxBytes) { await reader.cancel(); throw providerFailure('Vertex Veo operation response exceeded the maximum supported size.'); } chunks.push(next.value); } }
-  catch (cause) { if (cause instanceof VidGenError) throw cause; throw providerFailure('Vertex Veo video service returned an unreadable response.', cause); }
+  try { while (true) { const next = await reader.read(); if (next.done) break; size += next.value.byteLength; if (size > maxBytes) { await reader.cancel(); throw providerFailure('Agent Platform Veo operation response exceeded the maximum supported size.'); } chunks.push(next.value); } }
+  catch (cause) { if (cause instanceof VidGenError) throw cause; throw providerFailure('Agent Platform Veo video service returned an unreadable response.', cause); }
   finally { reader.releaseLock(); }
   const bytes = new Uint8Array(size); let offset = 0; for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; } return bytes;
 }
@@ -315,7 +315,7 @@ async function defaultAccessToken(): Promise<string> {
   return token;
 }
 
-function requiredEnvironmentValue(environment: VertexVeoEnvironment, name: string): string { const value = environment[name]?.trim(); if (value === undefined || value.length === 0) throw new VidGenError('configuration', `Vertex Veo ${name} configuration is required.`); return value; }
+function requiredEnvironmentValue(environment: GoogleAgentPlatformVeoEnvironment, name: string): string { const value = environment[name]?.trim(); if (value === undefined || value.length === 0) throw new VidGenError('configuration', `Agent Platform Veo ${name} configuration is required.`); return value; }
 function positiveSafeInteger(value: number, message: string): number { if (!Number.isSafeInteger(value) || value < 1) throw new VidGenError('invalid_argument', message); return value; }
 function nonNegativeSafeInteger(value: number, message: string): number { if (!Number.isSafeInteger(value) || value < 0) throw new VidGenError('invalid_argument', message); return value; }
 function record(value: unknown): Record<string, unknown> | undefined { return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined; }
