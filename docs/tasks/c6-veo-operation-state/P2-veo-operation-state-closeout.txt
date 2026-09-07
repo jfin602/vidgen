@@ -1,0 +1,51 @@
+TASK: Correction 6 / P2 — Veo operation-state closeout
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra Medium`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Review P1 as a bounded Veo polling-state correction. Inspect the actual diff, operation-state logic, polling loop, timeout behavior, completion parsing, simple/cinematic consumers, and focused tests; do not approve solely because tests pass.
+
+ACCEPTANCE
+
+Confirm:
+- name-only operations are treated as pending rather than malformed;
+- explicit `done: false` is pending and `done: true` is terminal;
+- present non-boolean `done` remains malformed;
+- the start response's full operation name is still strictly validated and the exact accepted name is used for polling;
+- name-only pending poll responses do not cause an unbounded loop; existing total-time/poll bounds still terminate safely;
+- terminal provider errors remain sanitized failures;
+- completed operations still require the existing valid single bounded inline MP4 shape and preserve safe operation provenance;
+- no completion/output validation was weakened to accommodate pending-state handling;
+- the simple headline path at an 8-second ceiling still requires exactly one initial 8-second generation and no extension;
+- simple >8-second and cinematic extension semantics remain unchanged;
+- request payloads, ADC auth, project/location/model configuration, reference-image constraints, endpoint, timeouts, provider identity, text/TTS/ngest/FFmpeg/CLI/durable schemas are unchanged;
+- package and engine remain 0.6.5.
+
+VALIDATION
+
+Run:
+- `npm run codex:phase:validate -- c6-veo-operation-state`;
+- focused Agent Platform Veo, video-client-factory, headline, and media-workflow tests;
+- `npm test`;
+- `npm run check`;
+- `node src/cli.ts --help`;
+- `git diff --check`.
+
+Inspect the tests specifically for name-only start, name-only intermediate poll, explicit false, malformed non-boolean `done`, bounded indefinitely-pending behavior, terminal provider error, and unchanged completion/provenance behavior.
+
+LIVE EVIDENCE
+
+Treat the owner's direct live calls only as qualification evidence already observed for the provider boundary: accepted 8-second generation, name-only start response, successful fetchPredictOperation completion, and valid inline MP4 result. Do not claim that the full VidGen headline render or human playback is qualified. The owner will rerun the same 8-second Bill headline smoke after human review.
+
+BOUNDED REPAIRS
+
+Repair only defects directly within Veo operation-state interpretation, polling safety, and focused regression coverage. Do not broaden provider architecture or spend live provider quota.
+
+FINAL RESPONSE
+
+Report review findings, any bounded repair, exact validation, pending/terminal/malformed semantics, timeout safety, preserved Veo request/completion contracts, unchanged 0.6.5 state, and whether `c6-veo-operation-state` is ready for human review.
