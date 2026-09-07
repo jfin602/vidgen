@@ -1,0 +1,51 @@
+TASK: Correction 6 / P1 — TTS PCM/WAV fix
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Fix the Agent Platform Gemini TTS output contract so VidGen requests headerless PCM from Cloud Text-to-Speech and wraps it exactly once into the existing deterministic WAV artifact.
+
+Read BOOT.md, docs/integrations/google-video.md, the current Agent Platform speech adapter, SpeechGenerationClient contract, media workflow/reuse code, and focused TTS tests before editing.
+
+MUST REMAIN TRUE
+
+- Keep the existing Cloud Text-to-Speech `v1/text:synthesize` endpoint, ADC Bearer auth, `x-goog-user-project`, project/model/voice/language runtime configuration, exact voiceover input, provider identity, and generic provenance/reuse behavior.
+- Request `audioEncoding: "PCM"`, not `LINEAR16`. Cloud TTS PCM is headerless 16-bit signed little-endian audio and therefore matches VidGen's existing deterministic PCM-to-WAV conversion.
+- Keep `sampleRateHertz: 24000`.
+- Remove `audioChannelCount` from the Cloud TTS REST request; it is not part of the v1 AudioConfig contract. VidGen's durable output remains mono 24 kHz 16-bit WAV.
+- Decode the returned bounded `audioContent` as raw PCM, validate non-empty/even-byte audio, wrap it exactly once with the existing WAV writer, and calculate duration from PCM payload bytes only.
+- Strengthen focused tests so the provider fake returns raw PCM, the request shape exactly matches the supported Cloud TTS fields, and the result proves one valid RIFF/WAVE header with the raw provider bytes only in the WAV data chunk.
+- Preserve current auth/timeout/HTTP/JSON/Base64/size failure safety. Do not expose tokens, narration, Base64 payloads, project-private values, or raw provider responses.
+- Preserve SpeechGenerationClient, cinematic media resume/reuse semantics, generated-media schema, FFmpeg assembly, CLI grammar, text/Veo behavior, ngest behavior, and package/engine version 0.6.5.
+
+PROOF
+
+Focused tests must prove:
+- the request uses `PCM`, 24000 Hz, and no `audioChannelCount`;
+- a raw PCM response produces exactly one valid mono 24 kHz 16-bit WAV header and the expected data payload/duration;
+- the test would fail if a second WAV header were inserted or if provider bytes were treated as a complete WAV;
+- malformed/odd/empty/oversized PCM and existing auth/network/provider failures remain safe;
+- media provenance/reuse behavior is unchanged.
+
+Run the focused TTS test, focused media/generated-media regression tests, `npm run check`, `node src/cli.ts --help`, and `git diff --check`.
+
+Downstream-required capability -> owning implementation/export -> focused proof:
+
+headerless Cloud TTS PCM -> Agent Platform speech adapter -> exact request/raw-response tests.
+
+raw PCM -> existing deterministic WAV artifact -> RIFF/data-chunk/duration tests.
+
+speech provider identity -> existing generated-media fingerprint/provenance -> media reuse regression tests.
+
+NON-GOALS
+
+Do not redesign TTS voices or language selection, change provider/auth architecture, switch speech APIs, alter text or Veo, modify creative contracts or durable schemas, touch FFmpeg policy, begin Phase 7, or rewrite historical task records.
+
+FINAL RESPONSE
+
+Report the corrected Cloud TTS request shape, WAV handling, focused regression proof, exact validation run, preserved provenance/reuse behavior, and confirmation that 0.6.5 is unchanged.
