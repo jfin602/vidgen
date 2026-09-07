@@ -1,0 +1,50 @@
+TASK: Correction 6 / P2 — Lower-third layout closeout
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra Medium`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Review P1 as a bounded deterministic finishing correction. Inspect the actual diff, lower-third fit strategy, workflow ordering, FFmpeg graph, finishing provenance, and focused tests; do not approve merely because tests pass.
+
+ACCEPTANCE
+
+Confirm:
+- the complete governed headline and source display name are preserved; no truncation, ellipsis, rewriting, shortening, or model authority over display text was introduced;
+- automatic headline wrapping still preserves the prior `c6-line-wrap` whitespace semantics;
+- the lower third has one explicit outer box and an inner content safe area with positive left/right/top/bottom padding;
+- accepted headline/source glyph layout is deterministically constrained to the inner safe area rather than relying only on character count;
+- the Venice/Lee Chang-dong regression no longer depends on the visually unsafe 42-character-line assumption;
+- genuinely unfit display text fails before any paid text/Veo generation;
+- source placement remains inside the box with bottom/right padding and clear separation from headline text;
+- staged text-file/no-shell safety remains intact and untrusted text does not enter the FFmpeg filter expression;
+- FFmpeg output remains 1080x1920, 30 fps, H.264/yuv420p + AAC stereo 48 kHz with existing loudnorm/duration behavior and one simple-path input;
+- the visible finishing change has a new `SIMPLE_CLIP_FINISHING_POLICY` version and headline sidecars record it without schema-shape changes;
+- presenter copy, Veo dialogue/prompting, Agent Platform auth/polling, duration planning, ngest, cinematic assembly, CLI, package and engine remain unchanged at 0.6.5.
+
+VALIDATION
+
+Run:
+- `npm run codex:phase:validate -- c6-lower-third-layout`;
+- focused simple-clip-finisher and headline-workflow tests plus relevant sidecar tests;
+- `npm test`;
+- `npm run check`;
+- `node src/cli.ts --help`;
+- `git diff --check`.
+
+Inspect tests specifically for full-text preservation, exact regression coverage, safe-area geometry, fit/rejection before provider work, source padding/separation, hostile text staging, and finishing-policy provenance. Mocked success alone is not proof of visual quality if the implemented fit contract can still place accepted glyphs outside the safe area.
+
+LIVE EVIDENCE
+
+Treat the owner's screenshot/playback only as root-cause evidence for the old layout. Do not claim the new visual treatment is human-qualified from unit tests. No live provider call is required. After human review, the owner will rerender the existing local Veo diagnostic clip at zero provider cost and visually inspect the lower third before another real headline generation.
+
+BOUNDED REPAIRS
+
+Repair only defects directly within lower-third fit/layout, pre-provider display validation, finishing-policy provenance, and focused regression coverage. Do not broaden into presenter speech/TTS, provider work, or Phase 7.
+
+FINAL RESPONSE
+
+Report review findings, any bounded repair, exact validation, preserved governed text, safe-area/fit semantics, policy-version provenance, unchanged 0.6.5 state, and whether `c6-lower-third-layout` is ready for human review.
