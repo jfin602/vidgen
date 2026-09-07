@@ -1,0 +1,49 @@
+TASK: Correction 6 / P2 — Response-schema closeout
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra Medium`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Review P1 as a bounded provider-boundary correction. Inspect the actual diff, both schema producers, Google request construction, consumers, and focused tests; do not approve merely because tests pass.
+
+ACCEPTANCE
+
+Confirm:
+- simple-copy and ClipPlan producer schemas remain provider-neutral and unchanged, including their root Draft 2020-12 `$schema` metadata and validation constraints;
+- only the Google `generationConfig.responseSchema` wire copy omits root `$schema`;
+- all other current schema fields and nested constraints are preserved exactly, including ClipPlan enum/min-max structure and simple-copy string constraints;
+- the original request schema is not mutated;
+- the implementation does not recursively strip arbitrary metadata, silently weaken unknown future constraints, or introduce a generalized schema-conversion subsystem;
+- schemas without root `$schema` preserve their prior wire shape;
+- `x-goog-api-key`, project/global endpoint, response MIME type, candidate count, timeout/bounds, response parsing, provider identity, and provenance remain unchanged;
+- VidGen still validates model output independently in simple-copy and ClipPlan consumers;
+- no Veo, TTS, ngest, FFmpeg, CLI, durable-schema, cinematic, or Phase 7 behavior changed;
+- package and engine remain 0.6.5.
+
+VALIDATION
+
+Run:
+- `npm run codex:phase:validate -- c6-response-schema`;
+- focused Google structured-text, simple-copy, ClipPlan/ClipPlan-workflow, and headline tests;
+- `npm test`;
+- `npm run check`;
+- `node src/cli.ts --help`;
+- `git diff --check`.
+
+Inspect tests specifically for producer/wire separation and schema immutability; mocked success alone is not sufficient if constraints are silently dropped.
+
+LIVE EVIDENCE
+
+Use the owner-supplied live evidence only as root-cause evidence: with current auth/endpoint/model, the schema including root `$schema` returned HTTP 400 naming that field, and removing only `$schema` returned HTTP 200. Do not claim the full headline path, Veo generation, render, or playback is qualified. The owner will rerun that smoke after human review.
+
+BOUNDED REPAIRS
+
+Repair only defects directly within the response-schema adaptation and focused regression coverage. Do not broaden provider architecture.
+
+FINAL RESPONSE
+
+Report review findings, any bounded repair, exact validation, producer/wire separation, preserved schema constraints and secret/provider behavior, unchanged 0.6.5 state, and whether `c6-response-schema` is ready for human review.
