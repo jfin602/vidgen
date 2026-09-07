@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { VidGenError } from '../../../src/core/error.ts';
+import { buildSimpleClipCopyModelOutputSchema } from '../../../src/core/simple-clip-copy.ts';
+import { buildClipPlanModelOutputSchema } from '../../../src/core/clip-plan.ts';
+import { getAssemblyTemplate } from '../../../src/core/template-registry.ts';
 import type { JsonObject } from '../../../src/shared/json.ts';
 import { readFileSync } from 'node:fs';
 
@@ -22,7 +25,7 @@ const project = 'vidgen-test-project';
 const model = 'gemini-test-model';
 const endpoint = buildGoogleGeminiAgentPlatformEndpoint(project, model);
 
-test('Google Gemini adapter sends one project/global Agent Platform structured-output request', async () => {
+test('Google Gemini adapter sends one project/global Agent Platform structured-output request with a root-dialect-free schema unchanged', async () => {
   let called = 0;
   let requestUrl: string | URL | Request | undefined;
   let init: RequestInit | undefined;
@@ -67,6 +70,65 @@ test('Google Gemini adapter sends one project/global Agent Platform structured-o
     requestId: 'response-123',
     outputText: '{"slots":[]}',
   });
+});
+
+test('Google Gemini adapter omits only the simple-copy root dialect marker without mutating its neutral schema', async () => {
+  const schema = buildSimpleClipCopyModelOutputSchema(10) as unknown as JsonObject;
+  const original = structuredClone(schema);
+  let wireSchema: JsonObject | undefined;
+  const client = clientFor(async (_input, init) => {
+    wireSchema = ((JSON.parse(String(init?.body)) as { generationConfig: { responseSchema: JsonObject } }).generationConfig.responseSchema);
+    return jsonResponse(completedGenerateContentResponse());
+  });
+
+  await client.generateStructuredJson({ systemInstruction: 'Follow the supplied schema.', input: storyText, responseSchema: schema });
+
+  assert.deepEqual(wireSchema, {
+    title: 'Simple clip presenter copy',
+    type: 'object',
+    additionalProperties: false,
+    required: ['text'],
+    properties: { text: { type: 'string', minLength: 1 } },
+  });
+  assert.deepEqual(schema, original);
+});
+
+test('Google Gemini adapter preserves real ClipPlan constraints while omitting its root dialect marker', async () => {
+  const schema = buildClipPlanModelOutputSchema(getAssemblyTemplate('default-news-40s')) as unknown as JsonObject;
+  const original = structuredClone(schema);
+  let wireSchema: JsonObject | undefined;
+  const client = clientFor(async (_input, init) => {
+    wireSchema = ((JSON.parse(String(init?.body)) as { generationConfig: { responseSchema: JsonObject } }).generationConfig.responseSchema);
+    return jsonResponse(completedGenerateContentResponse());
+  });
+
+  await client.generateStructuredJson({ systemInstruction: 'Follow the supplied schema.', input: storyText, responseSchema: schema });
+
+  const { $schema: _dialect, ...expected } = schema;
+  assert.deepEqual(wireSchema, expected);
+  const slots = wireSchema!.properties as JsonObject;
+  const slotArray = slots.slots as JsonObject;
+  const slot = slotArray.items as JsonObject;
+  const slotProperties = slot.properties as JsonObject;
+  assert.equal(slotArray.minItems, 5);
+  assert.equal(slotArray.maxItems, 5);
+  assert.deepEqual((slotProperties.id as JsonObject).enum, ['hook', 'headline', 'narration', 'supporting-information', 'closing']);
+  assert.equal((slotProperties.text as JsonObject).minLength, 1);
+  assert.equal((slotProperties.text as JsonObject).maxLength, 4_000);
+  assert.deepEqual(schema, original);
+});
+
+test('Google Gemini adapter does not recursively change a schema with no root dialect marker', async () => {
+  const schema: JsonObject = { type: 'object', $defs: { nested: { $schema: 'nested-marker', type: 'string' } } };
+  let wireSchema: JsonObject | undefined;
+  const client = clientFor(async (_input, init) => {
+    wireSchema = ((JSON.parse(String(init?.body)) as { generationConfig: { responseSchema: JsonObject } }).generationConfig.responseSchema);
+    return jsonResponse(completedGenerateContentResponse());
+  });
+
+  await client.generateStructuredJson({ systemInstruction: 'Follow the supplied schema.', input: storyText, responseSchema: schema });
+
+  assert.deepEqual(wireSchema, schema);
 });
 
 test('Google Gemini adapter returns neutral provenance and ignores provider-only part metadata', async () => {

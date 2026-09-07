@@ -101,6 +101,7 @@ test('invalid provider text fails safely after exactly one normal-path model cal
 
 test('simple-copy output schema is strict and independent of duration or lower-third fields', () => {
   const schema = buildSimpleClipCopyModelOutputSchema(10);
+  assert.equal(schema.$schema, 'https://json-schema.org/draft/2020-12/schema');
   assert.equal(schema.additionalProperties, false);
   assert.deepEqual(schema.required, ['text']);
   assert.deepEqual(Object.keys(schema.properties), ['text']);

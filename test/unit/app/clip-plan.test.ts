@@ -121,6 +121,7 @@ test('model-output response schema is template-specific and has exact expected s
   const template = alternateTemplate();
   const schema = buildClipPlanModelOutputSchema(template);
 
+  assert.equal(schema.$schema, 'https://json-schema.org/draft/2020-12/schema');
   assert.equal(schema.additionalProperties, false);
   assert.deepEqual(schema.required, ['slots']);
   assert.equal(schema.properties.slots.minItems, 3);

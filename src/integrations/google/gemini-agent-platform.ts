@@ -125,9 +125,18 @@ function buildRequestBody(request: StructuredTextModelRequest): JsonObject {
     generationConfig: {
       candidateCount: 1,
       responseMimeType: 'application/json',
-      responseSchema: request.responseSchema,
+      responseSchema: googleResponseSchema(request.responseSchema),
     },
   };
+}
+
+/** Google accepts the schema constraints but not JSON Schema's root dialect marker. */
+function googleResponseSchema(responseSchema: JsonObject): JsonObject {
+  if (!Object.hasOwn(responseSchema, '$schema')) {
+    return responseSchema;
+  }
+  const { $schema: _dialect, ...googleSchema } = responseSchema;
+  return googleSchema;
 }
 
 async function parseBoundedJson(response: Response, maxResponseBytes: number): Promise<unknown> {
