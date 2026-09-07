@@ -8,7 +8,7 @@ VERSIONING
 
 GOAL
 
-Repair the simple headline lower third so every accepted governed headline and source display name is rendered fully inside a deterministic black-box safe area with visible padding. Preserve the complete governed text; do not truncate, ellipsize, rewrite, or let glyphs cross the box boundary.
+Repair the simple headline lower third so every accepted governed headline and source display name is rendered fully inside a deterministic lower-third panel with visible padding. Change the panel background to opaque RGB `#336699`. Preserve the complete governed text; do not truncate, ellipsize, rewrite, or let glyphs cross the panel boundary.
 
 Read BOOT.md, the current simple-path architecture, the simple clip finisher, headline workflow, prior line-wrap regression tests, finishing provenance, and focused tests before editing.
 
@@ -16,7 +16,7 @@ LIVE ROOT-CAUSE EVIDENCE
 
 The owner visually reviewed a real FFmpeg render using the current lower-third graph:
 - the governed headline `‘Possible Love’: What The Critics Are Saying About Lee Chang-dong’s Korean Drama — Venice` was preserved and wrapped into three lines;
-- the 42-character second line visibly extended beyond the black lower-third box;
+- the 42-character second line visibly extended beyond the old black lower-third box;
 - the box/text treatment did not provide acceptable visual padding;
 - the render used the configured DejaVu Sans Bold font and the current 1080x1920 output path;
 - this demonstrates that character count alone is not sufficient evidence of rendered-width fit for a proportional font.
@@ -28,29 +28,32 @@ MUST REMAIN TRUE
 - Preserve the exact governed headline and source display name except for inserted deterministic line-break separators. Joining automatic headline lines with a single space must recover the original headline exactly.
 - No truncation, ellipsis, rewriting, source shortening, model-controlled lower-third text, or silent omission.
 - Define one explicit lower-third outer rectangle and an inner content safe area with nonzero left, right, top, and bottom padding.
+- The outer lower-third panel must render as opaque RGB `#336699`; do not preserve the old black/translucent-black treatment.
 - Headline glyphs and source glyphs for every accepted layout must remain within the inner safe area; source text must also retain clear separation from the headline block.
 - Do not treat a raw character-count threshold as proof of visual fit. Fit must account for the selected runtime font/rendering treatment or otherwise be deterministically guaranteed by the accepted-input contract.
 - If the governed headline/source cannot fit the bounded policy, reject clearly before any text-model or Veo generation call.
 - Keep the lower third deterministic and bounded. It is acceptable to adjust the box geometry, font sizes, line spacing, headline line count, or wrapping limits as part of one coherent finishing policy, but do not introduce responsive browser/CSS layout or arbitrary unbounded shrinking.
 - Keep staged text files and no-shell FFmpeg argv handling. Untrusted headline/source text must never be interpolated directly into the filter expression.
 - Keep 1080x1920, 30 fps, H.264, yuv420p, AAC stereo 48 kHz, loudnorm, duration trimming, and one-input simple finishing unchanged.
-- Because the visible lower-third treatment changes, update the simple finishing policy provenance from `simple-clip-finishing-policy-v1` to `simple-clip-finishing-policy-v2` for the new deterministic layout. Do not change headline sidecar schema shape.
+- Update the visible finishing-policy identity from `simple-clip-finishing-policy-v1` to `simple-clip-finishing-policy-v2`, including the current headline sidecar schema constraint for that finishing value. P1 itself must not add unrelated sidecar fields; P2 owns presenter-prompt provenance.
 - Preserve the current headline workflow's pre-provider lower-third failure behavior even if fit validation now needs the selected font or FFmpeg boundary.
-- Preserve simple presenter copy, Veo prompt/speech behavior, Agent Platform adapters, duration planning, operation polling, ngest, cinematic assembly, CLI grammar, and package/engine version 0.6.5.
+- Do not change presenter prompt construction in P1. P2 owns the external Veo presenter-prompt asset correction.
+- Preserve simple presenter copy, Agent Platform auth/polling, duration planning, ngest, cinematic assembly, CLI grammar, and package/engine version 0.6.5.
 
 PROOF
 
 Focused tests must prove:
 - the exact Venice/Lee Chang-dong regression headline is accepted, fully preserved, and laid out under the new bounded policy without relying on the old 42-character visual-fit assumption;
 - automatic wrap separators preserve governed headline semantics exactly;
-- the layout policy exposes/asserts explicit outer-box and inner-safe-area geometry with positive padding on every edge;
+- the layout policy exposes/asserts explicit outer-panel and inner-safe-area geometry with positive padding on every edge;
+- the rendered panel color is exactly opaque RGB `#336699` in the FFmpeg treatment;
 - headline and source placement cannot exceed the accepted inner content bounds under the chosen deterministic fit strategy;
-- source text stays inside the box with bottom/right padding and clear separation from the headline block;
+- source text stays inside the panel with bottom/right padding and clear separation from the headline block;
 - a genuinely unfit headline or source fails before text/video provider creation or network work;
 - hostile punctuation/newlines accepted by the existing display contract remain staged through text files and do not enter the FFmpeg filter expression;
-- the FFmpeg graph still has one input, normalized 1080x1920 output, trim/atrim, loudnorm, drawbox/drawtext (or the smallest equivalent existing-FFmpeg treatment), H.264/AAC output, and no cinematic concat path;
-- finishing provenance records the new policy version while sidecar schema/output technical fields remain compatible;
-- prior c6-line-wrap semantics remain regression-covered.
+- the FFmpeg graph still has one input, normalized 1080x1920 output, trim/atrim, loudnorm, drawbox/drawtext or the smallest equivalent existing-FFmpeg treatment, H.264/AAC output, and no cinematic concat path;
+- finishing provenance and the headline sidecar finishing constraint record `simple-clip-finishing-policy-v2`;
+- prior `c6-line-wrap` semantics remain regression-covered.
 
 Prefer the smallest implementation using existing FFmpeg/font boundaries. Do not add a large graphics/layout framework. If a new font-fit helper or measurement boundary is needed, keep it narrow, bounded, deterministic, injectable/testable, and provider-independent.
 
@@ -60,18 +63,18 @@ Downstream-required capability -> owning implementation/export -> focused proof:
 
 governed lower-third text -> deterministic fit/layout boundary -> accepted headline/source remain complete and provably inside the inner safe area.
 
-layout geometry -> simple FFmpeg finisher graph -> black box and both text blocks use one coherent safe-area policy.
+layout geometry/color -> simple FFmpeg finisher graph -> one `#336699` panel and both text blocks use one coherent safe-area policy.
 
-visual-treatment identity -> `SIMPLE_CLIP_FINISHING_POLICY` / headline sidecar provenance -> new policy version is recorded without changing sidecar schema shape.
+visual-treatment identity -> `SIMPLE_CLIP_FINISHING_POLICY` / headline sidecar finishing contract -> `simple-clip-finishing-policy-v2` is recorded consistently.
 
 NON-GOALS
 
-Do not change presenter dialogue generation, add TTS, alter Veo prompts/models/authentication, change the 8-second smoke duration, add B-roll, change ngest, modify cinematic assembly, redesign the entire video style, add Remotion/browser rendering, or change package/engine version.
+Do not change presenter dialogue generation, add TTS, change Veo models/authentication, change the 8-second smoke duration, add B-roll, change ngest, modify cinematic assembly, redesign the entire video style, add Remotion/browser rendering, or change package/engine version. Presenter prompt externalization is deliberately deferred to P2.
 
 LIVE QUALIFICATION
 
-Codex does not need owner credentials or a provider call. Do not spend Veo quota. After human review, the owner can rerender the already-generated local Veo diagnostic MP4 with the new finishing policy and visually confirm padding/fit before the next paid end-to-end headline smoke.
+Codex does not need owner credentials or a provider call. Do not spend Veo quota. After human review, the owner can rerender the already-generated local Veo diagnostic MP4 with the new finishing policy and visually confirm `#336699`, padding, and text fit before the next paid end-to-end headline smoke.
 
 FINAL RESPONSE
 
-Report the new lower-third fit/safe-area contract, exact preservation behavior, finishing-policy provenance change, focused/broad validation, preserved provider/simple/cinematic behavior, and confirmation that version 0.6.5 is unchanged.
+Report the new lower-third fit/safe-area contract, exact `#336699` background treatment, governed-text preservation, finishing-policy provenance change, focused/broad validation, preserved provider/simple/cinematic behavior, and confirmation that version 0.6.5 is unchanged.
