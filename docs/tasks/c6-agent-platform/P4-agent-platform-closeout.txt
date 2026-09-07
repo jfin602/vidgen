@@ -1,0 +1,59 @@
+TASK: Correction 6 / P4 — Agent Platform closeout
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Review P1-P3 as the bounded Agent Platform-only correction. Inspect the actual diff and resulting source beyond the happy path; do not approve merely because tests pass. Establish deterministic correctness and only the live capability evidence actually observable in the execution environment.
+
+ACCEPTANCE
+
+Confirm:
+- Gemini Enterprise Agent Platform is the sole supported Google model platform in active implementation;
+- structured text uses the project/global Agent Platform `generateContent` path and no active text code calls the old Developer/Interactions endpoint;
+- Veo has one supported Agent Platform implementation with no Developer/Vertex backend selector or silent fallback;
+- Gemini TTS uses the current documented Google Cloud synthesis path and not the old Interactions endpoint;
+- text, video, and speech remain separate provider-neutral capability boundaries with capability-specific supported authentication;
+- no capability assumes that authentication proven for another capability is sufficient;
+- provider/model/request-operation/voice provenance remains safe, generic, and sufficient for reuse invalidation without new provider-specific durable schema fields;
+- credentials, tokens, raw responses, thought signatures, authorization headers, project-private runtime material, and unrestricted staging paths do not enter prompts beyond required generation input, fingerprints, manifests, sidecars, logs, or public errors;
+- StoryInput, ClipPlan, templates, simple duration/copy behavior, presenter references, cinematic GeneratedMediaUnit semantics, resume/failure behavior, FFmpeg finishing/assembly, CLI grammar, and artifact publication semantics remain unchanged;
+- active source/tests/package wiring contains no executable legacy `generativelanguage.googleapis.com`, `VIDGEN_VIDEO_BACKEND`, `VIDGEN_VERTEX_VIDEO_MODEL`, or Developer/Vertex video adapter path;
+- historical `docs/tasks/c6-vertex-adapter/` remains unchanged;
+- package/engine version is still 0.6.5 and no Phase 7 scope entered the correction.
+
+VALIDATION
+
+Run:
+- `npm run codex:phase:validate -- c6-agent-platform`;
+- focused Agent Platform text, Veo, speech/auth, headline, media, generated-media, and CLI tests;
+- `npm test`;
+- `npm run check`;
+- `node src/cli.ts --help`;
+- `git diff --check`;
+- a bounded active-source/test/package search for the retired endpoint/backend identifiers, excluding historical task records.
+
+LIVE QUALIFICATION
+
+Treat live qualification as capability-specific and spend-bounded.
+
+- Text: if the configured Agent Platform API key/project/model are available, perform one small structured-text smoke and report only evidence actually observed. Prior owner evidence may inform setup but is not a substitute for execution in this closeout.
+- Veo: only if ADC authorization, project/model access, fixed quota, one owner-approved PNG/JPEG anchor, and local FFmpeg/FFprobe prerequisites are available, perform exactly one bounded 8-second presenter/headline generation with no extension. Do not make repeated paid attempts after an auth, permission, quota, configuration, or provider failure. Record the safe blocker instead.
+- Speech: if Cloud Text-to-Speech ADC/API access and configured model/voice/language are available, perform at most one short synthesis smoke and qualify the returned WAV technically.
+- Do not claim human playback/aesthetic qualification unless it was actually observed.
+
+A live blocker does not erase mocked implementation proof. Report text, video, speech, render, and human-playback evidence separately.
+
+BOUNDED REPAIRS
+
+Repair only defects clearly inside the Agent Platform correction and focused regression coverage needed to protect it. Do not redesign provider architecture, creative contracts, ngest, FFmpeg policy, or begin Phase 7.
+
+If implementation is complete, reconcile active BOOT/README/architecture/integration/roadmap status from transitional migration language to the observed final state. Preserve historical task records and do not convert an unobserved live capability into a success claim.
+
+FINAL RESPONSE
+
+Report review findings, bounded repairs, exact automated validation, active legacy-surface sweep, exact live evidence or blockers per capability, provider/model/auth behavior, provenance/secret safety, simple/cinematic regression status, documentation reconciliation, unchanged 0.6.5 state, and whether `c6-agent-platform` is ready for human review.
