@@ -1,0 +1,42 @@
+TASK: Correction 6 / P2 — TTS fix closeout
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra Medium`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Review P1 as the bounded TTS correctness repair that clears the known c6-agent-platform human-review blocker. Inspect the actual diff and resulting source/tests; do not approve solely because tests pass.
+
+ACCEPTANCE
+
+Confirm:
+- Cloud TTS uses `audioEncoding: "PCM"` with 24000 Hz and does not send unsupported `audioChannelCount`;
+- returned `audioContent` is treated as headerless 16-bit little-endian PCM and receives exactly one VidGen-authored mono 24 kHz WAV header;
+- duration is calculated from PCM payload bytes, not WAV/container bytes;
+- tests use raw PCM fixtures and would detect double-WAV wrapping;
+- ADC auth, quota-project header, model/voice/language configuration, exact narration, provider identity, generic provenance/fingerprints, media reuse/resume, schemas, and failure safety remain unchanged;
+- text, Veo, headline, FFmpeg/assembly, CLI, ngest, and Phase 7 behavior are untouched;
+- package and engine remain 0.6.5.
+
+VALIDATION
+
+Run:
+- `npm run codex:phase:validate -- c6-tts-fix`;
+- focused TTS/media/generated-media tests;
+- `npm test`;
+- `npm run check`;
+- `node src/cli.ts --help`;
+- `git diff --check`.
+
+If a configured Google Cloud environment is available, one short live TTS smoke may be used to technically probe the returned WAV. If it is unavailable, report that separately; do not fabricate live evidence and do not broaden this correction to make the environment available.
+
+BOUNDED REPAIRS
+
+Repair only defects directly inside this PCM/WAV contract and focused regression coverage. Do not redesign provider architecture or expand scope.
+
+FINAL RESPONSE
+
+Report review findings, any bounded repair, exact validation, whether live TTS evidence was observed or unavailable, WAV/container correctness, regression status, unchanged 0.6.5 state, and whether `c6-tts-fix` is ready for human review.
