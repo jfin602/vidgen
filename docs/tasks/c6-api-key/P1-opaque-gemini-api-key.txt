@@ -1,0 +1,62 @@
+TASK: Correction 6 / P1 — Opaque Gemini API-key handling
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra Medium`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Repair the Agent Platform structured-text runtime configuration so `GEMINI_API_KEY` is treated as an opaque runtime secret instead of being rejected by a VidGen-invented character whitelist. Preserve the existing text adapter, request contract, consumers, and secret-safety boundaries.
+
+Read BOOT.md, docs/integrations/google-video.md, the current Agent Platform structured-text adapter, ClipPlan/headline consumers, and focused tests before editing.
+
+OWNER / RUNTIME EVIDENCE
+
+A live Google key is present on the deployment VPS, is 53 characters long, contains `.`, and was previously proven usable in a direct Agent Platform text request. Node loads the same value from `.env`, but VidGen rejects it before network activity because the current adapter applies `^[A-Za-z0-9_-]+$` to `GEMINI_API_KEY`.
+
+MUST REMAIN TRUE
+
+- `GEMINI_API_KEY` remains a runtime-only secret used only by the Agent Platform structured-text capability.
+- Treat the key string as opaque. Require a present, non-blank value after the existing surrounding-whitespace normalization, but do not impose a guessed character whitelist or reinterpret its contents.
+- Preserve the exact key value actually sent in the existing `x-goog-api-key` header after that surrounding-whitespace normalization.
+- Missing or blank keys must still fail before fetch/network activity.
+- Keep `GOOGLE_CLOUD_PROJECT` and `VIDGEN_TEXT_MODEL` under their existing strict identifier validation; this correction must not loosen project/model path safety.
+- Do not log, persist, fingerprint, return, expose in public errors, or otherwise surface the API key.
+- Preserve the project/global Agent Platform `generateContent` endpoint, structured JSON request body, timeout/response bounds, provider identity, response parsing, safe provenance, and redirect/error behavior.
+- Preserve StructuredTextModelClient, ClipPlan, headline, StoryInput, ngest, Veo, speech, FFmpeg, CLI, durable schemas, and cinematic behavior.
+- Package and engine version remain 0.6.5.
+
+PROOF
+
+Focused tests must prove:
+- a non-blank API-key fixture containing `.` is accepted by runtime config and forwarded unchanged in `x-goog-api-key`;
+- the adapter no longer rejects otherwise non-blank key strings merely because of punctuation outside the old whitelist;
+- missing and blank keys still fail before fetch activity;
+- unsafe project and model values still fail before fetch activity;
+- API keys remain absent from public errors and neutral results/provenance;
+- the existing Agent Platform endpoint/request/response tests remain green;
+- focused ClipPlan and headline workflow regressions remain green.
+
+Remove or revise any test that encoded the obsolete assumption that an API key such as `"bad key"` is locally invalid solely because of its characters. Do not replace that assumption with a new guessed key syntax.
+
+Run the focused structured-text/ClipPlan/headline tests, `npm run check`, `node src/cli.ts --help`, and `git diff --check`.
+
+Downstream-required capability -> owning implementation/export -> focused proof:
+
+opaque non-blank Google key -> `loadGoogleGeminiRuntimeConfig()` / structured-text client configuration -> punctuation-bearing key accepted and exact header-value test.
+
+validated text runtime config -> existing StructuredTextModelClient consumers -> ClipPlan/headline regression tests.
+
+NON-GOALS
+
+Do not change Google video or speech authentication, switch authentication mechanisms, modify endpoint selection, add SDK layers, change project/model grammar, add key discovery/rotation/storage, edit `.env`, begin Phase 7, change schemas, or modify historical task records.
+
+LIVE EVIDENCE
+
+Codex does not need a real secret or live provider call to implement this correction. After human review, the owner will rerun the previously blocked VPS headline smoke. Do not claim that live Agent Platform generation is qualified from unit tests.
+
+FINAL RESPONSE
+
+Report the obsolete key-format assumption removed, the remaining missing/blank and project/model validation behavior, secret-safety proof, exact tests run, preserved consumers, and confirmation that version 0.6.5 is unchanged.
