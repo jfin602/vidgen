@@ -1,0 +1,55 @@
+TASK: Correction 6 / P1 — Simple extension speech timing
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Fix the remaining Phase 6 defect where simple presenter dialogue assigned across a raw 15-second Veo extension can be cut off when the final clip is trimmed to a planned 9-14 seconds.
+
+Read BOOT.md, the current Phase 6/c6 corrections, presenter-video/Veo implementation, and focused tests before editing. Keep this correction inside the simple presenter-generation path.
+
+MUST REMAIN TRUE
+
+- Do not change cinematic `generateVideo()` behavior or its existing `partitionPresenterSpeech()` semantics.
+- Simple clips planned at 4-8 seconds still place all assigned dialogue in the initial 8-second reference-image generation and use no extension.
+- Simple clips planned at 9-15 seconds still use exactly one 7-second Veo extension, but dialogue allocation must reflect the final retained timeline: 8 initial seconds plus only `plannedDurationSeconds - 8` retained extension seconds.
+- Use the existing 150 WPM simple-path speech-rate contract when deciding how many whole words can safely be assigned to the retained extension window. The extension chunk must not exceed that retained-window capacity; the remaining words belong to the initial chunk.
+- For valid 9-15 second workflow copy, the initial chunk must keep presenter speech active into the final second of the initial 8-second clip so Veo voice continuation remains viable.
+- The simple initial prompt must make continuity intent explicit when an extension is required. The extension prompt must require its exact assigned dialogue to begin immediately and finish within the portion of the extension that will survive final trimming; after that dialogue, it must add no speech.
+- Preserve exact-dialogue reconstruction: partitioning may move word boundaries only and must never rewrite, omit, duplicate, or invent words.
+- Reject simple provider requests whose supplied text cannot satisfy the selected final-duration speech contract rather than silently creating cut-off dialogue.
+- Preserve current 4-20 user ceiling behavior, 4-15 planned-final behavior, one-extension maximum, raw provider duration/provenance, lower-third/FFmpeg behavior, sidecar schema/publication semantics, provider transport safety, and package/engine version 0.6.5.
+- No new dependency and no Phase 7 work.
+
+PROOF
+
+Focused tests must cover every planned duration 9 through 15 using valid duration-sized copy and prove:
+- reconstructed dialogue is exact;
+- retained extension dialogue fits the retained extension seconds at 150 WPM;
+- initial dialogue remains active into the final second at the same rate;
+- 9-14 second plans no longer allocate speech according to the discarded tail of the raw 15-second result;
+- the extension prompt carries the retained-window timing requirement;
+- 15 seconds still behaves as the full 8+7 case;
+- 4-8 seconds remain one-operation/no-extension;
+- invalid over-capacity or continuity-incompatible direct simple-provider requests fail before network work;
+- cinematic presenter partitioning/regression tests remain unchanged and green.
+
+Run focused Veo/presenter/headline tests, `npm run check`, and `git diff --check`.
+
+Downstream-required capability -> owning implementation/export -> focused proof:
+
+planned 9-15 second simple dialogue -> trim-safe initial/extension assignment -> focused simple Veo timing tests.
+
+trim-safe dialogue assignment -> existing 15-second raw generation + deterministic final trim -> headline/Veo regression proof.
+
+NON-GOALS
+
+Do not redesign copy generation, duration planning, FFmpeg finishing, sidecar publication, CLI, cinematic media generation, provider transport, or documentation.
+
+FINAL RESPONSE
+
+Report the simple-path partition rule, prompt timing behavior, 9-15 second proof, cinematic regression status, validation run, and confirmation that version 0.6.5 is unchanged.
