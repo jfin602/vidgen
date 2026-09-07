@@ -1,0 +1,53 @@
+TASK: Correction 6 / P1 — Agent Platform structured text
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Move VidGen structured-text generation from the legacy Gemini Developer/Interactions transport to Gemini Enterprise Agent Platform while preserving the existing provider-neutral StructuredTextModelClient contract and all ClipPlan/headline semantics.
+
+Read BOOT.md, docs/integrations/google-video.md, the structured-text contract, current Google text adapter, ClipPlan/headline consumers, and focused tests before editing.
+
+MUST REMAIN TRUE
+
+- Gemini Enterprise Agent Platform is the only supported Google model platform.
+- Keep `GEMINI_API_KEY`, `GOOGLE_CLOUD_PROJECT`, and `VIDGEN_TEXT_MODEL` as runtime-only inputs for this capability. The text call uses the project-scoped Agent Platform `generateContent` surface in `global`; do not use `generativelanguage.googleapis.com` or the legacy Interactions wire.
+- Preserve the existing structured-text request/result abstraction. Provider-specific request/response shapes must remain inside the adapter.
+- Send the existing system instruction and user input as Agent Platform content, request one JSON response using the supplied response schema, and never duplicate or reinterpret producer-owned schema semantics.
+- Parse one usable text candidate from `GenerateContentResponse`; accept harmless provider-only metadata without persisting it. Safe `modelVersion` and `responseId` may supply effective model/request provenance.
+- Keep current bounded timeout/response-size/error behavior. API keys, raw responses, thought signatures, prompts, and provider-private metadata must not enter public errors or durable artifacts beyond existing safe provider/model/request fields.
+- Give the migrated adapter a stable Agent Platform provider identity so provenance reflects the effective transport without changing durable schema shapes.
+- Preserve ClipPlan validation, simple presenter-copy behavior, CLI grammar, StoryInput, templates, FFmpeg, and all video/speech behavior.
+- Package and engine version remain 0.6.5.
+
+PROOF
+
+Focused tests must prove:
+- missing/blank/unsafe project, key, or model configuration fails before network work as appropriate;
+- the request targets the project/global Agent Platform `generateContent` endpoint and authenticates with the configured API key without exposing it;
+- system instruction, user input, one candidate, JSON MIME type, and the exact supplied response schema are represented correctly;
+- one valid candidate produces neutral output with safe model/request provenance;
+- blocked, missing, empty, multi/ambiguous, malformed, oversized, timed-out, and unsuccessful responses fail safely;
+- extra provider metadata such as thought signatures is ignored rather than persisted;
+- no active structured-text code calls `generativelanguage.googleapis.com`;
+- focused ClipPlan and headline workflow tests remain green without changing their product contracts.
+
+Run the focused structured-text/ClipPlan/headline tests, `npm run check`, and `git diff --check`.
+
+Downstream-required capability -> owning implementation/export -> focused proof:
+
+Agent Platform structured JSON -> Google structured-text adapter implementing StructuredTextModelClient -> request/response/schema tests.
+
+safe effective text provenance -> neutral StructuredTextModelResult -> ClipPlan/headline regression tests.
+
+NON-GOALS
+
+Do not change video or speech transports, provider-neutral creative contracts, ngest behavior, schemas, FFmpeg, Phase 7 scope, or introduce a generalized Google/provider SDK layer.
+
+FINAL RESPONSE
+
+Report the Agent Platform text runtime/request contract, provenance behavior, exact validation run, preserved consumers, legacy endpoint removal for this capability, and confirmation that 0.6.5 is unchanged.
