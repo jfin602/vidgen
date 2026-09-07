@@ -1,7 +1,7 @@
 TASK: Correction 6 / P3 — Vertex adapter closeout
 
 MODEL / REASONING / USAGE
-- Recommended configuration: `Terra High`.
+- Recommended configuration: `Terra Medium`.
 
 VERSIONING
 - Required unchanged project version: `0.6.5`.
