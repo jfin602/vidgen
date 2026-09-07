@@ -1,0 +1,44 @@
+TASK: Correction 6 / P2 — Sec fix closeout
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra Medium`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Review P1 as the final bounded repair for the Phase 6 9-14 second presenter-speech truncation finding. Inspect the actual diff and resulting behavior; do not approve solely because tests pass.
+
+ACCEPTANCE
+
+Confirm:
+- simple 4-8 second presenter requests remain one initial generation with all dialogue;
+- simple 9-15 second requests use one extension and allocate dialogue against the retained final timeline rather than the raw 15-second timeline;
+- for each planned duration 9-15, retained extension copy fits the retained extension window under the 150 WPM contract and initial speech reaches the final second needed for voice continuation;
+- extension prompts require assigned dialogue immediately within the retained window and prohibit added dialogue afterward;
+- exact presenter text is neither rewritten nor lost across chunking;
+- incompatible direct simple-provider requests fail before network work;
+- the existing headline duration plan, FFmpeg trim, sidecar/publication integrity, CLI contract, and 4-20 user ceiling remain unchanged;
+- cinematic `generateVideo()`, `partitionPresenterSpeech()`, generated-media behavior, assembly behavior, and durable artifacts remain regression-protected;
+- package/engine version remains 0.6.5 and no Phase 7/unrelated work entered the correction.
+
+VALIDATION
+
+Run:
+- `npm run codex:phase:validate -- c6-sec-fix`;
+- focused presenter-video/Veo/headline tests;
+- `npm test`;
+- `npm run check`;
+- `node src/cli.ts --help`;
+- `git diff --check`.
+
+Do not claim live Veo speech timing, human playback, or aesthetic quality unless a real provider run was actually observed. If credentials/runtime media are unavailable, mocked deterministic proof is sufficient for this correction and the remaining live qualification gap must be stated explicitly.
+
+BOUNDED REPAIRS
+
+Repair only defects clearly inside this speech-timing correction and focused tests needed to protect them. Do not broaden Phase 6 or begin Phase 7.
+
+FINAL RESPONSE
+
+Report review findings, any bounded repair, exact validation/evidence observed, 9-15 second dialogue survival proof, cinematic regression status, unchanged 0.6.5 state, and whether `c6-sec-fix` is ready for human review and Phase 6 `/closeout`.
