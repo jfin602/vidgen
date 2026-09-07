@@ -1,0 +1,76 @@
+TASK: Correction 6 / P1 — Veo pending-operation state
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Repair Agent Platform Veo long-running-operation polling so a valid operation response with an omitted `done` field is treated as pending instead of malformed.
+
+Read BOOT.md, docs/integrations/google-video.md, the Agent Platform Veo adapter, presenter-video duration logic, headline/media consumers, and focused Veo tests before editing.
+
+LIVE ROOT-CAUSE EVIDENCE
+
+The owner has directly observed on the deployment VM:
+- `predictLongRunning` returned HTTP 200 with only a full operation `name`;
+- polling that exact name through `fetchPredictOperation` returned HTTP 200 with `done: true`;
+- completion contained one inline `video/mp4` with `bytesBase64Encoded`;
+- the direct generation used the same supported model, ADC path, reference-image request shape, and 8-second duration used by the headline smoke;
+- VidGen currently fails immediately after accepted generation with `Agent Platform Veo video service returned a malformed operation.`
+
+Google's documented Veo REST start response is likewise name-only and is intended to be polled by the returned full operation name.
+
+MUST REMAIN TRUE
+
+- Keep request construction unchanged: regional model endpoint, ADC bearer auth, model/project/location validation, prompt/reference-image semantics, 9:16, 720p, sampleCount 1, inline output, and initial 8-second Veo generation.
+- Preserve the simple path's duration contract: `--max-seconds 8` remains a hard ceiling and requires no extension.
+- Preserve cinematic and simple extension planning, retained-window behavior, operation provenance, polling interval, request timeout, total timeout, response bounds, and inline MP4 validation.
+- A valid operation object with omitted `done` means pending.
+- Explicit `done: false` remains pending.
+- Explicit `done: true` means terminal and proceeds through the existing completion/error handling.
+- If `done` is present with a non-boolean value, reject the operation as malformed.
+- Preserve safe provider-error handling; raw provider responses, tokens, prompts, or provider-private details must not enter public errors or durable artifacts.
+- Keep validation of the full operation name returned by the start request. Poll the exact accepted name as today.
+- Do not weaken completed-operation validation merely to make polling succeed.
+- Do not change text, TTS, ngest, FFmpeg, CLI grammar, durable schemas, provider identities, or package/engine version 0.6.5.
+
+PROOF
+
+Focused tests must prove:
+- a name-only `predictLongRunning` start response is accepted as pending, followed by `fetchPredictOperation` of that exact full name and successful `done: true` completion;
+- a name-only pending poll response is also accepted and polling continues until a later terminal completion;
+- explicit `done: false` remains accepted as pending;
+- explicit `done: true` immediate completion behavior remains supported where already valid;
+- present non-boolean `done` values are rejected as malformed;
+- provider terminal errors remain safe failures;
+- an indefinitely pending name-only operation is still bounded by the existing timeout/polling limits and cannot loop forever;
+- successful completion still returns the same provider/model/request/operation provenance and bounded inline MP4 result;
+- the 8-second simple presenter path still plans one generation operation with zero extensions;
+- cinematic extension behavior remains regression-covered.
+
+Update the existing test that currently classifies a name-only operation as malformed; replace that incorrect expectation with live-contract regression coverage rather than deleting malformed-operation coverage entirely.
+
+Run the focused Veo adapter, video-client-factory, headline, and media-workflow tests, `npm run check`, `node src/cli.ts --help`, and `git diff --check`.
+
+Downstream-required capability -> owning implementation/export -> focused proof:
+
+valid asynchronous Veo start -> Agent Platform Veo operation-state/poll loop -> name-only start is polled rather than rejected.
+
+bounded pending state -> existing deadline/poll limits -> repeated name-only pending responses terminate safely when bounds are exhausted.
+
+terminal Veo result -> existing completed-operation parser -> unchanged inline MP4 and provenance assertions.
+
+NON-GOALS
+
+Do not change Veo request payloads, authentication/IAM, model selection, duration planning, extension semantics, output staging, completion media shape, provider-neutral interfaces, text/TTS behavior, FFmpeg, Phase 7 scope, or package/engine version.
+
+LIVE QUALIFICATION
+
+Codex must not spend owner quota or require live credentials. Mocked tests prove orchestration only. After human review, the owner will rerun the same real ngest + Bill headline command with `--max-seconds 8`; that run is the next end-to-end qualification step.
+
+FINAL RESPONSE
+
+Report the corrected pending-operation semantics, malformed/timeout safety, preserved 8-second and extension behavior, exact validation run, unchanged provider/result contracts, and confirmation that version 0.6.5 is unchanged.
