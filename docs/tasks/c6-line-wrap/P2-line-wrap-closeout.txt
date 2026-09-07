@@ -1,0 +1,44 @@
+TASK: Correction 6 / P2 — Line-wrap closeout
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra Medium`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Review P1 as the bounded deterministic lower-third repair that clears the real-story headline preflight blocker. Inspect the actual diff and resulting tests beyond the happy path; do not approve only because tests pass.
+
+ACCEPTANCE
+
+Confirm:
+- lower-third policy remains exactly 3 x 42 for headlines and 1 x 42 for source display names;
+- automatic word wrapping uses separator whitespace as the line break and does not leave wrapper-introduced trailing/leading spaces;
+- the governed regression headline `‘Possible Love’: What The Critics Are Saying About Lee Chang-dong’s Korean Drama — Venice` is accepted and wraps to the exact three intended lines, including the 42-character second line;
+- full governed display content is preserved without truncation, rewriting, summarization, or model authority over the lower third;
+- explicit-newline and hostile text-file staging safety remain intact;
+- truly unfit text still fails before expensive provider generation;
+- headline workflow now passes this regression case through lower-third validation while retaining the pre-provider validation boundary;
+- no FFmpeg geometry/technical policy, duration behavior, sidecar/provenance, Agent Platform, ngest, cinematic, CLI, or Phase 7 behavior changed;
+- package and engine remain 0.6.5.
+
+VALIDATION
+
+Run:
+- `npm run codex:phase:validate -- c6-line-wrap`;
+- focused simple-clip-finisher and headline-workflow tests;
+- `npm test`;
+- `npm run check`;
+- `node src/cli.ts --help`;
+- `git diff --check`.
+
+A live provider/render call is not required for this local deterministic correction. If the owner later reruns the previously blocked VPS headline smoke, treat that as separate runtime evidence rather than inventing it here.
+
+BOUNDED REPAIRS
+
+Repair only defects directly inside the deterministic wrapping behavior and focused regression coverage. Do not broaden layout policy or provider behavior.
+
+FINAL RESPONSE
+
+Report review findings, any bounded repair, exact validation, regression-headline result, preserved failure/safety behavior, unchanged 0.6.5 state, and whether `c6-line-wrap` is ready for human review.
