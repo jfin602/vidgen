@@ -1,0 +1,66 @@
+TASK: Correction 6 / P1 — Lower-third line-wrap fix
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Fix deterministic simple-path lower-third wrapping so a headline that fits the existing 3 x 42-character policy is not rejected merely because a separator space was appended to the previous line before a word-wrap boundary.
+
+Read BOOT.md, the Phase 6 simple-finisher contract, current simple-clip finisher/wrapper, headline workflow, and focused tests before editing.
+
+MUST REMAIN TRUE
+
+- Keep the existing lower-third policy unchanged: headline up to 3 lines of 42 characters and source display name up to 1 line of 42 characters.
+- Preserve the full governed headline/source content. Do not truncate, summarize, rewrite, or ask a model to alter display text.
+- For automatic wrapping at ordinary inter-word whitespace, consume the separator as the line break instead of leaving trailing whitespace on the completed line or leading whitespace on the next line.
+- Preserve existing explicit-newline behavior and hostile-text staging safety. Do not interpolate article text into FFmpeg filter syntax.
+- Lines produced by automatic wrapping must not contain wrapper-introduced leading/trailing whitespace.
+- Continue rejecting truly unfit input: over-limit line counts, unbreakable tokens longer than the line width, blank lines where currently invalid, unsafe control text, or an overlong one-line source.
+- Keep lower-third feasibility validation before text/video provider generation in the headline workflow.
+- Preserve FFmpeg/FFprobe behavior, rendering geometry, font sizes, output format, duration logic, sidecar schema/provenance, Agent Platform adapters, ngest boundaries, cinematic behavior, CLI grammar, and package/engine version 0.6.5.
+
+REGRESSION CASE
+
+Add a focused regression for the real governed headline that exposed the defect:
+
+`‘Possible Love’: What The Critics Are Saying About Lee Chang-dong’s Korean Drama — Venice`
+
+Under the existing 42-character/3-line policy it must deterministically wrap as:
+
+`‘Possible Love’: What The Critics Are`
+`Saying About Lee Chang-dong’s Korean Drama`
+`— Venice`
+
+with line lengths 37, 42, and 8 and no trailing spaces.
+
+PROOF
+
+Focused tests must prove:
+- the real regression headline above is accepted with the exact deterministic wrapping shown;
+- a word that exactly fills a 42-character line does not cause the preceding separator to make that line length 43;
+- automatic wrapping introduces neither trailing nor leading separator whitespace;
+- full text semantics are preserved across automatic line breaks;
+- existing explicit newline/hostile staging behavior remains intact;
+- truly unfit 43-character unbreakable headline/source cases still fail;
+- headline workflow accepts the regression headline through lower-third preflight and reaches the next injected stage without a provider/network call in the test;
+- no unrelated simple/cinematic behavior changes.
+
+Run focused simple-clip-finisher and headline-workflow tests, `npm run check`, `node src/cli.ts --help`, and `git diff --check`.
+
+Downstream-required capability -> owning implementation/export -> focused proof:
+
+governed headline that fits 3 x 42 -> deterministic lower-third wrapper -> exact regression-line test.
+
+validated lower third -> headline workflow provider preflight boundary -> workflow regression proving the headline no longer fails before generation.
+
+NON-GOALS
+
+Do not increase line count/width, change typography/layout, add truncation/ellipsis, add model-generated display headlines, change provider calls, alter FFmpeg policy, change sidecars/schemas, touch ngest behavior, begin Phase 7, or modify historical task records.
+
+FINAL RESPONSE
+
+Report the wrapper defect and repair, exact regression wrapping, focused/broader validation, preserved pre-provider validation behavior, and confirmation that version 0.6.5 is unchanged.
