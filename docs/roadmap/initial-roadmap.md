@@ -263,7 +263,7 @@ The Distribution-v1 path is transitional. It must remain isolated behind the nge
 
 ## Phase 6 — Simple presenter headline clips
 
-Status: IMPLEMENTED AT 0.6.5 / OWNER CLOSEOUT PENDING
+Status: IMPLEMENTED AT 0.6.5 / HUMAN REVIEW PENDING
 
 Goal:
 Add the smallest useful production path for the current client requirement while preserving the completed cinematic pipeline unchanged.
@@ -310,14 +310,13 @@ Phase 6 implementation has reached package/engine baseline 0.6.5. Owner review h
 
 The historical `c6-vertex-adapter` correction was implemented at unchanged version 0.6.5, but its two-backend product direction is now superseded by explicit owner instruction.
 
-Current owner-directed correction: `c6-agent-platform` at unchanged package/engine version 0.6.5.
+`c6-agent-platform` is implemented at unchanged package/engine version 0.6.5; human review and capability-specific qualification remain evidence-bound.
 
 Goal:
 Make Gemini Enterprise Agent Platform the sole supported Google model integration while preserving the provider-neutral boundaries and all non-provider simple/cinematic behavior.
 
 Required direction:
 - Developer API and Vertex are not separate supported VidGen backends;
-- reconcile the current Developer/Vertex implementation split rather than preserve it as compatibility behavior;
 - keep structured text, video, and speech as capability-specific adapters behind existing neutral contracts;
 - use only authentication mechanisms supported by each Agent Platform capability;
 - do not assume an API key or ADC path proven for one capability is valid for another;
@@ -387,14 +386,4 @@ Likely concerns:
 
 ## Immediate next action
 
-Plan the owner-directed Phase 6 Agent Platform correction:
-
-    /prompt-ass
-    -> /prompt-plan
-    -> /prompt-write c6-agent-platform
-
-Keep package/engine version 0.6.5 across the correction stack. Preserve the completed simple/cinematic contracts and provider-neutral boundaries; do not preserve Developer/Vertex as supported backend choices.
-
-Phase 7 remains live ngest fan-out and operational hardening. Do not pull Phase 7 scope into the Agent Platform correction.
-
-Do not claim live Agent Platform Veo/provider/render qualification unless the corresponding execution was actually observed.
+Phase 7 is live ngest fan-out and operational hardening. Keep its orchestration, retrieval, queue, database, and publishing scope separate from the completed Agent Platform correction.

@@ -25,15 +25,11 @@ Conceptually:
                     v
              existing VidGen flows
 
-The earlier product direction that treated Gemini Developer API and Vertex AI as parallel supported VidGen backends is superseded.
+The earlier product direction that treated Gemini Developer API and Vertex AI as parallel supported VidGen backends is historical/superseded.
 
 ## Current implementation status
 
-The repository currently contains legacy Google transport code for both Developer API Veo and Vertex-style Veo access. That split is transitional implementation state, not a compatibility contract.
-
-The historical `c6-vertex-adapter` task records remain valid history and should not be rewritten. Current owner-directed work is the bounded `c6-agent-platform` correction at package/engine version 0.6.5.
-
-The correction should remove the product-facing Developer/Vertex backend distinction and reconcile Google model access through Agent Platform while preserving the existing provider-neutral contracts and downstream behavior.
+At package/engine version 0.6.5, `c6-agent-platform` has removed the product-facing Developer/Vertex backend distinction while preserving the provider-neutral contracts and downstream behavior. The historical `c6-vertex-adapter` task records remain unchanged history.
 
 ## Capability-specific integration
 
@@ -64,10 +60,7 @@ Authentication is capability-specific runtime state.
 
 A successful credential path for one Agent Platform capability must not be treated as proof that the same credential path is valid for another capability.
 
-Observed qualification:
-- an owner-run Agent Platform Gemini text request using the configured API-key path completed successfully on 2026-09-07;
-- no Agent Platform Veo generation qualification is claimed yet;
-- no render or human-playback qualification is implied by the text smoke.
+Qualification is capability-specific. No source-level implementation result is live-provider, render, or human-playback evidence.
 
 Credentials, access tokens, service-account material, and API keys must never enter:
 - StoryInput or CanonicalInput;
@@ -112,11 +105,7 @@ The Agent Platform adapter layer returns only the neutral media/model result req
 
 ## Runtime configuration
 
-Runtime configuration may include capability-specific model, project, location, credential, timeout, polling, and staging settings.
-
-Configuration names are implementation decisions owned by `c6-agent-platform`.
-
-Do not preserve `developer` and `vertex` as long-term user-facing VidGen backend choices merely because the transitional source currently exposes them.
+Runtime configuration may include capability-specific model, project, location, credential, timeout, polling, and staging settings. Text uses `GEMINI_API_KEY`, `GOOGLE_CLOUD_PROJECT`, and `VIDGEN_TEXT_MODEL`; Veo uses ADC plus `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, and `VIDGEN_VIDEO_MODEL`; speech uses ADC plus `GOOGLE_CLOUD_PROJECT`, `VIDGEN_TTS_MODEL`, `VIDGEN_TTS_VOICE`, and `VIDGEN_TTS_LANGUAGE_CODE`.
 
 Provider/model selections remain VidGen runtime configuration, not template or upstream control data.
 
@@ -178,17 +167,9 @@ Before claiming live Veo support, directly observe at least:
 
 A successful text call is not evidence of video behavior. A successful video call is not evidence of speech behavior.
 
-## Migration constraint
+## Implementation boundary
 
-The `c6-agent-platform` correction should make the smallest safe implementation change that:
-- removes the supported Developer/Vertex backend split;
-- retains provider-neutral core interfaces;
-- preserves simple and cinematic behavior outside the Google transport boundary;
-- keeps existing durable artifact meanings and failure honesty;
-- adds focused tests for the new configuration/authentication path;
-- removes or retires legacy adapter code only when no active consumer requires it.
-
-Historical task files and prior commit history should remain unchanged.
+The correction retains provider-neutral core interfaces, simple/cinematic behavior outside Google transport adapters, durable artifact meanings, and failure honesty. Historical task files and prior commit history remain unchanged.
 
 ## Non-goals
 

@@ -270,14 +270,12 @@ The MVP is Google-first, not Google-coupled.
 Keep thin provider-neutral requests/results at the VidGen boundary so ClipPlan generation, media generation, and FFmpeg assembly do not depend directly on provider response shapes.
 
 Current implementation:
-- Phase 3 provides the provider-neutral structured-text boundary plus Google Gemini Interactions adapter;
-- Phase 4 provides provider-neutral video/speech generation boundaries;
-- the current Google video code includes legacy Developer/Vertex transports for presenter/content-video generation, but that split is transitional implementation state;
-- Google Gemini TTS realizes exact off-screen voiceover text into WAV audio;
+- the provider-neutral structured-text boundary uses the project/global Agent Platform `generateContent` path;
+- provider-neutral video and speech generation boundaries use Agent Platform Veo and Cloud Text-to-Speech Gemini TTS respectively;
 - provider jobs/assets retain story-local provenance, hashes, request/operation identity where safe, and effective-generation-input identity;
 - provider model/voice selections remain runtime configuration rather than template semantics.
 
-The prior `c6-vertex-adapter` direction is superseded. Gemini Enterprise Agent Platform is the sole supported Google model platform:
+The prior `c6-vertex-adapter` direction is historical/superseded. Gemini Enterprise Agent Platform is the sole supported Google model platform:
 
     provider-neutral capability boundaries
                     |
@@ -294,7 +292,7 @@ The prior `c6-vertex-adapter` direction is superseded. Gemini Enterprise Agent P
                     v
          existing VidGen workflows
 
-Platform choice must not enter StoryInput, CanonicalControl, ClipPlan, AssemblyTemplate, generated model output, or ngest state. The current Developer/Vertex split in source is transitional implementation state and must not become a long-term compatibility contract.
+Platform choice must not enter StoryInput, CanonicalControl, ClipPlan, AssemblyTemplate, generated model output, or ngest state.
 
 Each Agent Platform capability owns its supported authentication, request/poll transport, model capability checks, and any bounded output/staging behavior. Authentication proven for one capability must not be assumed to prove another.
 
