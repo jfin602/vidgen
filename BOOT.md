@@ -2,7 +2,7 @@
 
 This is the session router for repository-aware work in jfin602/vidgen.
 
-VidGen is early-stage. Phases 1 and 2 have been implemented, reviewed, and closed. Phase 3 was manually owner-closed after P4 at version 0.3.4. Phase 4 was manually owner-closed at version 0.4.4 after its P5 review/repair pass. Phase 5 was implemented through P3 and manually owner-closed at version 0.5.3 after its P4 closeout review/repair. The Phase 5 closeout host did not have ffmpeg/ffprobe or owner-supplied real media-ready inputs, so no real story render or human playback qualification was established there. Since then, the deployment VPS has directly qualified FFmpeg 6.1.1, FFprobe 6.1.1, libx264, AAC, and the required assembly filters, but a complete owner-media generated story render is still unclaimed. The behavior-preserving MVP refactor and the `c5-optional-assets` correction are complete; standardized intro/outro wrappers are now independently optional. The owner has now prioritized a simpler production path before further operationalization: Phase 6 will add one short presenter clip per StoryInput with a deterministic headline/source lower third, a configurable 4-20 second maximum-duration ceiling, and a paired article-metadata JSON artifact. The existing template/ClipPlan/generated-media/assembly pipeline remains preserved as the cinematic path. The previously planned live ngest fan-out and operational-hardening work moves to Phase 7. `c5-config-fix` remains owner-approved but is deferred rather than blocking Phase 6.
+VidGen is early-stage. Phases 1 and 2 have been implemented, reviewed, and closed. Phase 3 was manually owner-closed after P4 at version 0.3.4. Phase 4 was manually owner-closed at version 0.4.4 after its P5 review/repair pass. Phase 5 was implemented through P3 and manually owner-closed at version 0.5.3 after its P4 closeout review/repair. The Phase 5 closeout host did not have ffmpeg/ffprobe or owner-supplied real media-ready inputs, so no real story render or human playback qualification was established there. Since then, the deployment VPS has directly qualified FFmpeg 6.1.1, FFprobe 6.1.1, libx264, AAC, and the required assembly filters, but a complete owner-media generated story render is still unclaimed. The behavior-preserving MVP refactor and the `c5-optional-assets` correction are complete; standardized intro/outro wrappers are now independently optional. Phase 6 simple presenter-headline implementation has reached the 0.6.5 baseline while preserving the existing template/ClipPlan/generated-media/assembly cinematic path. The owner has approved `c6-vertex-adapter` as a bounded Phase 6 correction at unchanged 0.6.5: Vertex AI Veo will be added as a parallel Google video backend without replacing the working Gemini Developer API Veo path. Live ngest fan-out and operational hardening remain Phase 7. `c5-config-fix` remains owner-approved but deferred.
 
 The initial engineering worksheet is historical decision context. Several of its promoted edition/newscast decisions were superseded by the single-story rebase on 2026-09-05. Current architecture and roadmap docs govern active direction.
 
@@ -18,7 +18,7 @@ The initial engineering worksheet is historical decision context. Several of its
 - Initial development input: a local VidGen-shaped sample fixture that exercises the same post-adapter validation/normalization semantics as live input, without requiring the upstream Distribution v1 wire itself.
 - MVP run state: filesystem-backed story artifacts plus structured metadata.
 - Creative production paths: the current-priority simple path branches from StoryInput without requiring ClipPlan/AssemblyTemplate; the preserved cinematic path continues to use one validated ClipPlan constrained by the selected assembly template.
-- Initial provider direction: Google-first, with Veo for generated presenter/video work behind thin provider-neutral boundaries.
+- Initial provider direction: Google-first, with Veo behind thin provider-neutral boundaries; the existing Developer API backend is preserved and the owner-approved `c6-vertex-adapter` correction adds Vertex AI as a parallel backend.
 - MVP assembly: FFmpeg.
 - Remotion: not part of the current MVP; defer programmable composition until evidence requires it.
 - Initial output: 1080x1920 9:16 H.264 MP4 at 30 fps.
@@ -26,13 +26,14 @@ The initial engineering worksheet is historical decision context. Several of its
 - Phase 2 completion version: 0.2.5.
 - Phase 3 owner-closeout version: 0.3.4.
 - Phase 4 owner-closeout version: 0.4.4.
-- Current package baseline: 0.5.3.
-- Next roadmap phase: Phase 6 — simple presenter headline clips.
-- Current repository state: Phase 1 authenticated ngest acquisition/canonicalization, Phase 2 local fixture ingress/StoryInput/story workspace, Phase 3 ClipPlan planning, Phase 4 deterministic generated-media units and Google Veo/Gemini media adapters, and Phase 5 deterministic FFprobe qualification, AssemblyPlan creation, FFmpeg rendering, `vidgen assemble`, `assembly-run.json`, `final-clip.json`, and atomic final-clip publication are implemented. `c5-optional-assets` is closed: intro and outro are independently optional, omission inserts no placeholder media, and only supplied wrappers participate in qualification, duration, fingerprinting, and provenance. The deployment VPS has qualified the required FFmpeg/FFprobe capabilities, while the first complete owner-media generated story render and playback review remain unclaimed. `c5-config-fix` is owner-approved and planned but not yet implemented; it will use ngest Distribution v1 as the current transitional live-development transport while preserving the future dedicated VidGen integration boundary. Publisher retrieval remains deferred.
+- Current package baseline: 0.6.5.
+- Next roadmap phase: Phase 7 — live ngest fan-out and operational hardening; current owner-directed work remains the Phase 6 `c6-vertex-adapter` correction.
+- Current repository state: Phases 1-5 provide authenticated ngest acquisition/canonicalization, local fixture ingress/StoryInput/story workspace, ClipPlan planning, deterministic generated-media units and Google Veo/Gemini adapters, FFprobe qualification, AssemblyPlan creation, FFmpeg rendering, cinematic final-artifact publication, and independently optional intro/outro wrappers. Phase 6 has added the separate StoryInput-based simple presenter-headline path with bounded presenter copy/video generation, deterministic lower-third finishing, and paired MP4/JSON publication at package/engine baseline 0.6.5. The deployment VPS has qualified required FFmpeg/FFprobe capabilities, while full live provider/story playback qualification remains evidence-specific and must not be inferred. `c6-vertex-adapter` is owner-approved for planning next. `c5-config-fix` remains owner-approved and deferred. Publisher retrieval remains deferred.
 - Current roadmap: docs/roadmap/initial-roadmap.md.
 - Current architecture: docs/architecture.md.
 - Current template contract: docs/template-system.md.
 - Current ngest integration notes: docs/integrations/ngest.md.
+- Current Google video backend notes: docs/integrations/google-video.md.
 - Current control notes: docs/control-interface.md.
 - Historical engineering worksheet: docs/planning/initial-engineering-question-worksheet.md.
 
@@ -182,16 +183,18 @@ Run artifacts are written under .codex-runs/ and ignored by Git.
 
 ## Current next action
 
-Phases 1 and 2 are closed at 0.1.5 and 0.2.5. Phase 3 was manually owner-closed at 0.3.4. Phase 4 was manually owner-closed at 0.4.4. Phase 5 was manually owner-closed at 0.5.3. The behavior-preserving MVP refactor and `c5-optional-assets` correction are complete at the unchanged 0.5.3 baseline.
-
-Current owner-directed work is Phase 6 planning for the simple presenter-headline clip path:
+Current owner-directed work is the bounded Phase 6 Vertex backend correction:
 
     /prompt-ass
     -> /prompt-plan
-    -> /prompt-write p6
+    -> /prompt-write c6-vertex-adapter
 
-Phase 6 must preserve the completed cinematic `story -> plan -> media -> assemble` behavior while adding a separate StoryInput-based path that produces one presenter clip, deterministic headline/source lower third, and paired article-metadata JSON. `maxSeconds` is a hard ceiling configurable from 4 through 20 seconds inclusive, not a requested target duration.
+The correction must keep package/engine version 0.6.5 unchanged, preserve the existing Gemini Developer API Veo backend, and add Vertex AI Veo only behind the existing provider-neutral video boundaries.
 
-`c5-config-fix` remains owner-approved but is deferred. Its transitional Distribution-v1 live-development adapter and Article-URL sample helper may be resumed later without changing the downstream StoryInput boundary. The future dedicated Profile-bound ngest VidGen endpoint remains the intended feed-plus-controls production boundary and should stay replaceable behind the input adapter.
+Backend selection belongs to runtime configuration. Vertex authentication, project/location/model configuration, polling, and any Cloud Storage staging/retrieval remain adapter concerns. Do not silently fall back between Developer API and Vertex.
 
-The previously planned live ngest fan-out and operational-hardening capability is now Phase 7. The deployment VPS has already qualified FFmpeg/FFprobe and required codec/filter availability, while full live media qualification must still be claimed only when actually observed.
+Phase 7 remains live ngest fan-out and operational hardening. Do not move fan-out, publisher retrieval, database/queue work, or automated publishing into the Vertex correction.
+
+`c5-config-fix` remains owner-approved but deferred. Its transitional Distribution-v1 live-development adapter and Article-URL sample helper may be resumed later without changing downstream StoryInput or video-provider boundaries.
+
+The deployment VPS has qualified FFmpeg/FFprobe and required codec/filter availability. Live Developer API, Vertex AI, render, and human-playback claims remain separate and must be made only when actually observed.
