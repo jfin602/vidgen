@@ -8,6 +8,7 @@ import type {
 import {
   assertPresenterVideoGenerationRequest,
   planPresenterVideoDuration,
+  partitionSimplePresenterSpeech,
   type PresenterVideoGenerationClient,
   type PresenterVideoGenerationRequest,
   type PresenterVideoGenerationResult,
@@ -155,11 +156,12 @@ export class GoogleVeoVideoGenerationClient implements VideoGenerationClient, Pr
     if (durationPlan.extensionCount > this.maxExtensionCount) {
       throw providerFailure('Google Veo video request exceeds the configured extension limit.');
     }
-    const dialogueChunks = partitionPresenterSpeech(request.spokenText, durationPlan.extensionCount + 1);
+    const dialogueChunks = partitionSimplePresenterSpeech(request.spokenText, request.maxSeconds);
+    const retainedExtensionSeconds = Math.min(request.maxSeconds, durationPlan.rawProviderDurationSeconds) - INITIAL_DURATION_SECONDS;
     const generated = await this.generateSequence(
-      buildSimplePresenterInitialRequest(request, dialogueChunks[0]!),
+      buildSimplePresenterInitialRequest(request, dialogueChunks[0]!, durationPlan.extensionCount > 0),
       durationPlan.extensionCount,
-      (previous, extensionIndex) => buildSimplePresenterExtensionRequest(previous, dialogueChunks[extensionIndex + 1] ?? ''),
+      (previous, extensionIndex) => buildSimplePresenterExtensionRequest(previous, dialogueChunks[extensionIndex + 1] ?? '', retainedExtensionSeconds),
     );
     return {
       provider: this.provider,
@@ -382,10 +384,11 @@ function buildExtensionRequest(
 function buildSimplePresenterInitialRequest(
   request: PresenterVideoGenerationRequest,
   dialogue: string,
+  requiresExtension: boolean,
 ): Record<string, unknown> {
   return {
     instances: [{
-      prompt: simplePresenterPrompt(dialogue, false),
+      prompt: simplePresenterPrompt(dialogue, false, requiresExtension),
       referenceImages: request.referenceImages.map(toReferenceImage),
     }],
     parameters: {
@@ -397,10 +400,11 @@ function buildSimplePresenterInitialRequest(
 function buildSimplePresenterExtensionRequest(
   previous: DownloadedVideo,
   dialogue: string,
+  retainedExtensionSeconds: number,
 ): Record<string, unknown> {
   return {
     instances: [{
-      prompt: simplePresenterPrompt(dialogue, true),
+      prompt: simplePresenterPrompt(dialogue, true, false, retainedExtensionSeconds),
       video: { inlineData: { mimeType: previous.mimeType, data: Buffer.from(previous.bytes).toString('base64') } },
     }],
     parameters: { aspectRatio: '9:16', numberOfVideos: 1, resolution: '720p' },
@@ -420,13 +424,15 @@ function presenterPrompt(request: VideoGenerationRequest, dialogue: string, isEx
   ].join(' ');
 }
 
-function simplePresenterPrompt(dialogue: string, isExtension: boolean): string {
+function simplePresenterPrompt(dialogue: string, isExtension: boolean, requiresExtension = false, retainedExtensionSeconds?: number): string {
   const continuity = isExtension
     ? 'Continue the same presenter, appearance, setting, and scene continuity from the supplied prior Veo video.'
     : 'Preserve the intended anchor appearance from the supplied reference images.';
   return [
     'Create a portrait news-presenter video.', continuity,
     `The presenter must speak only this exact assigned dialogue: "${dialogue}".`,
+    ...(requiresExtension ? ['Keep the presenter speaking through this initial 8-second clip\'s final second so the required Veo extension can continue the voice.'] : []),
+    ...(isExtension ? [`Begin this exact assigned dialogue immediately and finish it within the first ${retainedExtensionSeconds} seconds of this 7-second extension, the only portion retained in the final clip. After that dialogue, add no speech.`] : []),
     'Do not add dialogue. Do not create readable or generated on-screen text. Do not add unsupported story facts.',
   ].join(' ');
 }

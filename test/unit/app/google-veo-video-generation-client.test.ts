@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createApprovedReferenceImage, type ApprovedReferenceImage, type GeneratedMediaUnit } from '../../../src/core/generated-media.ts';
-import { planPresenterVideoDuration } from '../../../src/core/presenter-video.ts';
+import { planPresenterVideoDuration, partitionSimplePresenterSpeech } from '../../../src/core/presenter-video.ts';
+import { SIMPLE_CLIP_BROADCAST_WORDS_PER_MINUTE } from '../../../src/core/simple-clip-copy.ts';
 import { VidGenError } from '../../../src/core/error.ts';
 import {
   GOOGLE_VEO_API_BASE,
@@ -98,8 +99,8 @@ test('simple presenter duration plans use at most one seven-second Veo extension
     operation('operations/simple-extension', true), videoResponse([2]),
   ]), { extensionEnabled: true });
   const result = await client.generatePresenterVideo({
-    spokenText: 'One two three four five six.',
-    referenceImages: [createApprovedReferenceImage('image/png', new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))],
+    spokenText: numberedWords(37),
+    referenceImages: [simpleReferenceImage()],
     maxSeconds: 20,
   });
   assert.equal(result.generationOperationCount, 2);
@@ -107,9 +108,66 @@ test('simple presenter duration plans use at most one seven-second Veo extension
   assert.equal(calls.length, 4);
   const assignedDialogue = [calls[0]!, calls[2]!].map((call) => {
     const prompt = String((parseBody(call).instances as Array<Record<string, unknown>>)[0]!.prompt);
-    return /assigned dialogue: "([\s\S]*?)"\. Do not add dialogue\./.exec(prompt)![1]!;
+    return /assigned dialogue: "([\s\S]*?)"\./.exec(prompt)![1]!;
   });
-  assert.equal(assignedDialogue.join(' '), 'One two three four five six.');
+  assert.equal(assignedDialogue.join(' '), numberedWords(37));
+});
+
+test('simple presenter speech uses only each planned final retained extension window', async (context) => {
+  for (let duration = 9; duration <= 15; duration += 1) {
+    await context.test(`${duration} seconds`, async () => {
+      const calls: FetchCall[] = [];
+      const spokenText = numberedWords(Math.floor((duration * SIMPLE_CLIP_BROADCAST_WORDS_PER_MINUTE) / 60));
+      const client = clientFor(sequenceFetch(calls, [
+        operation('operations/simple-initial', true), videoResponse([1]),
+        operation('operations/simple-extension', true), videoResponse([2]),
+      ]), { extensionEnabled: true });
+
+      await client.generatePresenterVideo({ spokenText, referenceImages: [simpleReferenceImage()], maxSeconds: duration });
+
+      const initialPrompt = promptFrom(calls[0]!); const extensionPrompt = promptFrom(calls[2]!);
+      const [initial, extension] = [initialPrompt, extensionPrompt].map(assignedDialogue);
+      const extensionCapacity = Math.floor(((duration - 8) * SIMPLE_CLIP_BROADCAST_WORDS_PER_MINUTE) / 60);
+      assert.equal([initial, extension].join(' '), spokenText);
+      assert.ok(wordCount(extension) <= extensionCapacity);
+      assert.ok((wordCount(initial) * 60) / SIMPLE_CLIP_BROADCAST_WORDS_PER_MINUTE > 7);
+      assert.match(initialPrompt, /initial 8-second clip's final second.*required Veo extension/i);
+      assert.match(extensionPrompt, new RegExp(`Begin this exact assigned dialogue immediately and finish it within the first ${duration - 8} seconds`));
+      assert.match(extensionPrompt, /After that dialogue, add no speech\./);
+      if (duration < 15) {
+        const rawExtensionWords = wordCount(spokenText) - Math.floor((wordCount(spokenText) * 8) / 15);
+        assert.ok(rawExtensionWords > wordCount(extension));
+      } else {
+        assert.equal(wordCount(extension), extensionCapacity);
+      }
+    });
+  }
+});
+
+test('simple presenter clips through eight seconds use one operation with all dialogue', async (context) => {
+  for (let duration = 4; duration <= 8; duration += 1) {
+    await context.test(`${duration} seconds`, async () => {
+      const calls: FetchCall[] = [];
+      const spokenText = numberedWords(Math.floor((duration * SIMPLE_CLIP_BROADCAST_WORDS_PER_MINUTE) / 60));
+      const client = clientFor(sequenceFetch(calls, [operation('operations/simple', true), videoResponse([1])]), { extensionEnabled: true });
+      await client.generatePresenterVideo({ spokenText, referenceImages: [simpleReferenceImage()], maxSeconds: duration });
+      assert.equal(calls.length, 2);
+      assert.equal(assignedDialogue(promptFrom(calls[0]!)), spokenText);
+      assert.equal(promptFrom(calls[0]!).includes('required Veo extension'), false);
+    });
+  }
+});
+
+test('simple presenter rejects over-capacity or continuity-incompatible dialogue before network work', async (context) => {
+  for (const spokenText of [numberedWords(23), numberedWords(18)]) {
+    await context.test(`${wordCount(spokenText)} words`, async () => {
+      let calls = 0;
+      const client = clientFor(async () => { calls += 1; return videoResponse([1]); }, { extensionEnabled: true });
+      await assert.rejects(client.generatePresenterVideo({ spokenText, referenceImages: [simpleReferenceImage()], maxSeconds: 9 }), hasSimpleClipCode);
+      assert.equal(calls, 0);
+    });
+  }
+  assert.deepEqual(partitionSimplePresenterSpeech(numberedWords(22), 9).join(' '), numberedWords(22));
 });
 
 test('Google Veo presenter rejects missing, excessive, or unsupported references before network', async (context) => {
@@ -163,7 +221,7 @@ test('Google Veo assigns partitioned presenter dialogue across extension operati
   const initialPrompt = String((parseBody(calls[0]!).instances as Array<Record<string, unknown>>)[0]!.prompt);
   const extensionPrompt = String((parseBody(calls[2]!).instances as Array<Record<string, unknown>>)[0]!.prompt);
   const dialogue = [initialPrompt, extensionPrompt].map((prompt) => {
-    const match = /assigned dialogue: "([\s\S]*?)"\. Do not add dialogue\./.exec(prompt);
+    const match = /assigned dialogue: "([\s\S]*?)"\./.exec(prompt);
     assert.notEqual(match, null);
     return match![1]!;
   });
@@ -296,6 +354,24 @@ function parseBody(call: FetchCall): Record<string, unknown> {
   return JSON.parse(String(call.init.body)) as Record<string, unknown>;
 }
 
+function promptFrom(call: FetchCall): string {
+  return String((parseBody(call).instances as Array<Record<string, unknown>>)[0]!.prompt);
+}
+
+function assignedDialogue(prompt: string): string {
+  const match = /assigned dialogue: "([\s\S]*?)"\./.exec(prompt);
+  assert.notEqual(match, null);
+  return match![1]!;
+}
+
+function numberedWords(count: number): string {
+  return Array.from({ length: count }, (_, index) => `word${index + 1}`).join(' ');
+}
+
+function wordCount(text: string): number {
+  return text.split(' ').length;
+}
+
 function contentUnit(targetDurationSeconds: number): GeneratedMediaUnit {
   return {
     unitId: 'u02', segment: { id: 'content', startSeconds: 5, endSeconds: 5 + targetDurationSeconds },
@@ -317,12 +393,20 @@ function image(): ApprovedReferenceImage {
   return { mimeType: 'image/png', bytes: new Uint8Array([3, 4, 5]), sha256: 'b'.repeat(64) };
 }
 
+function simpleReferenceImage(): ApprovedReferenceImage {
+  return createApprovedReferenceImage('image/png', new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+}
+
 function hasGeneratedMediaCode(error: unknown): boolean {
   return error instanceof VidGenError && error.code === 'generated_media';
 }
 
 function hasConfigurationCode(error: unknown): boolean {
   return error instanceof VidGenError && error.code === 'configuration';
+}
+
+function hasSimpleClipCode(error: unknown): boolean {
+  return error instanceof VidGenError && error.code === 'simple_clip';
 }
 
 function safeGeneratedMediaError(error: unknown): boolean {

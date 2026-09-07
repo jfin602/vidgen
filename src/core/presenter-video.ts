@@ -1,9 +1,15 @@
 import { assertApprovedAnchorReferenceCount, assertApprovedReferenceImage, type ApprovedReferenceImage } from './anchor-reference.ts';
 import { VidGenError } from './error.ts';
-import { assertSimpleClipMaxSeconds } from './simple-clip-copy.ts';
+import {
+  assertSimpleClipMaxSeconds,
+  SIMPLE_CLIP_BROADCAST_WORDS_PER_MINUTE,
+  SIMPLE_CLIP_REALIZABLE_MAX_SECONDS,
+} from './simple-clip-copy.ts';
 
 const INITIAL_VEO_DURATION_SECONDS = 8;
 const VEO_EXTENSION_DURATION_SECONDS = 7;
+const SIMPLE_PRESENTER_WORDS_PER_SECOND = SIMPLE_CLIP_BROADCAST_WORDS_PER_MINUTE / 60;
+const SIMPLE_PRESENTER_CONTINUITY_WORDS = Math.floor((INITIAL_VEO_DURATION_SECONDS - 1) * SIMPLE_PRESENTER_WORDS_PER_SECOND) + 1;
 
 export interface PresenterVideoDurationPlan {
   /** The Phase 6 final-artifact ceiling, not a raw provider-duration claim. */
@@ -75,6 +81,26 @@ export function assertPresenterVideoGenerationRequest(request: PresenterVideoGen
   } catch (cause) {
     throw invalidPresenterVideo('Presenter video generation requires one to three approved local anchor references.', cause);
   }
+  partitionSimplePresenterSpeech(request.spokenText, request.maxSeconds);
+}
+
+/** Splits simple-path dialogue against the final retained Veo timeline. */
+export function partitionSimplePresenterSpeech(spokenText: string, maxSeconds: number): readonly string[] {
+  const normalized = spokenText.trim().replace(/\s+/g, ' ');
+  const words = normalized.split(' ');
+  const finalDurationSeconds = Math.min(maxSeconds, SIMPLE_CLIP_REALIZABLE_MAX_SECONDS);
+  if (words.length > Math.floor(finalDurationSeconds * SIMPLE_PRESENTER_WORDS_PER_SECOND)) {
+    throw invalidPresenterVideo('Presenter dialogue exceeds the selected final-duration speech capacity.');
+  }
+  if (finalDurationSeconds <= INITIAL_VEO_DURATION_SECONDS) {
+    return [normalized];
+  }
+  const extensionCapacity = Math.floor((finalDurationSeconds - INITIAL_VEO_DURATION_SECONDS) * SIMPLE_PRESENTER_WORDS_PER_SECOND);
+  const extensionWords = Math.min(extensionCapacity, words.length - SIMPLE_PRESENTER_CONTINUITY_WORDS);
+  if (extensionWords < 1) {
+    throw invalidPresenterVideo('Presenter dialogue cannot keep speech active into the initial clip final second and continue into the retained extension.');
+  }
+  return [words.slice(0, -extensionWords).join(' '), words.slice(-extensionWords).join(' ')];
 }
 
 function invalidPresenterVideo(message: string, cause?: unknown): VidGenError {
