@@ -24,7 +24,7 @@ The roadmap assumes:
 - the Phase 6 simple path branches directly from StoryInput and does not require AssemblyTemplate, ClipPlan, cinematic GeneratedMediaUnit resolution, or cinematic AssemblyPlan;
 - the preserved cinematic path continues to use one validated ClipPlan creative stage and declarative assembly templates for structure/timing/media-slot requirements;
 - independently optional standardized premade intro/outro wrapper assets remain part of the preserved cinematic path under the approved post-Phase-5 correction; omission inserts no placeholder media;
-- Google-first generated media behind thin replaceable adapters;
+- Gemini Enterprise Agent Platform as the sole supported Google model platform, behind thin replaceable capability adapters;
 - Veo as the initial presenter/video direction;
 - FFmpeg/FFprobe for deterministic finishing/qualification of the simple path and assembly/qualification of the preserved cinematic path;
 - 1080x1920 9:16 H.264 MP4 at 30 fps as the initial output target;
@@ -308,23 +308,27 @@ Phase 6 implementation has reached package/engine baseline 0.6.5. Owner review h
 
 ## Approved Phase 6 corrections
 
-The owner has approved `c6-vertex-adapter` as a bounded Phase 6 correction at unchanged version 0.6.5.
+The historical `c6-vertex-adapter` correction was implemented at unchanged version 0.6.5, but its two-backend product direction is now superseded by explicit owner instruction.
+
+Current owner-directed correction: `c6-agent-platform` at unchanged package/engine version 0.6.5.
 
 Goal:
-Add Vertex AI Veo as a parallel Google video backend behind the existing provider-neutral video-generation boundaries while preserving the working Gemini Developer API Veo backend.
+Make Gemini Enterprise Agent Platform the sole supported Google model integration while preserving the provider-neutral boundaries and all non-provider simple/cinematic behavior.
 
 Required direction:
-- existing Developer API behavior remains supported and regression-protected;
-- Vertex is selected explicitly through runtime configuration rather than StoryInput, CanonicalControl, ClipPlan, templates, or model output;
-- use supported Google Cloud authentication for Vertex rather than reusing `GEMINI_API_KEY`;
-- keep Vertex model/project/location and any bounded Cloud Storage staging configuration inside the adapter/runtime boundary;
-- preserve the current approved presenter-reference semantics and fail configuration when a selected Vertex model cannot satisfy them;
-- keep provider request/poll/output retrieval and staging safety inside the Vertex adapter;
-- do not silently fall back between Developer API and Vertex;
+- Developer API and Vertex are not separate supported VidGen backends;
+- reconcile the current Developer/Vertex implementation split rather than preserve it as compatibility behavior;
+- keep structured text, video, and speech as capability-specific adapters behind existing neutral contracts;
+- use only authentication mechanisms supported by each Agent Platform capability;
+- do not assume an API key or ADC path proven for one capability is valid for another;
+- keep model/project/location, polling, output retrieval, and any bounded staging configuration inside runtime/adapter boundaries;
+- preserve approved presenter-reference semantics and fail clearly when a selected model/API path cannot satisfy them;
+- do not silently fall back to a legacy Developer or Vertex path;
 - preserve simple-path duration/FFmpeg/sidecar behavior and cinematic GeneratedMediaUnit/assembly semantics;
-- record safe effective backend/model/operation provenance without secrets, raw provider responses, or unrestricted staging paths;
-- include mocked deterministic proof plus a real Vertex qualification when credentials, quota, supported model access, staging, and runtime are actually available;
-- no Flow automation, ngest changes, fan-out, database/queue work, publishing, or generalized provider-framework redesign.
+- record safe platform/model/request-operation provenance without secrets, raw provider responses, signed URLs, or unrestricted staging paths;
+- include deterministic mocked proof plus capability-specific live qualification when credentials, quota, model access, and runtime permit it;
+- retain the observed 2026-09-07 Agent Platform Gemini text API-key smoke as text-only evidence; it does not qualify Veo;
+- no ngest changes, fan-out, database/queue work, publishing, or generalized provider-framework redesign.
 
 See docs/integrations/google-video.md.
 
@@ -383,14 +387,14 @@ Likely concerns:
 
 ## Immediate next action
 
-Plan the owner-approved Phase 6 Vertex backend correction:
+Plan the owner-directed Phase 6 Agent Platform correction:
 
     /prompt-ass
     -> /prompt-plan
-    -> /prompt-write c6-vertex-adapter
+    -> /prompt-write c6-agent-platform
 
-Keep package/engine version 0.6.5 across the correction stack. Preserve the existing Developer API backend and the completed simple/cinematic contracts.
+Keep package/engine version 0.6.5 across the correction stack. Preserve the completed simple/cinematic contracts and provider-neutral boundaries; do not preserve Developer/Vertex as supported backend choices.
 
-Phase 7 remains live ngest fan-out and operational hardening. Do not pull Phase 7 scope into the Vertex correction.
+Phase 7 remains live ngest fan-out and operational hardening. Do not pull Phase 7 scope into the Agent Platform correction.
 
-Do not claim live Vertex/provider/render qualification unless the corresponding execution was actually observed.
+Do not claim live Agent Platform Veo/provider/render qualification unless the corresponding execution was actually observed.
