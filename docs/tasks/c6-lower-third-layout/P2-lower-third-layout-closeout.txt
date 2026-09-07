@@ -22,7 +22,7 @@ Confirm:
 - source placement remains inside the box with bottom/right padding and clear separation from headline text;
 - staged text-file/no-shell safety remains intact and untrusted text does not enter the FFmpeg filter expression;
 - FFmpeg output remains 1080x1920, 30 fps, H.264/yuv420p + AAC stereo 48 kHz with existing loudnorm/duration behavior and one simple-path input;
-- the visible finishing change has a new `SIMPLE_CLIP_FINISHING_POLICY` version and headline sidecars record it without schema-shape changes;
+- the visible finishing change uses `simple-clip-finishing-policy-v2` and headline sidecars record it without schema-shape changes;
 - presenter copy, Veo dialogue/prompting, Agent Platform auth/polling, duration planning, ngest, cinematic assembly, CLI, package and engine remain unchanged at 0.6.5.
 
 VALIDATION
