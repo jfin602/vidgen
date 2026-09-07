@@ -1,0 +1,64 @@
+TASK: Correction 6 / P3 — Vertex adapter closeout
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Review P1-P2 as the bounded Phase 6 Vertex backend correction. Inspect the actual diff and resulting source; do not approve solely because tests pass. Establish mocked correctness and, when the qualification environment is available, one bounded real Vertex Veo generation.
+
+ACCEPTANCE
+
+Confirm:
+- the existing Gemini Developer API Veo adapter remains supported, default, and regression-protected;
+- Vertex is a separate adapter implementing the existing neutral cinematic/simple video contracts;
+- backend selection is explicit runtime configuration with no silent fallback;
+- Vertex uses ADC bearer auth, configured project/location/model, and the regional Vertex long-running prediction/poll surface;
+- supported Vertex models preserve required presenter-reference capability; unsupported Lite/preview/unsafe values fail before provider work;
+- PNG/JPEG presenter references are bounded inline assets and WebP is rejected only by the Vertex adapter without weakening the shared reference contract or Developer API behavior;
+- the correction uses bounded inline Vertex video results and does not create Cloud Storage staging unless a documented/runtime blocker required a bounded repair;
+- simple 4-15 second generation preserves the final Phase 6 duration/speech-timing contract and cinematic generation preserves existing GeneratedMediaUnit semantics;
+- provider/model/operation provenance remains safe and sufficient to distinguish backends;
+- switching backend cannot reuse incompatible prior generated media;
+- no tokens, credentials, project-private runtime material, raw provider responses, or authorization headers enter prompts, fingerprints, sidecars, manifests, logs, or public errors;
+- StoryInput, ClipPlan, templates, FFmpeg finishing/assembly, CLI grammar, headline publication integrity, and cinematic durable schemas remain unchanged;
+- package/engine version is still 0.6.5 and no Phase 7 scope entered the correction.
+
+VALIDATION
+
+Run:
+- `npm run codex:phase:validate -- c6-vertex-adapter`;
+- focused Vertex adapter/auth/polling/reference/extension tests;
+- focused backend-selector, headline, media, generated-media, Developer-Veo, and CLI tests;
+- `npm test`;
+- `npm run check`;
+- `node src/cli.ts --help`;
+- `git diff --check`.
+
+LIVE VERTEX QUALIFICATION
+
+If ADC, project access, Vertex API/model quota, and an owner-approved local PNG/JPEG anchor are available, perform exactly one bounded 8-second Vertex presenter generation using `veo-3.1-fast-generate-001` unless the configured supported model intentionally differs.
+
+The live smoke must:
+- use Vertex directly, not the Developer API and not automatic fallback;
+- use one initial generation only, with no extension, to bound spend;
+- verify a successful operation, safe operation provenance, non-empty MP4 output, expected MIME/signature, and no secret/raw-response leakage;
+- record the model/location used and whether FFprobe/FFmpeg compatibility or human playback was actually observed;
+- avoid persisting credentials or raw provider responses.
+
+Do not make repeated paid attempts after a configuration, permission, quota, auth, or provider failure. Report the exact safe blocker instead.
+
+Ordinary correction closeout requires an actually observed live Vertex generation. If the environment cannot perform it, report the implementation as mock-validated but the correction as blocked for ordinary human closeout unless the owner explicitly waives that provider-evidence gate.
+
+If FFmpeg/FFprobe and a suitable local font are also available, optionally finish/probe the live raw clip through the existing simple finisher as additional compatibility evidence. Do not treat this optional finishing smoke as human aesthetic qualification.
+
+BOUNDED REPAIRS
+
+Repair only defects clearly inside the Vertex adapter/selector correction and focused tests needed to protect them. Do not redesign provider architecture, introduce GCS merely for convenience, modify Phase 6 product contracts, or begin Phase 7.
+
+FINAL RESPONSE
+
+Report review findings, any bounded repairs, exact automated validation, exact live Vertex evidence or blocker, effective backend/model/location, reference/extension behavior, provenance/secret safety, Developer API and cinematic/simple regression status, unchanged 0.6.5 state, and whether `c6-vertex-adapter` is ready for human review.
