@@ -272,7 +272,7 @@ Keep thin provider-neutral requests/results at the VidGen boundary so ClipPlan g
 Current implementation:
 - Phase 3 provides the provider-neutral structured-text boundary plus Google Gemini Interactions adapter;
 - Phase 4 provides provider-neutral video/speech generation boundaries;
-- the existing Google Veo Developer API backend realizes presenter/content-video units from deterministic unit content and explicit approved local presenter references;
+- the current Google video code includes legacy Developer/Vertex transports for presenter/content-video generation, but that split is transitional implementation state;
 - Google Gemini TTS realizes exact off-screen voiceover text into WAV audio;
 - provider jobs/assets retain story-local provenance, hashes, request/operation identity where safe, and effective-generation-input identity;
 - provider model/voice selections remain runtime configuration rather than template semantics.
