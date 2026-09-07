@@ -22,10 +22,23 @@ const filters = ' ... scale ... pad ... fps ... setsar ... trim ... setpts ... a
 test('simple lower third wraps all text without truncation and rejects text that cannot fit', () => {
   const headline = 'One two three four five six seven eight nine ten eleven twelve thirteen fourteen';
   const lowerThird = validateSimpleLowerThird(headline, 'Example News');
-  assert.equal(lowerThird.headline.replace(/\n/gu, ''), headline);
+  assert.equal(lowerThird.headline.replace(/\n/gu, ' '), headline);
   assert.equal(lowerThird.sourceDisplayName, 'Example News');
   assert.throws(() => validateSimpleLowerThird('x'.repeat(43), 'Example News'), hasSimpleClip);
   assert.throws(() => validateSimpleLowerThird('Headline', 'x'.repeat(43)), hasSimpleClip);
+});
+
+test('simple lower third consumes automatic wrap separators without changing governed headline semantics', () => {
+  const headline = '‘Possible Love’: What The Critics Are Saying About Lee Chang-dong’s Korean Drama — Venice';
+  const lowerThird = validateSimpleLowerThird(headline, 'Example News');
+  const lines = lowerThird.headline.split('\n');
+  assert.deepEqual(lines, ['‘Possible Love’: What The Critics Are', 'Saying About Lee Chang-dong’s Korean Drama', '— Venice']);
+  assert.deepEqual(lines.map((line) => line.length), [37, 42, 8]);
+  assert.ok(lines.every((line) => line.trim() === line));
+  assert.equal(lines.join(' '), headline);
+  const exactWord = validateSimpleLowerThird(`Prefix ${'x'.repeat(42)}`, 'Example News').headline.split('\n');
+  assert.deepEqual(exactWord, ['Prefix', 'x'.repeat(42)]);
+  assert.ok(exactWord.every((line) => line.length <= 42 && line.trim() === line));
 });
 
 test('simple finisher stages hostile article text, trims sub-eight coverage, and keeps FFmpeg argv-only', async () => {

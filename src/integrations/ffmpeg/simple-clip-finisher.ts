@@ -141,7 +141,7 @@ function wrapFullText(value: string, charactersPerLine: number, maximumLines: nu
     if (line.length + token.length <= charactersPerLine) { line += token; continue; }
     if (/^\s+$/u.test(token)) { line += token; continue; }
     if (line.trim().length === 0 || token.length > charactersPerLine) throw invalidSimpleClip(`Simple clip ${label} cannot fit the deterministic lower third.`);
-    lines.push(line);
+    lines.push(line.trimEnd());
     line = token;
   }
   lines.push(line);

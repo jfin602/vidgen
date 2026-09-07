@@ -6,6 +6,7 @@ import test from 'node:test';
 
 import { generateHeadlineClip, validateHeadlineSidecar } from '../../../src/app/headline-workflow.ts';
 import { planPresenterVideoDuration } from '../../../src/core/presenter-video.ts';
+import { loadNgestVidGenManifestFile } from '../../../src/integrations/ngest/local-manifest-file.ts';
 
 const manifest = join(process.cwd(), 'test', 'fixtures', 'ngest-vidgen-manifest.json');
 
@@ -92,6 +93,24 @@ test('headline sidecar records safe Agent Platform provider/model identity witho
     assert.deepEqual(sidecar.videoProvider.model, 'veo-3.1-generate-001');
     assert.equal(JSON.stringify(sidecar).includes('GOOGLE_CLOUD_PROJECT'), false);
     assert.equal(JSON.stringify(sidecar).includes('secret-token'), false);
+  });
+});
+
+test('headline workflow accepts the governed wrapping regression before any provider call', async () => {
+  await withAssets(async (directory, anchor, font) => {
+    let reachedNextStage = false;
+    let videoClientCreated = false;
+    await assert.rejects(generateHeadlineClip({
+      ...fakeDependencies(directory, anchor, font),
+      loadManifest: async (path) => {
+        const loaded = await loadNgestVidGenManifestFile(path);
+        return { ...loaded, articles: loaded.articles.map((article) => article.articleId === 'example-article-1' ? { ...article, headline: '‘Possible Love’: What The Critics Are Saying About Lee Chang-dong’s Korean Drama — Venice' } : article) };
+      },
+      createTextClient: () => { reachedNextStage = true; throw new Error('next injected stage'); },
+      createVideoClient: () => { videoClientCreated = true; throw new Error('video provider must not be created'); },
+    }), /next injected stage/);
+    assert.equal(reachedNextStage, true);
+    assert.equal(videoClientCreated, false);
   });
 });
 
