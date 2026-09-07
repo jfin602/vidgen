@@ -1,0 +1,60 @@
+TASK: Correction 6 / P2 — Agent Platform Veo
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Make the existing Agent Platform Veo long-running prediction path the sole Google video implementation, removing the supported Developer/Vertex backend split while preserving the neutral cinematic and simple presenter-video contracts.
+
+Read P1's resulting state, BOOT.md, docs/integrations/google-video.md, both current Veo adapters, video factory, presenter-duration logic, headline/media consumers, provenance/reuse code, and focused tests before editing.
+
+MUST REMAIN TRUE
+
+- There is one supported Google video path: Gemini Enterprise Agent Platform Veo. Do not preserve `developer` and `vertex` as runtime choices or silent fallbacks.
+- Reuse and rename/harden the current long-running Agent Platform-compatible Veo implementation rather than inventing a second video transport. Remove the legacy Developer API Veo implementation once active consumers/tests no longer require it.
+- Runtime video configuration is `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION` (currently only `us-central1`), and `VIDGEN_VIDEO_MODEL`. Retire `VIDGEN_VIDEO_BACKEND` and `VIDGEN_VERTEX_VIDEO_MODEL`.
+- Use supported ADC bearer authentication for Veo; video generation must not require `GEMINI_API_KEY`.
+- Support the current reference-capable `veo-3.1-generate-001` and `veo-3.1-fast-generate-001` models. Reject unsupported/unsafe model or location configuration before auth/network work.
+- Preserve the current neutral presenter/content request semantics: one to three approved local PNG/JPEG presenter references, portrait 9:16, 720p, one sample, exact assigned dialogue, 8-second initial reference generation, and existing bounded 7-second extension/duration/speech-partition behavior.
+- Continue using documented `:predictLongRunning` plus `:fetchPredictOperation`. If `storageUri` is omitted, accept only bounded Base64 inline MP4 results; do not add Cloud Storage staging merely for this correction.
+- Treat tokens, operations, provider responses, and returned media as untrusted. Preserve current bounds on auth, HTTP, polling, operation count, response/video size, MIME/signature, redirects, and safe failures.
+- Keep one small default video-client construction seam shared by headline and cinematic media workflows, while preserving their injected neutral fake-client seams. Do not introduce a provider registry.
+- Use a stable Agent Platform video provider identity. Changing from legacy transport identity must invalidate incompatible story-local video reuse through existing provider/model fingerprints and provenance without adding provider-specific durable fields.
+- Preserve StoryInput, ClipPlan, templates, GeneratedMediaUnit meaning, headline sidecar schema, generated-media schema, CLI grammar, FFmpeg finishing/assembly, and publication semantics.
+- Package and engine version remain 0.6.5.
+
+PROOF
+
+Focused tests must prove:
+- the default configured client is the sole Agent Platform Veo client and no backend selector remains;
+- project/location/model validation fails before auth/network for unsafe or unsupported values;
+- ADC/token acquisition remains injectable/mockable and Bearer auth never leaks;
+- initial and polling URLs use the configured project/model and `us-central1`;
+- one to three PNG/JPEG references are encoded exactly and WebP is rejected before auth/network;
+- initial/reference, content, extension, and simple 4-20 second behavior preserve current neutral duration and exact-dialogue contracts;
+- polling uses the exact returned operation name and bounded inline MP4 decoding rejects malformed/filtered/empty/oversized/wrong-MIME/invalid-signature results;
+- headline and cinematic default construction use the sole client while injected fakes bypass ambient configuration;
+- Agent Platform provider/model identity is safe in headline/generated-media provenance and invalidates legacy/incompatible video reuse;
+- active source/tests no longer depend on `VIDGEN_VIDEO_BACKEND`, `VIDGEN_VERTEX_VIDEO_MODEL`, or the Developer API Veo adapter.
+
+Run focused Veo/client-construction/headline/media/generated-media tests, `npm test`, `node src/cli.ts --help`, and `git diff --check`.
+
+Downstream-required capability -> owning implementation/export -> focused proof:
+
+Agent Platform authenticated Veo -> sole Agent Platform video client implementing VideoGenerationClient and PresenterVideoGenerationClient -> auth/request/poll/reference/extension tests.
+
+configured video client -> headline/media default construction -> workflow injection/regression tests.
+
+effective Agent Platform video identity -> existing provider/model fingerprints and provenance -> reuse/sidecar/generated-media tests.
+
+NON-GOALS
+
+Do not change text behavior delivered by P1, add GCS staging, add a new provider framework, alter creative/duration contracts, touch ngest, begin Phase 7, or add publishing/database/queue work.
+
+FINAL RESPONSE
+
+Report sole-video-path configuration, removed legacy selector/adapter behavior, Agent Platform auth/request semantics, provenance/reuse behavior, exact validation run, preserved simple/cinematic contracts, and confirmation that 0.6.5 is unchanged.
