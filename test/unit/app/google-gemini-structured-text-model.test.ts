@@ -9,11 +9,12 @@ import {
   DEFAULT_GOOGLE_GEMINI_MAX_RESPONSE_BYTES,
   buildGoogleGeminiAgentPlatformEndpoint,
   GoogleGeminiStructuredTextModelClient,
+  loadGoogleGeminiRuntimeConfig,
   type FetchImplementation,
   type GoogleGeminiEnvironment,
 } from '../../../src/integrations/google/gemini-agent-platform.ts';
 
-const apiKey = 'gemini-test-key-never-surface';
+const apiKey = 'gemini.test-key-never-surface';
 const storyText = 'story text that must never appear in public errors';
 const responseSchema: JsonObject = { type: 'object', properties: { slots: { type: 'array' } } };
 
@@ -85,7 +86,12 @@ test('Google Gemini adapter returns neutral provenance and ignores provider-only
   });
 });
 
-test('missing, blank, or unsafe Agent Platform project, key, or model fails before fetch activity', () => {
+test('Google Gemini runtime config treats a non-blank API key as opaque after surrounding-whitespace normalization', () => {
+  const opaqueApiKey = '  gemini.key+fixture/=:?@~  ';
+  assert.equal(loadGoogleGeminiRuntimeConfig(environment({ GEMINI_API_KEY: opaqueApiKey })).apiKey, opaqueApiKey.trim());
+});
+
+test('missing or blank key and unsafe Agent Platform project or model fail before fetch activity', () => {
   let calls = 0;
   const fakeFetch: FetchImplementation = async () => {
     calls += 1;
@@ -125,7 +131,6 @@ test('missing, blank, or unsafe Agent Platform project, key, or model fails befo
   for (const environment of [
     { GEMINI_API_KEY: apiKey, GOOGLE_CLOUD_PROJECT: '  ', VIDGEN_TEXT_MODEL: model },
     { GEMINI_API_KEY: apiKey, GOOGLE_CLOUD_PROJECT: 'bad/project', VIDGEN_TEXT_MODEL: model },
-    { GEMINI_API_KEY: 'bad key', GOOGLE_CLOUD_PROJECT: project, VIDGEN_TEXT_MODEL: model },
     { GEMINI_API_KEY: apiKey, GOOGLE_CLOUD_PROJECT: project, VIDGEN_TEXT_MODEL: '../unsafe-model' },
   ]) {
     assert.throws(() => new GoogleGeminiStructuredTextModelClient({ environment, fetch: fakeFetch }), hasCode('configuration'));

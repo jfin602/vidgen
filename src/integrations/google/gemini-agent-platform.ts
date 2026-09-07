@@ -35,7 +35,7 @@ export function loadGoogleGeminiRuntimeConfig(
   environment: GoogleGeminiEnvironment = process.env,
 ): GoogleGeminiRuntimeConfig {
   return {
-    apiKey: requiredSafeEnvironmentValue(environment, GEMINI_API_KEY_ENV, /^[A-Za-z0-9_-]+$/),
+    apiKey: requiredEnvironmentValue(environment, GEMINI_API_KEY_ENV),
     project: requiredSafeEnvironmentValue(environment, GOOGLE_CLOUD_PROJECT_ENV, /^(?:[a-z][a-z0-9-]{4,28}[a-z0-9]|[0-9]{6,30})$/),
     model: requiredSafeEnvironmentValue(environment, VIDGEN_TEXT_MODEL_ENV, /^[A-Za-z0-9._-]+$/),
   };
@@ -223,8 +223,16 @@ function requiredSafeEnvironmentValue(
   name: string,
   pattern: RegExp,
 ): string {
+  const value = requiredEnvironmentValue(environment, name);
+  if (!pattern.test(value)) {
+    throw new VidGenError('configuration', `Google Gemini ${name} configuration is required.`);
+  }
+  return value;
+}
+
+function requiredEnvironmentValue(environment: GoogleGeminiEnvironment, name: string): string {
   const value = environment[name]?.trim();
-  if (value === undefined || value.length === 0 || !pattern.test(value)) {
+  if (value === undefined || value.length === 0) {
     throw new VidGenError('configuration', `Google Gemini ${name} configuration is required.`);
   }
   return value;
