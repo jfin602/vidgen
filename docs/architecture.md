@@ -272,12 +272,36 @@ Keep thin provider-neutral requests/results at the VidGen boundary so ClipPlan g
 Current implementation:
 - Phase 3 provides the provider-neutral structured-text boundary plus Google Gemini Interactions adapter;
 - Phase 4 provides provider-neutral video/speech generation boundaries;
-- Google Veo realizes presenter/content-video units from deterministic unit content and explicit approved local presenter references;
+- the existing Google Veo Developer API backend realizes presenter/content-video units from deterministic unit content and explicit approved local presenter references;
 - Google Gemini TTS realizes exact off-screen voiceover text into WAV audio;
 - provider jobs/assets retain story-local provenance, hashes, request/operation identity where safe, and effective-generation-input identity;
 - provider model/voice selections remain runtime configuration rather than template semantics.
 
-Do not build a large generalized provider framework before a second provider or real complexity requires it.
+The owner-approved `c6-vertex-adapter` correction adds Vertex AI Veo as a parallel Google video backend without replacing the working Developer API path:
+
+    VideoGenerationClient / PresenterVideoGenerationClient
+                    |
+             backend selection
+              /          \
+             v            v
+    Developer API      Vertex AI
+       Veo                Veo
+             \            /
+              v          v
+          provider-neutral result
+                    |
+                    v
+         existing VidGen workflows
+
+Backend selection is runtime configuration. It must not enter StoryInput, CanonicalControl, ClipPlan, AssemblyTemplate, generated model output, or ngest state.
+
+The Vertex adapter owns its own authentication, request/poll transport, supported-model capability checks, and any bounded Cloud Storage staging/download behavior. The existing Developer API adapter keeps its current API-key path and behavior.
+
+Do not silently fall back between backends. A selected backend failure should remain attributable to that backend so billing, provenance, reproducibility, and debugging are unambiguous.
+
+Do not build a large generalized provider framework merely because VidGen now has two Google transports. Preserve the current neutral contracts and add only the backend-specific adapter/selection needed.
+
+See docs/integrations/google-video.md.
 
 ## Asset rights and trust
 

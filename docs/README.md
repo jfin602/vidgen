@@ -10,6 +10,7 @@ The project was deliberately rebased after Phase 1 from an edition-oriented news
 - architecture.md — shared StoryInput boundary plus the current-priority simple presenter path and preserved cinematic path.
 - template-system.md — preserved cinematic assembly-template contract and locked default cinematic clip structure.
 - integrations/ngest.md — authenticated ngest boundary and manual ngest-shaped fixture path.
+- integrations/google-video.md — Google video backend contract: existing Developer API Veo plus the owner-approved parallel Vertex AI Veo correction.
 - control-interface.md — current provisional control compatibility and simplified future direction.
 - roadmap/initial-roadmap.md — current implementation sequence.
 - planning/initial-engineering-question-worksheet.md — historical index of the original 20 engineering decisions and supersession notes.

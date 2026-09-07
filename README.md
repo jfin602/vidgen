@@ -42,7 +42,7 @@ Current simple-path direction:
 - final output is a postable vertical MP4 paired with article/provenance metadata JSON;
 - 1080x1920 9:16 H.264 MP4 at 30 fps remains the initial output target;
 - no B-roll, separate voiceover, intro/outro, ClipPlan, AssemblyTemplate, cinematic GeneratedMediaUnit resolution, or cinematic AssemblyPlan is required by the simple path;
-- Google-first presenter generation remains behind thin provider-neutral boundaries;
+- Google-first presenter generation remains behind thin provider-neutral boundaries; the existing Developer API Veo backend is preserved, and the owner-approved `c6-vertex-adapter` correction adds Vertex AI Veo as a parallel backend;
 - FFmpeg/FFprobe remain the deterministic finishing and qualification tools.
 
 The implemented cinematic `story -> plan -> media -> assemble` pipeline remains supported and must not regress. See docs/template-system.md for that preserved assembly-template contract.
@@ -81,7 +81,7 @@ Phases 1 and 2 are complete and closed at versions 0.1.5 and 0.2.5. Phase 3 was 
 
 The project was simplified after Phase 1. FeedAnalysis, EditorialPlan, separate Script and ProductionPlan stages, Remotion composition, edition-level planning, and story-selection logic are no longer part of the current MVP.
 
-The repository baseline is 0.5.3. Phase 5's deterministic assembly path is implemented. The original Phase 5 closeout host lacked ffmpeg/ffprobe and owner-supplied real media, so that closeout did not establish a real render. Since then, the deployment VPS has directly qualified FFmpeg 6.1.1, FFprobe 6.1.1, libx264, AAC, and the required assembly filters. `c5-optional-assets` is closed: intro and outro are independently optional, omitted wrappers contribute no placeholder media, duration, identity, or provenance, and supplied wrappers remain fully qualified. A complete owner-media generated story render and human playback review are still unclaimed. `c5-config-fix` remains owner-approved but is deferred. The next roadmap phase is Phase 6, which adds the simple presenter-headline path while preserving the completed cinematic pipeline. The previously planned live story fan-out and operational-hardening work moves to Phase 7. The future dedicated ngest VidGen feed-plus-controls endpoint remains the intended production boundary.
+The repository package baseline is 0.6.5. Phase 5's deterministic assembly path is implemented. The original Phase 5 closeout host lacked ffmpeg/ffprobe and owner-supplied real media, so that closeout did not establish a real render. Since then, the deployment VPS has directly qualified FFmpeg 6.1.1, FFprobe 6.1.1, libx264, AAC, and the required assembly filters. `c5-optional-assets` is closed: intro and outro are independently optional, omitted wrappers contribute no placeholder media, duration, identity, or provenance, and supplied wrappers remain fully qualified. A complete owner-media generated story render and human playback review are still unclaimed. `c5-config-fix` remains owner-approved but is deferred. Phase 6 simple presenter-headline implementation has reached the 0.6.5 baseline while preserving the completed cinematic pipeline. The owner-approved `c6-vertex-adapter` correction adds Vertex AI Veo as a parallel backend without replacing the existing Developer API backend. Live story fan-out and operational hardening remain Phase 7. The future dedicated ngest VidGen feed-plus-controls endpoint remains the intended production boundary.
 
 ## Start here
 

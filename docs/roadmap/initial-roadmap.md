@@ -6,7 +6,7 @@ Phase 2 completion: 0.2.5
 Phase 3 owner closeout: 0.3.4
 Phase 4 owner closeout: 0.4.4
 Phase 5 owner closeout: 0.5.3
-Current baseline: 0.5.3
+Current baseline: 0.6.5
 
 This roadmap was rebased on 2026-09-05 after Phase 1. The original edition/newscast phases were intentionally removed in favor of a single-story clip engine. On 2026-09-06 the owner prioritized a still simpler presenter-headline production path before live fan-out while explicitly preserving the implemented cinematic template pipeline.
 
@@ -263,7 +263,7 @@ The Distribution-v1 path is transitional. It must remain isolated behind the nge
 
 ## Phase 6 — Simple presenter headline clips
 
-Status: NEXT ROADMAP PHASE
+Status: IMPLEMENTED AT 0.6.5 / OWNER CLOSEOUT PENDING
 
 Goal:
 Add the smallest useful production path for the current client requirement while preserving the completed cinematic pipeline unchanged.
@@ -303,6 +303,30 @@ Required direction:
 - no live fan-out, publisher retrieval, database/queue work, automated publishing, or cinematic refactor as part of this phase.
 
 Phase 6 planning owns the exact CLI spelling, presenter-copy contract, provider-duration capability mapping, runtime anchor/font configuration, output naming, and durable JSON sidecar schema.
+
+Phase 6 implementation has reached package/engine baseline 0.6.5. Owner review has driven bounded Phase 6 correction work without promoting those repairs into a new roadmap phase.
+
+## Approved Phase 6 corrections
+
+The owner has approved `c6-vertex-adapter` as a bounded Phase 6 correction at unchanged version 0.6.5.
+
+Goal:
+Add Vertex AI Veo as a parallel Google video backend behind the existing provider-neutral video-generation boundaries while preserving the working Gemini Developer API Veo backend.
+
+Required direction:
+- existing Developer API behavior remains supported and regression-protected;
+- Vertex is selected explicitly through runtime configuration rather than StoryInput, CanonicalControl, ClipPlan, templates, or model output;
+- use supported Google Cloud authentication for Vertex rather than reusing `GEMINI_API_KEY`;
+- keep Vertex model/project/location and any bounded Cloud Storage staging configuration inside the adapter/runtime boundary;
+- preserve the current approved presenter-reference semantics and fail configuration when a selected Vertex model cannot satisfy them;
+- keep provider request/poll/output retrieval and staging safety inside the Vertex adapter;
+- do not silently fall back between Developer API and Vertex;
+- preserve simple-path duration/FFmpeg/sidecar behavior and cinematic GeneratedMediaUnit/assembly semantics;
+- record safe effective backend/model/operation provenance without secrets, raw provider responses, or unrestricted staging paths;
+- include mocked deterministic proof plus a real Vertex qualification when credentials, quota, supported model access, staging, and runtime are actually available;
+- no Flow automation, ngest changes, fan-out, database/queue work, publishing, or generalized provider-framework redesign.
+
+See docs/integrations/google-video.md.
 
 ## Phase 7 — Live ngest fan-out and operational hardening
 
@@ -359,12 +383,14 @@ Likely concerns:
 
 ## Immediate next action
 
-Plan the new Phase 6 simple presenter-headline path:
+Plan the owner-approved Phase 6 Vertex backend correction:
 
     /prompt-ass
     -> /prompt-plan
-    -> /prompt-write p6
+    -> /prompt-write c6-vertex-adapter
 
-Do not require `c5-config-fix` before Phase 6. It remains an approved deferred ingress correction and may be resumed later.
+Keep package/engine version 0.6.5 across the correction stack. Preserve the existing Developer API backend and the completed simple/cinematic contracts.
 
-Phase 6 must explicitly regression-protect the completed cinematic pipeline and must not claim live provider/render qualification unless the corresponding execution was actually observed.
+Phase 7 remains live ngest fan-out and operational hardening. Do not pull Phase 7 scope into the Vertex correction.
+
+Do not claim live Vertex/provider/render qualification unless the corresponding execution was actually observed.
