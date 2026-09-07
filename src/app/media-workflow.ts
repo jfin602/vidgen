@@ -23,7 +23,7 @@ import {
 } from '../core/anchor-reference.ts';
 import { getAssemblyTemplate } from '../core/template-registry.ts';
 import { GoogleGeminiSpeechGenerationClient } from '../integrations/google/gemini-speech-generation.ts';
-import { GoogleVeoVideoGenerationClient } from '../integrations/google/veo-video-generation.ts';
+import { createConfiguredVideoClient } from '../integrations/google/video-client-factory.ts';
 import { writeJsonAtomically, prettyJson } from '../shared/atomic-json.ts';
 import { canonicalJson } from '../shared/canonical-json.ts';
 import { VIDGEN_ENGINE_VERSION } from '../version.ts';
@@ -155,7 +155,7 @@ export async function generateStoryMedia(dependencies: MediaWorkflowDependencies
   // provider client is constructed until this point.
   const hasVideo = units.some((unit) => unit.role.kind !== 'voiceover');
   const hasSpeech = units.some((unit) => unit.role.kind === 'voiceover');
-  const video = hasVideo ? (dependencies.createVideoClient ?? (() => new GoogleVeoVideoGenerationClient()))() : undefined;
+  const video = hasVideo ? (dependencies.createVideoClient ?? createConfiguredVideoClient)() : undefined;
   const speech = hasSpeech ? (dependencies.createSpeechClient ?? (() => new GoogleGeminiSpeechGenerationClient()))() : undefined;
   if (video === undefined && hasVideo) throw new VidGenError('configuration', 'Video generation client is unavailable.');
   if (speech === undefined && hasSpeech) throw new VidGenError('configuration', 'Speech generation client is unavailable.');

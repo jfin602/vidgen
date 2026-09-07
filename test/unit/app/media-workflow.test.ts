@@ -139,6 +139,32 @@ test('media workflow rejects an invalid local anchor reference before constructi
   });
 });
 
+test('cinematic media defaults through the backend selector while an injected client bypasses it', async () => {
+  await withWorkspace(async (directory) => {
+    const reference = join(directory, 'anchor.png'); await writeFile(reference, png(1));
+    await withVideoBackend('invalid', async () => {
+      const defaults = fakes();
+      await assert.rejects(generateStoryMedia({ storyDirectory: directory, anchorReferencePaths: [reference], createSpeechClient: defaults.createSpeechClient, now: clock() }), /VIDGEN_VIDEO_BACKEND must be "developer" or "vertex"/);
+      await generateStoryMedia({ storyDirectory: directory, anchorReferencePaths: [reference], ...defaults, now: clock() });
+    });
+  });
+});
+
+test('video backend provider identity invalidates cinematic reuse without leaking backend configuration', async () => {
+  await withWorkspace(async (directory) => {
+    const reference = join(directory, 'anchor.png'); await writeFile(reference, png(1));
+    await generateStoryMedia({ storyDirectory: directory, anchorReferencePaths: [reference], ...fakes('video-v1', 'speech-v1', 'voice-a', 'google-veo'), now: clock() });
+    const vertex = fakes('video-v1', 'speech-v1', 'voice-a', 'vertex-veo');
+    await generateStoryMedia({ storyDirectory: directory, anchorReferencePaths: [reference], ...vertex, now: clock() });
+    assert.deepEqual(vertex.videoUnits, ['u01', 'u02', 'u04', 'u05']);
+    assert.deepEqual(vertex.speechUnits, []);
+    const manifest = await readFile(join(directory, GENERATED_MEDIA_ARTIFACT_NAME), 'utf8');
+    assert.equal(manifest.includes('vertex-veo'), true);
+    assert.equal(manifest.includes('GOOGLE_CLOUD_PROJECT'), false);
+    assert.equal(manifest.includes('secret-token'), false);
+  });
+});
+
 test('shared approved anchor references retain local MIME, byte, and hash validation for cinematic and simple clients', async () => {
   await withWorkspace(async (directory) => {
     const reference = join(directory, 'anchor.png');
@@ -154,14 +180,15 @@ test('shared approved anchor references retain local MIME, byte, and hash valida
   });
 });
 
-function fakes(videoModel = 'video-v1', speechModel = 'speech-v1', voice = 'voice-a') {
+function fakes(videoModel = 'video-v1', speechModel = 'speech-v1', voice = 'voice-a', videoProvider = 'fake-video') {
   const videoUnits: string[] = []; const speechUnits: string[] = [];
-  const video: VideoGenerationClient = { provider: 'fake-video', model: videoModel, generateVideo: async (request) => { videoUnits.push(request.unit.unitId); return videoResult(request.unit.unitId); } };
+  const video: VideoGenerationClient = { provider: videoProvider, model: videoModel, generateVideo: async (request) => { videoUnits.push(request.unit.unitId); return videoResult(request.unit.unitId, videoProvider); } };
   const speech: SpeechGenerationClient = { provider: 'fake-speech', model: speechModel, voice, generateSpeech: async (request) => { speechUnits.push(request.unit.unitId); return { provider: 'fake-speech', model: speechModel, voice, requestId: `s-${request.unit.unitId}`, mimeType: 'audio/wav', bytes: new Uint8Array([82, 73, 70, 70, 1]), durationSeconds: 1 }; } };
   return { video, speech, videoUnits, speechUnits, createVideoClient: () => video, createSpeechClient: () => speech };
 }
-function videoResult(unitId: string) { return { provider: 'fake-video', model: 'returned-video', requestId: `v-${unitId}`, mimeType: 'video/mp4', bytes: new Uint8Array([0, 0, 0, 16, 102, 116, 121, 112]), durationSeconds: 8 }; }
+function videoResult(unitId: string, provider = 'fake-video') { return { provider, model: 'returned-video', requestId: `v-${unitId}`, mimeType: 'video/mp4', bytes: new Uint8Array([0, 0, 0, 16, 102, 116, 121, 112]), durationSeconds: 8 }; }
 function png(last: number) { return new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, last]); }
 function clock() { return () => new Date('2026-09-05T12:00:00.000Z'); }
 async function withWorkspace(run: (directory: string) => Promise<void>) { const directory = await mkdtemp(join(tmpdir(), 'vidgen-media-')); try { await writeWorkspace(directory); await run(directory); } finally { await rm(directory, { recursive: true, force: true }); } }
+async function withVideoBackend(value: string | undefined, run: () => Promise<void>) { const prior = process.env.VIDGEN_VIDEO_BACKEND; try { if (value === undefined) delete process.env.VIDGEN_VIDEO_BACKEND; else process.env.VIDGEN_VIDEO_BACKEND = value; await run(); } finally { if (prior === undefined) delete process.env.VIDGEN_VIDEO_BACKEND; else process.env.VIDGEN_VIDEO_BACKEND = prior; } }
 async function writeWorkspace(directory: string) { const template = getAssemblyTemplate('default-news-40s'); const plan = { schemaVersion: '1', storyFingerprint, template: { id: template.id, version: template.version }, slots: template.contentSlots.map((slot) => ({ id: slot.id, text: `${slot.id} text` })) }; const story = { storyRunId: runId, status: 'story_ready', startedAt: '2026-09-05T00:00:00.000Z', endedAt: '2026-09-05T00:00:01.000Z', engineVersion: '0.4.4', articleId: 'article', storyFingerprint, sourceInputFingerprint: 'b'.repeat(64), storyInputArtifact: 'story.json', template: { id: template.id, version: template.version }, generatedAssetRoles: [], standardizedAssetRoles: [] }; const clipRun = { storyRunId: runId, status: 'clip_plan_ready', startedAt: '2026-09-05T00:00:00.000Z', endedAt: '2026-09-05T00:00:01.000Z', engineVersion: '0.4.4', storyFingerprint, template: { id: template.id, version: template.version }, provider: 'fake', configuredModel: 'fake', clipPlanArtifact: 'clip-plan.json' }; await Promise.all([writeFile(join(directory, 'story-run.json'), JSON.stringify(story)), writeFile(join(directory, 'clip-plan-run.json'), JSON.stringify(clipRun)), writeFile(join(directory, 'clip-plan.json'), JSON.stringify(plan))]); }

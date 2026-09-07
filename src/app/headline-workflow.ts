@@ -10,7 +10,7 @@ import { buildStoryInput, type StoryInput } from '../core/story-input.ts';
 import type { StructuredTextModelClient } from '../core/structured-text-model.ts';
 import { LocalSimpleClipFinisher, SIMPLE_CLIP_DURATION_TOLERANCE_SECONDS, SIMPLE_CLIP_FINISHING_POLICY, validateSimpleLowerThird } from '../integrations/ffmpeg/simple-clip-finisher.ts';
 import { GoogleGeminiStructuredTextModelClient } from '../integrations/google/gemini-interactions.ts';
-import { GoogleVeoVideoGenerationClient } from '../integrations/google/veo-video-generation.ts';
+import { createConfiguredVideoClient } from '../integrations/google/video-client-factory.ts';
 import { loadNgestVidGenManifestFile } from '../integrations/ngest/local-manifest-file.ts';
 import { writeJsonAtomically } from '../shared/atomic-json.ts';
 import { VIDGEN_ENGINE_VERSION } from '../version.ts';
@@ -32,7 +32,7 @@ export async function generateHeadlineClip(dependencies: HeadlineWorkflowDepende
     await mkdir(workDirectory, { recursive: false });
     const copy = await generateSimpleClipCopy(story, maxSeconds, (dependencies.createTextClient ?? (() => new GoogleGeminiStructuredTextModelClient()))());
     const plannedDurationSeconds = getSimpleClipPlannedDurationSeconds(copy.copy.text, maxSeconds); const plan = planPresenterVideoDuration(plannedDurationSeconds);
-    const video = await (dependencies.createVideoClient ?? (() => new GoogleVeoVideoGenerationClient()))().generatePresenterVideo({ spokenText: copy.copy.text, referenceImages: references.map(({ image }) => image), maxSeconds: plannedDurationSeconds }); validateVideoResult(video, plan);
+    const video = await (dependencies.createVideoClient ?? createConfiguredVideoClient)().generatePresenterVideo({ spokenText: copy.copy.text, referenceImages: references.map(({ image }) => image), maxSeconds: plannedDurationSeconds }); validateVideoResult(video, plan);
     const rawPath = join(workDirectory, 'presenter.mp4'); const candidatePath = join(workDirectory, 'candidate.mp4'); await writeFile(rawPath, video.bytes, { flag: 'wx' });
     const finished = await finisher.finish({ rawPresenterVideoPath: rawPath, fontPath, headline: lowerThird.headline, sourceDisplayName: lowerThird.sourceDisplayName, maxSeconds, plannedDurationSeconds, workDirectory, outputPath: candidatePath });
     const bytes = await readFile(candidatePath); const sidecar = buildHeadlineSidecar(clipId, story, copy, video, references.map(({ identity }) => identity), font, maxSeconds, plannedDurationSeconds, finished.probe.durationSeconds, basename(finalPath), bytes, finished.ffmpegVersion, dependencies.engineVersion ?? VIDGEN_ENGINE_VERSION); validateHeadlineSidecar(sidecar);
