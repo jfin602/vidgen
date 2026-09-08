@@ -37,7 +37,7 @@
     "technical": { "type": "object", "additionalProperties": false, "required": ["output", "audio"], "properties": { "output": { "$ref": "#/$defs/output" }, "audio": { "$ref": "#/$defs/audio" } } },
     "output": { "type": "object", "additionalProperties": false, "required": ["width", "height", "fps", "container", "videoCodec", "pixelFormat"], "properties": { "width": { "const": 1080 }, "height": { "const": 1920 }, "fps": { "const": 30 }, "container": { "const": "mp4" }, "videoCodec": { "const": "h264" }, "pixelFormat": { "const": "yuv420p" } } },
     "audio": { "type": "object", "additionalProperties": false, "required": ["encoder", "sampleRate", "channels", "bitrate"], "properties": { "encoder": { "const": "aac" }, "sampleRate": { "const": 48000 }, "channels": { "const": 2 }, "bitrate": { "const": "192k" } } },
-    "finishing": { "type": "object", "additionalProperties": false, "required": ["policy", "ffmpegVersion"], "properties": { "policy": { "const": "simple-clip-finishing-policy-v1" }, "ffmpegVersion": { "$ref": "#/$defs/safeToken" } } },
+    "finishing": { "type": "object", "additionalProperties": false, "required": ["policy", "ffmpegVersion"], "properties": { "policy": { "const": "simple-clip-finishing-policy-v2" }, "ffmpegVersion": { "$ref": "#/$defs/safeToken" } } },
     "safeToken": { "type": "string", "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?![Ff][Ii][Ll][Ee]:)[A-Za-z0-9._:/@ -]{1,256}$" }
   }
 }

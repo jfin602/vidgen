@@ -83,6 +83,8 @@ test('simple finisher stages hostile article text, trims sub-eight coverage, and
     assert.match(graph, /atrim=duration=4/);
     assert.match(graph, /loudnorm=I=-16:LRA=11:TP=-1.5/);
     assert.match(graph, /drawbox=x=48:y=1080:w=984:h=620/);
+    assert.match(graph, /color=0x336699:t=fill/);
+    assert.doesNotMatch(graph, /drawbox=.*color=(?:black|0x000000)(?:@|:)/);
     assert.match(graph, /fontsize=44:x=96:y=1152:line_spacing=16/);
     assert.match(graph, /fontsize=32:x=96:y=1492/);
     assert.match(graph, /drawtext=fontfile=font\.ttf:textfile=simple-headline\.txt:expansion=none/);

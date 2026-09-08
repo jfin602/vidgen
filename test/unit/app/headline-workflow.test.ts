@@ -70,7 +70,11 @@ test('sidecar write failure removes a promoted MP4 and strict validation rejects
     const result = await generateHeadlineClip(fakeDependencies(directory, anchor, font)); const sidecar = JSON.parse(await readFile(result.metadataPath, 'utf8'));
     assert.throws(() => validateHeadlineSidecar({ ...sidecar, unsupported: true }));
     assert.throws(() => validateHeadlineSidecar({ ...sidecar, final: { ...sidecar.final, technical: { output: sidecar.final.technical.output } } }));
+    assert.equal(sidecar.finishing.policy, 'simple-clip-finishing-policy-v2');
+    assert.throws(() => validateHeadlineSidecar({ ...sidecar, finishing: { ...sidecar.finishing, policy: 'simple-clip-finishing-policy-v1' } }));
     assert.throws(() => validateHeadlineSidecar({ ...sidecar, finishing: { ...sidecar.finishing, policy: 'file:///tmp/ffmpeg.log' } }));
+    const schema = JSON.parse(await readFile(join(process.cwd(), 'schemas', 'headline-clip.schema.json'), 'utf8'));
+    assert.equal(schema.$defs.finishing.properties.policy.const, 'simple-clip-finishing-policy-v2');
   });
 });
 
