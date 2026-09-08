@@ -1,0 +1,129 @@
+TASK: Correction 6 / P2 — File-driven Veo prompts with no hardcoded prompt prose
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Remove Veo prompt prose from TypeScript. All Veo prompt wording, including presenter wording, the AI-generated-reference disclaimer, exact-dialogue instructions, story-grounding prose, continuation instructions, no-extra-dialogue rules, on-screen-text rules, unsupported-fact rules, and B-roll/content wording must come from one bounded operator-owned local prompt-spec file. Source code may select a template and substitute validated dynamic values, but must not contain fallback or appended Veo prompt sentences.
+
+Read BOOT.md, Google video integration notes, current Agent Platform Veo adapter, provider-neutral video/presenter contracts, video client factory, headline workflow/sidecar, cinematic media workflow/reuse fingerprinting, generated-media schemas, and focused tests before editing.
+
+PROMPT FILE CONTRACT
+
+Add one runtime setting:
+
+`VIDGEN_VEO_PROMPT_FILE`
+
+Production may point it at:
+
+`/home/deploy/vidgen-assets/prompts/veo-prompts.json`
+
+Do not hardcode that deployment path in source.
+
+Use one strict, bounded UTF-8 JSON prompt-spec file. The exact field names may be chosen narrowly, but it must provide distinct templates for every current Veo prompt shape:
+- simple presenter initial request without extension;
+- simple presenter initial request when an extension will follow;
+- simple presenter extension;
+- cinematic presenter initial;
+- cinematic presenter extension;
+- cinematic content/B-roll initial;
+- cinematic content/B-roll extension.
+
+The file is the sole owner of provider-sent Veo prose. It must be able to contain the owner's disclaimer itself, for example:
+
+`The supplied reference images are AI-generated presenter images and do not depict a real person or celebrity.`
+
+That sentence must NOT exist as a hardcoded source string.
+
+The owner's starting file will use `presenter` rather than `news-presenter`. Do not hardcode or rewrite either word in source; prompt wording belongs to the file.
+
+TEMPLATE SUBSTITUTION
+
+Support only a small fixed placeholder vocabulary required by current behavior, such as:
+- `{{dialogue}}`;
+- `{{context}}`;
+- `{{retainedExtensionSeconds}}`.
+
+Use separate prompt-spec fields where conditional prose would otherwise have to be hardcoded, including the simple initial-with-extension case.
+
+Validate that each template contains exactly the placeholders its request shape requires and no unknown placeholders. Replacement must be one-pass/non-recursive: dynamic dialogue or story text that happens to contain placeholder-looking text must remain literal data and must not become template syntax.
+
+The engine may own only structural mechanics:
+- selecting the correct prompt template;
+- substituting validated dynamic values;
+- choosing request/reference/video payload fields;
+- duration/extension planning;
+- provider/auth/polling/result handling.
+
+No provider-sent Veo instruction sentence may be appended, prepended, or used as a fallback in TypeScript. Missing or invalid prompt configuration must fail rather than silently use the old hardcoded prompts.
+
+INPUT / FAILURE SAFETY
+
+- Require a regular local file, valid UTF-8/JSON, strict expected shape, nonblank bounded template strings, and a small explicit maximum byte size.
+- Reject missing, unreadable, non-file, malformed, oversized, unknown-field, missing-template, or invalid-placeholder specs with sanitized configuration/generation errors.
+- Do not expose prompt contents, absolute paths, raw filesystem errors, credentials, or provider headers in public errors/artifacts.
+- Validate the prompt asset before any paid provider call in the simple headline flow. In cinematic media generation, validate before the first provider generation call when video units are required.
+- Read one stable byte snapshot per configured client/run so request construction, identity, and provenance cannot disagree if the file changes mid-run. A later run may pick up new bytes.
+
+GENERATION IDENTITY / PROVENANCE
+
+Editing the prompt file must affect generation identity without a code change.
+
+Define a safe prompt-asset identity containing only:
+- basename;
+- SHA-256;
+- byte size.
+
+Do not persist prompt text or absolute paths.
+
+- Expose the active prompt-asset identity through the provider-neutral video/presenter client boundary in the narrowest reusable form.
+- Include the prompt identity in simple headline sidecar provenance. Bump the headline sidecar schema version because its shape changes.
+- Include the prompt identity in cinematic video generated-media provenance. Bump the generated-media/media-run schema version where required by the durable shape.
+- Include the prompt identity in effective generation fingerprinting for every Veo video unit, presenter or content, so a prompt-file edit cannot reuse stale Veo media.
+- Voiceover/TTS reuse must remain unaffected by Veo prompt-file changes.
+- Existing video records lacking the new prompt identity must not be treated as reusable under the new contract.
+
+PRESERVED BEHAVIOR
+
+Preserve:
+- one to three approved PNG/JPEG presenter references;
+- exact validated dialogue bytes supplied to the prompt placeholder;
+- current simple speech partitioning and 4-20 second ceiling;
+- 8-second initial Veo generation and existing extension timing;
+- cinematic ClipPlan context semantics;
+- Veo model, ADC auth, regional endpoints, request parameters, polling bounds, operation provenance, inline MP4 validation, and safe failures;
+- text generation, TTS, ngest, FFmpeg finishing/assembly, CLI grammar, and package/engine version 0.6.5.
+
+The prompt file changes wording/configuration only. It does not bypass provider safety classification and no live safety outcome may be claimed from mocked tests.
+
+PROOF
+
+Focused tests must prove:
+- no current Veo provider request receives hardcoded prompt prose from source;
+- all seven current Veo request shapes use the configured file templates;
+- the AI-generated-reference disclaimer can exist only in the prompt file and appears in a generated presenter request because the file contains it;
+- changing file wording changes the outgoing prompt without changing source;
+- allowed placeholders are substituted exactly once where required, unknown/missing placeholders fail, and replacement is non-recursive;
+- simple/cinematic dynamic dialogue and context are preserved exactly;
+- extension timing values are substituted from the existing duration plan;
+- invalid prompt files fail before provider auth/network and do not leak content/path;
+- prompt identity in headline sidecars and cinematic video records matches the exact loaded bytes;
+- changing only the prompt file invalidates all Veo video reuse while leaving voiceover reuse stable;
+- no prompt text or absolute prompt path is persisted;
+- Veo request parameters, references, auth headers, endpoints, polling, operation IDs, and result handling remain unchanged.
+
+Update only the narrow operator/runtime documentation needed to describe `VIDGEN_VEO_PROMPT_FILE`, the prompt-spec shape/placeholders, safe provenance, and the expected production asset location. Do not commit or claim to create the actual `/home/deploy/vidgen-assets/prompts/veo-prompts.json` file; the owner will create it on the deployment host after implementation.
+
+Run focused Agent Platform Veo, video-client-factory, headline-workflow/sidecar, media-workflow/generated-media/reuse tests, `npm run check`, `node src/cli.ts --help`, and `git diff --check`.
+
+NON-GOALS
+
+Do not add remote prompt URLs, a database/CMS, hot reload, arbitrary scripting, general-purpose templating, provider-safety workarounds, new creative stages, publishing, or Phase 7 work.
+
+FINAL RESPONSE
+
+Report the single prompt-file contract, exact placeholder/spec semantics, confirmation that no Veo prompt prose remains hardcoded, prompt provenance/reuse behavior, schema-version changes, validation, preserved provider behavior, and unchanged project version 0.6.5.
