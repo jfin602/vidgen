@@ -1,0 +1,85 @@
+TASK: Correction 6 / P1 — Preserve the full Veo presenter timeline
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Stop cutting simple headline presenter media to the word-count duration estimate. The final FFmpeg headline clip must retain the entire Veo clip returned for that production.
+
+Read BOOT.md, current simple presenter duration/copy contracts, current headline workflow, the current three-file headline package, simple FFmpeg finisher, headline schema, CLI/help text, and focused tests before editing. Inspect current main rather than assuming the pre-raw-artifact state.
+
+OWNER-APPROVED DURATION SEMANTICS
+
+The current implementation estimates a short presenter duration from word count and then uses that estimate as an exact FFmpeg `trim`/`atrim` boundary. Live evidence showed a seven-second finished clip cutting off speech from the provider's eight-second Veo result.
+
+Remove that behavior.
+
+- The word-count duration remains useful only for presenter-copy planning and deciding whether the current Veo path needs the initial 8-second generation only or the existing extension path.
+- Once Veo returns presenter media, the final simple headline must preserve the full returned Veo timeline.
+- Do not use the estimated/planned speech duration as an FFmpeg trim boundary.
+- Do not discard the final second of an 8-second Veo result because copy was estimated at 4-7 seconds.
+- Do not discard retained extension coverage from a 15-second Veo result because copy was estimated shorter than 15 seconds.
+- If deterministic normalization needs a duration bound for audio/video synchronization, derive it from the qualified raw Veo media/provider coverage, never from the word-count speech estimate, and do not shorten the usable Veo timeline.
+- Preserve all available presenter speech and video through the end of the raw Veo clip.
+
+This deliberately supersedes the prior rule that `--max-seconds` is a hard final-media ceiling. Keep the CLI option and 4-20 validation, but treat it as the copy/planning ceiling used to bound presenter text and provider extension selection. The final media may reflect Veo's supported 8- or 15-second coverage even when that is longer than the speech estimate or requested planning ceiling. Update only the narrow current docs/help/comments needed so they no longer promise a final trim that the owner has removed.
+
+CURRENT THREE-FILE PACKAGE
+
+Preserve the just-landed successful headline publication unit:
+- `<clipId>.veo.mp4` = untouched Veo bytes;
+- `<clipId>.mp4` = FFmpeg-normalized/postable clip;
+- `<clipId>.json` = safe metadata/provenance.
+
+The finished `.mp4` remains the Poster input. Do not regress transactional cleanup, dry-run suppression, raw Veo identity, or final identity.
+
+METADATA / VALIDATION
+
+Reconcile runtime validation and `schemas/headline-clip.schema.json` with the new full-provider-duration semantics.
+
+The existing fields must no longer imply that `finalDurationSeconds` must equal the word-count estimate or remain below `requestedMaxSeconds`. The durable contract must make the new meaning unambiguous. If the semantic change requires a headline sidecar schema-version bump, perform it narrowly and update all producers/validators/tests together.
+
+Verbose output must not call the word-count estimate a "planned final duration" after this change. Use wording that identifies it as presenter speech/copy planning rather than final media duration.
+
+PRESERVED BEHAVIOR
+
+Preserve:
+- existing presenter copy word budget and factual grounding;
+- existing Veo initial 8-second and extension timing/count behavior;
+- one to three approved anchor references;
+- prompt-file behavior and prompt provenance;
+- Agent Platform model/auth/request/polling/result handling;
+- raw Veo byte preservation;
+- FFmpeg normalization, lower-third rendering, H.264/yuv420p, 30 fps, AAC 48 kHz stereo, loudnorm, and one-input simple path;
+- dry-run behavior;
+- `headline-post` using only the finished MP4;
+- cinematic path behavior;
+- package/engine version 0.6.5.
+
+Do not make the P2 visual lower-third changes in this prompt.
+
+PROOF
+
+Focused tests must prove at minimum:
+- a 4-, 6-, or 7-second speech estimate with an 8-second Veo result produces an approximately 8-second final clip rather than being trimmed to the estimate;
+- a >8-second speech estimate using the existing extension plan retains the complete 15-second Veo result;
+- the FFmpeg graph no longer trims video/audio to the word-count speech estimate;
+- raw presenter stream validation still rejects malformed/missing-stream media;
+- final output technical qualification remains strict;
+- metadata/runtime/static-schema duration rules reflect the new full-provider semantics;
+- verbose wording no longer describes the speech estimate as final duration;
+- the raw `.veo.mp4`, final `.mp4`, JSON, dry-run, failure cleanup, and Poster handoff regressions remain covered.
+
+Run focused presenter-duration/simple-copy/simple-finisher/headline-workflow/CLI/poster-handoff tests, then `npm run check`, `node src/cli.ts --help`, and `git diff --check`.
+
+NON-GOALS
+
+Do not change presenter wording, Veo prompts, model selection, reference-image semantics, provider safety behavior, publishing adapters, lower-third position/opacity/alignment, cinematic generation, or Phase 7.
+
+FINAL RESPONSE
+
+Report the old trim source removed, the new final-duration source, any headline schema-version change, preserved three-file package/Poster behavior, focused and broad validation, and unchanged version 0.6.5.
