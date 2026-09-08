@@ -22,7 +22,7 @@ MUST REMAIN TRUE
 - After readiness succeeds, run the existing headline generation path. Poster post invocation may occur only after the finished MP4 and its coupled sidecar have reached the existing successful headline publication boundary.
 - The Bluesky caption is exactly `"<headline>" by <source display name>`, using the same governed Article/source identity that produced the clip. Do not summarize, rewrite, add hashtags, or ask a model to create publishing text.
 - The real handoff is the equivalent of Poster `post bluesky --video <finished-mp4> --text <caption>`. Do not pass Poster `--dry-run` on a real `headline-post` run.
-- `headline-post --dry-run` performs VidGen headline preflight plus Poster `doctor bluesky` only. It must not call text/Veo generation, create a final clip, invoke Poster `post`, upload media, or create an external post.
+- `headline-post --dry-run` must perform Poster `doctor bluesky` plus the P1 headline dry-run contract: it still runs structured-text presenter-copy generation and persists the P1 inspection artifacts, while suppressing Veo. It must not create a production-ready final clip, invoke Poster `post`, upload media, or create an external post.
 - If headline generation fails, Poster post must never run. If Poster publishing fails after generation, preserve the completed VidGen MP4/sidecar, return nonzero, and report a safe publishing-stage failure rather than deleting valid generated artifacts.
 - Do not forward or persist raw child-process stderr/stdout as trusted diagnostics. No secrets, authorization data, app passwords, raw provider responses, or shell command strings may enter VidGen artifacts or public errors.
 - Do not bypass Poster duplicate protection or add a VidGen `--allow-duplicate` path in this correction.
@@ -35,7 +35,7 @@ Focused tests must cover:
 - `headline-post` parsing/help for normal and dry-run forms;
 - missing/invalid Poster root or failed `doctor bluesky` stops before generation;
 - local headline preflight occurs before Poster doctor and generation;
-- dry run reaches Poster doctor but never generation or Poster post;
+- dry run reaches Poster doctor and structured-text generation, produces the P1 inspection artifacts, but never calls Veo or Poster post;
 - normal success invokes Poster post only after headline final readiness;
 - exact caption construction, including headlines containing whitespace/quotes or shell-significant characters, reaches Poster as one `--text` argument with no shell interpretation;
 - generation failure never invokes Poster post;
@@ -47,7 +47,7 @@ Run focused CLI/headline/handoff tests, `npm run check`, `node src/cli.ts --help
 
 Downstream-required capability -> owning implementation/export -> focused proof:
 
-safe local headline readiness -> P1 shared preflight -> ordering/no-generation tests.
+safe local headline readiness + inspectable pre-Veo state -> P1 shared dry-run/preflight -> ordering, text-generation, artifact, and no-Veo tests.
 
 finished headline MP4 + governed Article/source identity -> existing headline workflow result/sidecar boundary -> handoff sequencing and exact-caption tests.
 
