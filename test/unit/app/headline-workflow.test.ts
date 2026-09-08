@@ -114,10 +114,27 @@ test('headline workflow accepts the governed wrapping regression before any prov
   });
 });
 
+test('headline workflow rejects selected-font lower-third overflow before provider creation', async () => {
+  await withAssets(async (directory, anchor, font) => {
+    let textClientCreated = false; let videoClientCreated = false;
+    await assert.rejects(generateHeadlineClip({
+      ...fakeDependencies(directory, anchor, font),
+      loadManifest: async (path) => {
+        const loaded = await loadNgestVidGenManifestFile(path);
+        return { ...loaded, articles: loaded.articles.map((article) => article.articleId === 'example-article-1' ? { ...article, source: { ...article.source, displayName: 'W'.repeat(32) } } : article) };
+      },
+      finisher: { ...fakeFinisher(() => 4), preflightLowerThird: async () => { throw new Error('selected font cannot fit source'); } },
+      createTextClient: () => { textClientCreated = true; throw new Error('text provider must not be created'); },
+      createVideoClient: () => { videoClientCreated = true; throw new Error('video provider must not be created'); },
+    }), /selected font cannot fit source/);
+    assert.equal(textClientCreated, false); assert.equal(videoClientCreated, false);
+  });
+});
+
 function fakeDependencies(directory: string, anchor: string, font: string, text = 'A short factual presenter sentence.') {
   return { inputFile: manifest, articleId: 'example-article-1', anchorReferencePaths: [anchor], fontPath: font, artifactsRoot: directory, createClipId: () => 'clip-safe-1', createTextClient: () => ({ provider: 'fake-text', model: 'fake-model', generateStructuredJson: async () => ({ provider: 'fake-text', model: 'fake-model', requestId: 'request-1', outputText: JSON.stringify({ text }) }) }), createVideoClient: () => ({ provider: 'fake-video', model: 'fake-model', generatePresenterVideo: async (request: { maxSeconds: number }) => video(request.maxSeconds) }), finisher: fakeFinisher((request) => request.plannedDurationSeconds) };
 }
 function video(plannedDurationSeconds: number) { const durationPlan = planPresenterVideoDuration(plannedDurationSeconds); const operationIds = Array.from({ length: durationPlan.extensionCount + 1 }, (_, index) => `operation-${index + 1}`); return { provider: 'fake-video', model: 'fake-model', requestId: operationIds[0], operationId: operationIds.at(-1), operationIds, generationOperationCount: durationPlan.extensionCount + 1, mimeType: 'video/mp4', bytes: new Uint8Array([1]), rawDurationSeconds: durationPlan.rawProviderDurationSeconds, durationPlan }; }
-function fakeFinisher(duration: (request: { readonly plannedDurationSeconds: number }) => number) { return { preflight: async () => ({ version: 'ffmpeg version fake' }), finish: async (request: { outputPath: string; plannedDurationSeconds: number }) => { await writeFile(request.outputPath, 'finished'); return { outputPath: request.outputPath, ffmpegVersion: 'ffmpeg version fake', durationMs: 1, probe: { durationSeconds: duration(request), containerNames: ['mp4'], streamTypes: ['video', 'audio'], video: { codecName: 'h264', width: 1080, height: 1920, pixelFormat: 'yuv420p', averageFrameRate: { numerator: 30, denominator: 1, value: 30 } }, audio: { codecName: 'aac', sampleRate: 48000, channels: 2 } } }; } }; }
+function fakeFinisher(duration: (request: { readonly plannedDurationSeconds: number }) => number) { return { preflightLowerThird: async (request: { headline: string; sourceDisplayName: string }) => ({ headline: request.headline, sourceDisplayName: request.sourceDisplayName }), finish: async (request: { outputPath: string; plannedDurationSeconds: number }) => { await writeFile(request.outputPath, 'finished'); return { outputPath: request.outputPath, ffmpegVersion: 'ffmpeg version fake', durationMs: 1, probe: { durationSeconds: duration(request), containerNames: ['mp4'], streamTypes: ['video', 'audio'], video: { codecName: 'h264', width: 1080, height: 1920, pixelFormat: 'yuv420p', averageFrameRate: { numerator: 30, denominator: 1, value: 30 } }, audio: { codecName: 'aac', sampleRate: 48000, channels: 2 } } }; } }; }
 async function withAssets(run: (directory: string, anchor: string, font: string) => Promise<void>) { const directory = await mkdtemp(join(tmpdir(), 'vidgen-headline-')); const anchor = join(directory, 'anchor.png'); const font = join(directory, 'font.ttf'); try { await writeFile(anchor, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])); await writeFile(font, 'font'); await run(directory, anchor, font); } finally { await rm(directory, { recursive: true, force: true }); } }
 async function withVideoModel(value: string, run: () => Promise<void>) { const prior = { project: process.env.GOOGLE_CLOUD_PROJECT, location: process.env.GOOGLE_CLOUD_LOCATION, model: process.env.VIDGEN_VIDEO_MODEL }; try { process.env.GOOGLE_CLOUD_PROJECT = 'vidgen-test-project'; process.env.GOOGLE_CLOUD_LOCATION = 'us-central1'; process.env.VIDGEN_VIDEO_MODEL = value; await run(); } finally { for (const [name, priorValue] of Object.entries({ GOOGLE_CLOUD_PROJECT: prior.project, GOOGLE_CLOUD_LOCATION: prior.location, VIDGEN_VIDEO_MODEL: prior.model })) if (priorValue === undefined) delete process.env[name]; else process.env[name] = priorValue; } }

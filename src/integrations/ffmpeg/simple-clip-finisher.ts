@@ -1,4 +1,4 @@
-import { copyFile, mkdir, rm, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, relative, resolve } from 'node:path';
 
 import { VidGenError } from '../../core/error.ts';
@@ -9,11 +9,18 @@ import { type FfprobeDependencies, type LocalMediaProbe, probeLocalMedia } from 
 import { assertRegularLocalFile } from './local-file.ts';
 
 export const SIMPLE_CLIP_FINISHING_POLICY = Object.freeze({
-  version: 'simple-clip-finishing-policy-v1',
+  version: 'simple-clip-finishing-policy-v2',
   output: { width: 1080, height: 1920, fps: 30, container: 'mp4', videoCodec: 'h264', pixelFormat: 'yuv420p' },
   audio: { encoder: 'aac', sampleRate: 48_000, channels: 2, bitrate: '192k' },
   loudnorm: { integratedLufs: -16, loudnessRange: 11, truePeakDb: -1.5 },
-  lowerThird: { version: 'headline-source-v1', headlineLines: 3, sourceLines: 1, charactersPerLine: 42 },
+  lowerThird: {
+    version: 'headline-source-v2',
+    outer: { x: 48, y: 1080, width: 984, height: 620 },
+    inner: { x: 96, y: 1128, width: 888, height: 524 },
+    padding: { left: 48, right: 48, top: 48, bottom: 48 },
+    headline: { x: 96, y: 1152, fontSize: 44, lineSpacing: 16, lines: 5, charactersPerLine: 32, height: 284 },
+    source: { x: 96, y: 1492, fontSize: 32, lines: 1, charactersPerLine: 32, height: 40, separation: 56 },
+  },
 } as const);
 
 export const SIMPLE_CLIP_DURATION_TOLERANCE_SECONDS = 1 / SIMPLE_CLIP_FINISHING_POLICY.output.fps;
@@ -36,6 +43,8 @@ export interface SimpleClipFinishingRequest extends SimpleLowerThird {
 export interface SimpleClipFinisherDependencies extends FfmpegDependencies {
   readonly ffprobe?: FfprobeDependencies;
   readonly probe?: (path: string, dependencies?: FfprobeDependencies) => Promise<LocalMediaProbe>;
+  /** Test seam; production measures staged glyph pixels through FFmpeg. */
+  readonly measureLowerThird?: (lowerThird: SimpleLowerThird) => void | Promise<void>;
 }
 
 export interface SimpleClipFinishResult extends FfmpegRenderResult {
@@ -45,8 +54,8 @@ export interface SimpleClipFinishResult extends FfmpegRenderResult {
 /** Validates the lower third before a caller spends on provider generation. */
 export function validateSimpleLowerThird(headline: string, sourceDisplayName: string): SimpleLowerThird {
   return {
-    headline: wrapFullText(headline, SIMPLE_CLIP_FINISHING_POLICY.lowerThird.charactersPerLine, SIMPLE_CLIP_FINISHING_POLICY.lowerThird.headlineLines, 'headline'),
-    sourceDisplayName: wrapFullText(sourceDisplayName, SIMPLE_CLIP_FINISHING_POLICY.lowerThird.charactersPerLine, SIMPLE_CLIP_FINISHING_POLICY.lowerThird.sourceLines, 'source display name'),
+    headline: wrapFullText(headline, SIMPLE_CLIP_FINISHING_POLICY.lowerThird.headline.charactersPerLine, SIMPLE_CLIP_FINISHING_POLICY.lowerThird.headline.lines, 'headline'),
+    sourceDisplayName: wrapFullText(sourceDisplayName, SIMPLE_CLIP_FINISHING_POLICY.lowerThird.source.charactersPerLine, SIMPLE_CLIP_FINISHING_POLICY.lowerThird.source.lines, 'source display name'),
   };
 }
 
@@ -71,6 +80,20 @@ export class LocalSimpleClipFinisher {
 
   async preflight(): Promise<{ readonly version: string }> { return this.#renderer.preflight(true); }
 
+  /** Validates selected-font glyph bounds before a workflow creates any provider client. */
+  async preflightLowerThird(request: Pick<SimpleClipFinishingRequest, 'headline' | 'sourceDisplayName' | 'fontPath' | 'workDirectory'>): Promise<SimpleLowerThird> {
+    const lowerThird = validateSimpleLowerThird(request.headline, request.sourceDisplayName);
+    if (typeof request.workDirectory !== 'string' || request.workDirectory.trim().length === 0 || typeof request.fontPath !== 'string' || request.fontPath.trim().length === 0) throw invalidSimpleClip('Simple clip font and work directory are required.');
+    const workDirectory = resolve(request.workDirectory);
+    const info = await stat(workDirectory).catch(() => undefined);
+    if (info === undefined || !info.isDirectory()) throw invalidSimpleClip('Simple clip work directory is unavailable.');
+    await assertRegularLocalFile(request.fontPath, { maxBytes: 100_000_000 });
+    await this.preflight();
+    const staged = await stageAssets(request.fontPath, lowerThird, workDirectory);
+    try { await this.#validateStagedLayout(lowerThird, staged, workDirectory); return lowerThird; }
+    finally { await Promise.all(staged.map((path) => rm(path, { force: true }).catch(() => undefined))); }
+  }
+
   async finish(request: SimpleClipFinishingRequest): Promise<SimpleClipFinishResult> {
     if (request === null || typeof request !== 'object') throw invalidSimpleClip('Simple clip finishing request is invalid.');
     const lowerThird = validateSimpleLowerThird(request.headline, request.sourceDisplayName);
@@ -82,9 +105,10 @@ export class LocalSimpleClipFinisher {
     const rawProbe = await probe(request.rawPresenterVideoPath, this.#dependencies.ffprobe);
     requireRawPresenterCoverage(rawProbe, duration);
     const capabilities = await this.preflight();
-    const staged = await stageAssets(request, lowerThird, workDirectory);
+    const staged = await stageAssets(request.fontPath, lowerThird, workDirectory);
     const started = Date.now();
     try {
+      await this.#validateStagedLayout(lowerThird, staged, workDirectory);
       await this.#renderer.run(buildSimpleClipFinishArgs(request.rawPresenterVideoPath, outputPath, duration, staged), 'FFmpeg could not finish the simple clip candidate.', workDirectory);
       const candidateProbe = await probe(outputPath, this.#dependencies.ffprobe);
       validateSimpleFinishedCandidate(candidateProbe, request);
@@ -92,6 +116,15 @@ export class LocalSimpleClipFinisher {
     } finally {
       await Promise.all(staged.map((path) => rm(path, { force: true }).catch(() => undefined)));
     }
+  }
+
+  async #validateStagedLayout(lowerThird: SimpleLowerThird, stagedPaths: readonly string[], workDirectory: string): Promise<void> {
+    if (this.#dependencies.measureLowerThird !== undefined) return this.#dependencies.measureLowerThird(lowerThird);
+    const pixelsPath = resolve(workDirectory, 'simple-lower-third-layout.raw');
+    try {
+      await this.#renderer.run(buildSimpleLowerThirdMeasurementArgs(stagedPaths), 'FFmpeg could not validate simple lower-third layout.', workDirectory);
+      assertSimpleLowerThirdPixels(await readFile(pixelsPath));
+    } finally { await rm(pixelsPath, { force: true }).catch(() => undefined); }
   }
 }
 
@@ -101,10 +134,37 @@ export function buildSimpleClipFinishArgs(rawPresenterVideoPath: string, outputP
   const [fontPath, headlinePath, sourcePath] = stagedPaths.map((path) => basename(path));
   if (fontPath !== 'font.ttf' || headlinePath !== 'simple-headline.txt' || sourcePath !== 'simple-source.txt') throw invalidSimpleClip('Simple clip display staging failed.');
   const graph = [
-    `[0:v:0]setpts=PTS-STARTPTS,scale=w=1080:h=1920:force_original_aspect_ratio=decrease,pad=w=1080:h=1920:x=(ow-iw)/2:y=(oh-ih)/2:color=black,setsar=1,fps=30,trim=duration=${duration},setpts=PTS-STARTPTS,drawbox=x=54:y=1410:w=972:h=390:color=black@0.72:t=fill,drawtext=fontfile=font.ttf:textfile=simple-headline.txt:expansion=none:fontcolor=white:fontsize=54:x=90:y=1460:line_spacing=12,drawtext=fontfile=font.ttf:textfile=simple-source.txt:expansion=none:fontcolor=white:fontsize=36:x=90:y=1730[vout]`,
+    `[0:v:0]setpts=PTS-STARTPTS,scale=w=1080:h=1920:force_original_aspect_ratio=decrease,pad=w=1080:h=1920:x=(ow-iw)/2:y=(oh-ih)/2:color=black,setsar=1,fps=30,trim=duration=${duration},setpts=PTS-STARTPTS,drawbox=x=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.outer.x}:y=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.outer.y}:w=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.outer.width}:h=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.outer.height}:color=black@0.72:t=fill,drawtext=fontfile=font.ttf:textfile=simple-headline.txt:expansion=none:fontcolor=white:fontsize=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.headline.fontSize}:x=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.headline.x}:y=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.headline.y}:line_spacing=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.headline.lineSpacing},drawtext=fontfile=font.ttf:textfile=simple-source.txt:expansion=none:fontcolor=white:fontsize=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.source.fontSize}:x=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.source.x}:y=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.source.y}[vout]`,
     `[0:a:0]asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_rates=48000:channel_layouts=stereo,apad,atrim=duration=${duration},asetpts=PTS-STARTPTS,loudnorm=I=-16:LRA=11:TP=-1.5,aresample=48000,aformat=sample_rates=48000:channel_layouts=stereo[aout]`,
   ].join(';');
   return ['-hide_banner', '-y', '-i', rawPresenterVideoPath, '-filter_complex', graph, '-map', '[vout]', '-map', '[aout]', '-c:v', 'libx264', '-crf', '20', '-preset', 'medium', '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', '-ar', '48000', '-ac', '2', '-b:a', '192k', '-movflags', '+faststart', '-f', 'mp4', outputPath];
+}
+
+/** Renders the actual staged font/text once into pixels; no article text enters this graph. */
+export function buildSimpleLowerThirdMeasurementArgs(stagedPaths: readonly string[]): readonly string[] {
+  const [fontPath, headlinePath, sourcePath] = stagedPaths.map((path) => basename(path));
+  if (fontPath !== 'font.ttf' || headlinePath !== 'simple-headline.txt' || sourcePath !== 'simple-source.txt') throw invalidSimpleClip('Simple clip display staging failed.');
+  const { output, lowerThird } = SIMPLE_CLIP_FINISHING_POLICY;
+  const graph = `drawtext=fontfile=font.ttf:textfile=simple-headline.txt:expansion=none:fontcolor=white:fontsize=${lowerThird.headline.fontSize}:x=${lowerThird.headline.x}:y=${lowerThird.headline.y}:line_spacing=${lowerThird.headline.lineSpacing},drawtext=fontfile=font.ttf:textfile=simple-source.txt:expansion=none:fontcolor=white:fontsize=${lowerThird.source.fontSize}:x=${lowerThird.source.x}:y=${lowerThird.source.y}`;
+  return ['-hide_banner', '-y', '-f', 'lavfi', '-i', `color=c=black:s=${output.width}x${output.height}:r=1`, '-vf', graph, '-frames:v', '1', '-pix_fmt', 'gray', '-f', 'rawvideo', 'simple-lower-third-layout.raw'];
+}
+
+/** Rejects any actual rendered glyph outside its assigned safe-area block. */
+export function assertSimpleLowerThirdPixels(pixels: Uint8Array): void {
+  const { output, lowerThird } = SIMPLE_CLIP_FINISHING_POLICY;
+  if (pixels.byteLength !== output.width * output.height) throw invalidSimpleClip('Simple lower-third measurement output was invalid.');
+  const background = pixels[0]!;
+  const headline = pixelBounds(pixels, lowerThird.headline.y, lowerThird.headline.y + lowerThird.headline.height, output.width, background);
+  const source = pixelBounds(pixels, lowerThird.source.y, lowerThird.source.y + lowerThird.source.height, output.width, background);
+  const inside = (bounds: PixelBounds, top: number, height: number) => bounds.left >= lowerThird.inner.x && bounds.right < lowerThird.inner.x + lowerThird.inner.width && bounds.top >= top && bounds.bottom < top + height && bounds.bottom < lowerThird.inner.y + lowerThird.inner.height;
+  if (headline === undefined || source === undefined || !inside(headline, lowerThird.headline.y, lowerThird.headline.height) || !inside(source, lowerThird.source.y, lowerThird.source.height) || source.top < lowerThird.headline.y + lowerThird.headline.height + lowerThird.source.separation) throw invalidSimpleClip('Simple clip text cannot fit the deterministic lower-third safe area.');
+}
+
+interface PixelBounds { readonly left: number; readonly right: number; readonly top: number; readonly bottom: number; }
+function pixelBounds(pixels: Uint8Array, startY: number, endY: number, width: number, background: number): PixelBounds | undefined {
+  let left = width; let right = -1; let top = endY; let bottom = -1;
+  for (let y = startY; y < endY; y += 1) for (let x = 0; x < width; x += 1) if (pixels[(y * width) + x] !== background) { left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y); }
+  return right < 0 ? undefined : { left, right, top, bottom };
 }
 
 function requireRawPresenterCoverage(probe: LocalMediaProbe, duration: number): void {
@@ -160,13 +220,13 @@ async function validateBoundary(request: SimpleClipFinishingRequest): Promise<{ 
   return { workDirectory, outputPath };
 }
 
-async function stageAssets(request: SimpleClipFinishingRequest, lowerThird: SimpleLowerThird, workDirectory: string): Promise<readonly string[]> {
+async function stageAssets(fontPath: string, lowerThird: SimpleLowerThird, workDirectory: string): Promise<readonly string[]> {
   const paths: string[] = [];
   try {
     await mkdir(workDirectory, { recursive: true });
     for (const [name, content] of [['font.ttf', undefined], ['simple-headline.txt', lowerThird.headline], ['simple-source.txt', lowerThird.sourceDisplayName]] as const) {
       const path = resolve(workDirectory, name);
-      if (content === undefined) await copyFile(request.fontPath, path); else await writeFile(path, content, { encoding: 'utf8', flag: 'wx' });
+      if (content === undefined) await copyFile(fontPath, path); else await writeFile(path, content, { encoding: 'utf8', flag: 'wx' });
       paths.push(path);
     }
     return paths;
