@@ -1,0 +1,75 @@
+TASK: Correction 6 / P3 — Headline polish correction closeout
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra Medium`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Review P1 and P2 together against current pushed main. Inspect implementation, durable metadata/schema, FFmpeg graph construction, tests, and the existing headline-post handoff. Do not approve merely because tests pass.
+
+ACCEPTANCE
+
+Full Veo duration:
+- the word-count speech estimate is not used as a final FFmpeg trim boundary;
+- the final simple headline retains the complete qualified Veo presenter timeline;
+- an initial Veo result is not shortened from 8 seconds to an estimated 4-7 seconds;
+- extension output is not shortened from its complete retained provider coverage to the speech estimate;
+- any audio/video normalization bound comes from the qualified raw media/provider coverage and does not remove usable Veo content;
+- stale comments/help/metadata validation no longer claim the speech estimate is the exact final duration;
+- `--max-seconds` remains a bounded copy/planning input rather than a hidden final-media cutter.
+
+Artifact/package regression:
+- successful real generation remains exactly the same-ID raw `.veo.mp4`, finished `.mp4`, and JSON publication unit;
+- raw Veo bytes remain untouched;
+- final MP4 remains the only Poster upload input;
+- metadata safely identifies raw/final artifacts;
+- failure cleanup is transactional;
+- dry-run creates neither MP4 and never calls Veo.
+
+Lower-third polish:
+- outer panel is flush with the bottom of the 1080x1920 frame;
+- background is RGB `#336699` at exactly 77% opacity;
+- headline and source are center-aligned horizontally, including multiline headline presentation;
+- full governed headline/source text remains intact;
+- selected-font safe-area measurement and pre-provider rejection remain intact;
+- white text, existing intended font sizing/spacing, staged text-file safety, and one-input simple finishing remain intact;
+- finishing provenance/static schema agree on `simple-clip-finishing-policy-v3`.
+
+Provider / architecture regression:
+- Veo model/auth/prompt-file/reference/request/polling/result behavior is unchanged;
+- presenter copy grounding and word budget are unchanged except for corrected public duration semantics;
+- no publishing logic moves into VidGen beyond the existing Poster handoff;
+- cinematic generation/assembly is unchanged;
+- package/engine version remains 0.6.5.
+
+VALIDATION
+
+Run:
+- `npm run codex:phase:validate -- c6-polish`;
+- focused presenter-video/simple-copy/simple-clip-finisher tests;
+- focused headline-workflow/CLI/poster-handoff tests;
+- `npm test`;
+- `npm run check`;
+- `node src/cli.ts --help`;
+- `git diff --check`.
+
+Inspect source directly for the old speech-estimate `trim`/`atrim` behavior and old lower-third geometry/color/alignment. Do not rely only on mocks.
+
+EVIDENCE HONESTY
+
+No live Veo call is required for Codex closeout. Mocked/unit proof does not establish live provider generation or human visual/audio quality.
+
+If a suitable already-generated local `.veo.mp4` and FFmpeg/ffprobe are available without another provider call, perform a bounded local finishing smoke and report exactly what was observed. Otherwise report live playback/visual qualification as pending owner review.
+
+Do not claim that speech is no longer clipped in live output until a post-change real clip has been generated and watched.
+
+BOUNDED REPAIRS
+
+Repair only defects within P1 full-provider-duration finishing/metadata semantics, P2 lower-third treatment/provenance, their focused regression coverage, and narrow contradictory docs/help/comments.
+
+FINAL RESPONSE
+
+Report findings/repairs, exact validation, final duration semantics, three-file artifact/Poster behavior, bottom/opacity/alignment treatment, finishing/headline schema versions, unchanged 0.6.5 version, any local runtime evidence actually observed, and whether `c6-polish` is ready for human review.
