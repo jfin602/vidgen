@@ -5,7 +5,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "clipId", "article", "profile", "publication", "story", "presenterText", "requestedMaxSeconds", "plannedDurationSeconds", "finalDurationSeconds", "final", "textProvider", "videoProvider", "references", "font", "finishing", "engineVersion"],
   "properties": {
-    "schemaVersion": { "const": "1" },
+    "schemaVersion": { "const": "2" },
     "clipId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$" },
     "article": { "$ref": "#/$defs/article" },
     "profile": { "$ref": "#/$defs/profile" },
@@ -32,7 +32,7 @@
     "file": { "type": "object", "additionalProperties": false, "required": ["basename", "sha256", "byteSize"], "properties": { "basename": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$" }, "sha256": { "$ref": "#/$defs/hash" }, "byteSize": { "type": "integer", "minimum": 1 } } },
     "reference": { "type": "object", "additionalProperties": false, "required": ["ordinal", "basename", "mimeType", "sha256", "byteSize"], "properties": { "ordinal": { "type": "integer", "minimum": 1 }, "basename": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$" }, "mimeType": { "enum": ["image/png", "image/jpeg", "image/webp"] }, "sha256": { "$ref": "#/$defs/hash" }, "byteSize": { "type": "integer", "minimum": 1 } } },
     "provider": { "type": "object", "additionalProperties": false, "required": ["provider", "model"], "properties": { "provider": { "$ref": "#/$defs/safeToken" }, "model": { "$ref": "#/$defs/safeToken" }, "requestId": { "$ref": "#/$defs/safeToken" } } },
-    "videoProvider": { "type": "object", "additionalProperties": false, "required": ["provider", "model"], "properties": { "provider": { "$ref": "#/$defs/safeToken" }, "model": { "$ref": "#/$defs/safeToken" }, "requestId": { "$ref": "#/$defs/safeToken" }, "operationId": { "$ref": "#/$defs/safeToken" }, "operationIds": { "type": "array", "items": { "$ref": "#/$defs/safeToken" } }, "generationOperationCount": { "type": "integer", "minimum": 1 } } },
+    "videoProvider": { "type": "object", "additionalProperties": false, "required": ["provider", "model", "promptAssetIdentity"], "properties": { "provider": { "$ref": "#/$defs/safeToken" }, "model": { "$ref": "#/$defs/safeToken" }, "promptAssetIdentity": { "$ref": "#/$defs/file" }, "requestId": { "$ref": "#/$defs/safeToken" }, "operationId": { "$ref": "#/$defs/safeToken" }, "operationIds": { "type": "array", "items": { "$ref": "#/$defs/safeToken" } }, "generationOperationCount": { "type": "integer", "minimum": 1 } } },
     "final": { "type": "object", "additionalProperties": false, "required": ["filename", "sha256", "byteSize", "technical"], "properties": { "filename": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}\\.mp4$" }, "sha256": { "$ref": "#/$defs/hash" }, "byteSize": { "type": "integer", "minimum": 1 }, "technical": { "$ref": "#/$defs/technical" } } },
     "technical": { "type": "object", "additionalProperties": false, "required": ["output", "audio"], "properties": { "output": { "$ref": "#/$defs/output" }, "audio": { "$ref": "#/$defs/audio" } } },
     "output": { "type": "object", "additionalProperties": false, "required": ["width", "height", "fps", "container", "videoCodec", "pixelFormat"], "properties": { "width": { "const": 1080 }, "height": { "const": 1920 }, "fps": { "const": 30 }, "container": { "const": "mp4" }, "videoCodec": { "const": "h264" }, "pixelFormat": { "const": "yuv420p" } } },

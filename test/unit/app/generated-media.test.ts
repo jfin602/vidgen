@@ -108,7 +108,7 @@ test('provider-neutral clients expose configuration identity and requests/result
   const unit = resolveGeneratedMediaUnits(getAssemblyTemplate('default-news-40s'), planFor(getAssemblyTemplate('default-news-40s')))[0]!;
   const image = createApprovedReferenceImage('image/png', new Uint8Array([1, 2, 3]));
   const video: VideoGenerationClient = {
-    provider: 'test-video', model: 'video-model-v1',
+    provider: 'test-video', model: 'video-model-v1', promptAssetIdentity: { basename: 'veo-prompts.json', sha256: 'c'.repeat(64), byteSize: 1 },
     generateVideo: async (request) => {
       assert.deepEqual(Object.keys(request).sort(), ['referenceImages', 'unit']);
       assert.equal(request.referenceImages?.[0]?.sha256, image.sha256);

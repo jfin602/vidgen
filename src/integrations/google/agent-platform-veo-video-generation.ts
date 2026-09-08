@@ -1,6 +1,7 @@
 import { VidGenError } from '../../core/error.ts';
 import { defaultGoogleCloudAccessToken, type GoogleCloudAccessTokenProvider } from './google-cloud-auth.ts';
 import type { ApprovedReferenceImage, VideoGenerationClient, VideoGenerationRequest, VideoGenerationResult } from '../../core/generated-media.ts';
+import { loadVeoPromptSpec, renderVeoPrompt, type LoadedVeoPromptSpec } from './veo-prompt-spec.ts';
 import {
   assertPresenterVideoGenerationRequest,
   partitionSimplePresenterSpeech,
@@ -70,6 +71,7 @@ export function loadGoogleAgentPlatformVeoRuntimeConfig(environment: GoogleAgent
 export class GoogleAgentPlatformVeoVideoGenerationClient implements VideoGenerationClient, PresenterVideoGenerationClient {
   readonly provider = 'google-agent-platform-veo';
   readonly model: string;
+  readonly promptAssetIdentity;
 
   private readonly project: string;
   private readonly fetchImplementation: FetchImplementation;
@@ -83,11 +85,14 @@ export class GoogleAgentPlatformVeoVideoGenerationClient implements VideoGenerat
   private readonly maxResponseBytes: number;
   private readonly maxVideoBytes: number;
   private readonly maxExtensionCount: number;
+  private readonly prompts: LoadedVeoPromptSpec;
 
   constructor(options: GoogleAgentPlatformVeoVideoGenerationClientOptions = {}) {
     const config = loadGoogleAgentPlatformVeoRuntimeConfig(options.environment);
     this.project = config.project;
     this.model = config.model;
+    this.prompts = loadVeoPromptSpec(options.environment);
+    this.promptAssetIdentity = this.prompts.identity;
     this.fetchImplementation = options.fetch ?? fetch;
     this.getAccessToken = options.getAccessToken ?? defaultGoogleCloudAccessToken;
     this.now = options.now ?? Date.now;
@@ -107,8 +112,8 @@ export class GoogleAgentPlatformVeoVideoGenerationClient implements VideoGenerat
     this.assertExtensionCount(extensionCount);
     const dialogue = request.unit.role.kind === 'presenter' ? partitionCinematicSpeech(request.unit.spokenText, extensionCount + 1) : [];
     const generated = await this.generateSequence(
-      buildInitialRequest(request, dialogue[0]), extensionCount,
-      (previous, index) => buildExtensionRequest(request, previous, dialogue[index + 1]),
+      buildInitialRequest(request, dialogue[0], this.prompts), extensionCount,
+      (previous, index) => buildExtensionRequest(request, previous, dialogue[index + 1], this.prompts),
     );
     return resultFor(this, generated, INITIAL_DURATION_SECONDS + (extensionCount * EXTENSION_DURATION_SECONDS));
   }
@@ -121,8 +126,8 @@ export class GoogleAgentPlatformVeoVideoGenerationClient implements VideoGenerat
     const dialogue = partitionSimplePresenterSpeech(request.spokenText, request.maxSeconds);
     const retainedExtensionSeconds = Math.min(request.maxSeconds, durationPlan.rawProviderDurationSeconds) - INITIAL_DURATION_SECONDS;
     const generated = await this.generateSequence(
-      buildSimpleInitialRequest(request, dialogue[0]!, durationPlan.extensionCount > 0), durationPlan.extensionCount,
-      (previous, index) => buildSimpleExtensionRequest(previous, dialogue[index + 1] ?? '', retainedExtensionSeconds),
+      buildSimpleInitialRequest(request, dialogue[0]!, durationPlan.extensionCount > 0, this.prompts), durationPlan.extensionCount,
+      (previous, index) => buildSimpleExtensionRequest(previous, dialogue[index + 1] ?? '', retainedExtensionSeconds, this.prompts),
     );
     return { ...resultFor(this, generated), rawDurationSeconds: durationPlan.rawProviderDurationSeconds, durationPlan };
   }
@@ -220,38 +225,33 @@ function resultFor(client: GoogleAgentPlatformVeoVideoGenerationClient, generate
   return { provider: client.provider, model: client.model, requestId: generated.operationIds[0], operationId: generated.operationIds.at(-1), operationIds: generated.operationIds, generationOperationCount: generated.operationIds.length, mimeType: generated.video.mimeType, bytes: generated.video.bytes, ...(durationSeconds === undefined ? {} : { durationSeconds }) };
 }
 
-function buildInitialRequest(request: VideoGenerationRequest, dialogue: string | undefined): Record<string, unknown> {
-  const instance: Record<string, unknown> = { prompt: request.unit.role.kind === 'presenter' ? presenterPrompt(request, dialogue ?? request.unit.spokenText, false) : contentPrompt(request, false) };
+function buildInitialRequest(request: VideoGenerationRequest, dialogue: string | undefined, prompts: LoadedVeoPromptSpec): Record<string, unknown> {
+  const instance: Record<string, unknown> = { prompt: request.unit.role.kind === 'presenter' ? cinematicPrompt(request, dialogue ?? request.unit.spokenText, false, prompts) : cinematicPrompt(request, undefined, false, prompts) };
   if (request.unit.role.kind === 'presenter') instance.referenceImages = request.referenceImages!.map(toAssetReference);
   return { instances: [instance], parameters: videoParameters(true) };
 }
 
-function buildExtensionRequest(request: VideoGenerationRequest, previous: InlineVideo, dialogue: string | undefined): Record<string, unknown> {
-  return { instances: [{ prompt: request.unit.role.kind === 'presenter' ? presenterPrompt(request, dialogue ?? '', true) : contentPrompt(request, true), video: toInlineVideo(previous) }], parameters: videoParameters(false) };
+function buildExtensionRequest(request: VideoGenerationRequest, previous: InlineVideo, dialogue: string | undefined, prompts: LoadedVeoPromptSpec): Record<string, unknown> {
+  return { instances: [{ prompt: request.unit.role.kind === 'presenter' ? cinematicPrompt(request, dialogue ?? '', true, prompts) : cinematicPrompt(request, undefined, true, prompts), video: toInlineVideo(previous) }], parameters: videoParameters(false) };
 }
 
-function buildSimpleInitialRequest(request: PresenterVideoGenerationRequest, dialogue: string, requiresExtension: boolean): Record<string, unknown> {
-  return { instances: [{ prompt: simplePresenterPrompt(dialogue, false, requiresExtension), referenceImages: request.referenceImages.map(toAssetReference) }], parameters: videoParameters(true) };
+function buildSimpleInitialRequest(request: PresenterVideoGenerationRequest, dialogue: string, requiresExtension: boolean, prompts: LoadedVeoPromptSpec): Record<string, unknown> {
+  return { instances: [{ prompt: renderVeoPrompt(requiresExtension ? 'simplePresenterInitialWithExtension' : 'simplePresenterInitial', prompts.templates[requiresExtension ? 'simplePresenterInitialWithExtension' : 'simplePresenterInitial'], { dialogue, context: '', retainedExtensionSeconds: '' }), referenceImages: request.referenceImages.map(toAssetReference) }], parameters: videoParameters(true) };
 }
 
-function buildSimpleExtensionRequest(previous: InlineVideo, dialogue: string, retainedExtensionSeconds: number): Record<string, unknown> {
-  return { instances: [{ prompt: simplePresenterPrompt(dialogue, true, false, retainedExtensionSeconds), video: toInlineVideo(previous) }], parameters: videoParameters(false) };
+function buildSimpleExtensionRequest(previous: InlineVideo, dialogue: string, retainedExtensionSeconds: number, prompts: LoadedVeoPromptSpec): Record<string, unknown> {
+  return { instances: [{ prompt: renderVeoPrompt('simplePresenterExtension', prompts.templates.simplePresenterExtension, { dialogue, context: '', retainedExtensionSeconds: String(retainedExtensionSeconds) }), video: toInlineVideo(previous) }], parameters: videoParameters(false) };
 }
 
 function videoParameters(initial: boolean): Record<string, unknown> {
   return { aspectRatio: '9:16', ...(initial ? { durationSeconds: INITIAL_DURATION_SECONDS } : {}), resolution: '720p', sampleCount: 1 };
 }
 
-function presenterPrompt(request: VideoGenerationRequest, dialogue: string, extension: boolean): string {
-  return ['Create a portrait news-presenter video.', extension ? 'Continue the same presenter, appearance, setting, and scene continuity from the supplied prior Veo video.' : 'Preserve the intended anchor appearance from the supplied reference images.', `Use only this supplied ClipPlan visual/news context: ${unitContext(request)}.`, `The presenter must speak only this exact assigned dialogue: "${dialogue}".`, 'Do not add dialogue. Do not create readable or generated on-screen text. Do not add unsupported story facts.'].join(' ');
-}
-
-function simplePresenterPrompt(dialogue: string, extension: boolean, requiresExtension = false, retainedExtensionSeconds?: number): string {
-  return ['Create a portrait news-presenter video.', extension ? 'Continue the same presenter, appearance, setting, and scene continuity from the supplied prior Veo video.' : 'Preserve the intended anchor appearance from the supplied reference images.', `The presenter must speak only this exact assigned dialogue: "${dialogue}".`, ...(requiresExtension ? ["Keep the presenter speaking through this initial 8-second clip's final second so the required Veo extension can continue the voice."] : []), ...(extension ? [`Begin this exact assigned dialogue immediately and finish it within the first ${retainedExtensionSeconds} seconds of this 7-second extension, the only portion retained in the final clip. After that dialogue, add no speech.`] : []), 'Do not add dialogue. Do not create readable or generated on-screen text. Do not add unsupported story facts.'].join(' ');
-}
-
-function contentPrompt(request: VideoGenerationRequest, extension: boolean): string {
-  return [extension ? 'Continue the same supplied visual treatment from the prior Veo video.' : 'Create a portrait news B-roll video.', `Remain grounded only in this supplied ClipPlan content: ${unitContext(request)}.`, 'Do not introduce new specific story claims. Do not add dialogue or voice narration.', 'Do not create readable or generated on-screen text. Do not retrieve or reuse publisher media.'].join(' ');
+function cinematicPrompt(request: VideoGenerationRequest, dialogue: string | undefined, extension: boolean, prompts: LoadedVeoPromptSpec): string {
+  const name = request.unit.role.kind === 'presenter'
+    ? (extension ? 'cinematicPresenterExtension' : 'cinematicPresenterInitial')
+    : (extension ? 'cinematicContentExtension' : 'cinematicContentInitial');
+  return renderVeoPrompt(name, prompts.templates[name], { dialogue: dialogue ?? '', context: unitContext(request), retainedExtensionSeconds: '' });
 }
 
 function unitContext(request: VideoGenerationRequest): string { return request.unit.content.map((value) => `${value.usage} ${value.slotId}: ${value.text}`).join(' | '); }

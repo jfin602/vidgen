@@ -1,5 +1,6 @@
 import { assertApprovedAnchorReferenceCount, assertApprovedReferenceImage, type ApprovedReferenceImage } from './anchor-reference.ts';
 import { VidGenError } from './error.ts';
+import type { VeoPromptAssetIdentity } from './generated-media.ts';
 import {
   assertSimpleClipMaxSeconds,
   SIMPLE_CLIP_BROADCAST_WORDS_PER_MINUTE,
@@ -44,6 +45,7 @@ export interface PresenterVideoGenerationResult {
 export interface PresenterVideoGenerationClient {
   readonly provider: string;
   readonly model: string;
+  readonly promptAssetIdentity: VeoPromptAssetIdentity;
   generatePresenterVideo(request: PresenterVideoGenerationRequest): Promise<PresenterVideoGenerationResult>;
 }
 

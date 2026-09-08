@@ -9,6 +9,7 @@ import { planPresenterVideoDuration } from '../../../src/core/presenter-video.ts
 import { loadNgestVidGenManifestFile } from '../../../src/integrations/ngest/local-manifest-file.ts';
 
 const manifest = join(process.cwd(), 'test', 'fixtures', 'ngest-vidgen-manifest.json');
+const promptAssetIdentity = { basename: 'veo-prompts.json', sha256: 'c'.repeat(64), byteSize: 1 };
 
 test('headline workflow publishes a validated safe flat MP4/JSON pair with no local-path provenance', async () => {
   await withAssets(async (directory, anchor, font) => {
@@ -23,7 +24,7 @@ test('headline workflow publishes a validated safe flat MP4/JSON pair with no lo
 test('short copy under the default ceiling makes only the initial eight-second provider request', async () => {
   await withAssets(async (directory, anchor, font) => {
     let requested: number | undefined;
-    await generateHeadlineClip({ ...fakeDependencies(directory, anchor, font), createVideoClient: () => ({ provider: 'fake-video', model: 'fake-model', generatePresenterVideo: async (request) => { requested = request.maxSeconds; return video(request.maxSeconds); } }) });
+    await generateHeadlineClip({ ...fakeDependencies(directory, anchor, font), createVideoClient: () => ({ provider: 'fake-video', model: 'fake-model', promptAssetIdentity, generatePresenterVideo: async (request) => { requested = request.maxSeconds; return video(request.maxSeconds); } }) });
     assert.equal(requested, 4);
   });
 });
@@ -32,7 +33,7 @@ test('copy requiring more than eight seconds requests exactly one extension plan
   await withAssets(async (directory, anchor, font) => {
     let requested: number | undefined;
     const text = Array.from({ length: 21 }, (_, index) => `word${index}`).join(' ');
-    await generateHeadlineClip({ ...fakeDependencies(directory, anchor, font, text), createVideoClient: () => ({ provider: 'fake-video', model: 'fake-model', generatePresenterVideo: async (request) => { requested = request.maxSeconds; return video(request.maxSeconds); } }) });
+    await generateHeadlineClip({ ...fakeDependencies(directory, anchor, font, text), createVideoClient: () => ({ provider: 'fake-video', model: 'fake-model', promptAssetIdentity, generatePresenterVideo: async (request) => { requested = request.maxSeconds; return video(request.maxSeconds); } }) });
     assert.equal(requested, 9);
   });
 });
@@ -43,10 +44,10 @@ test('four-second plan trims the initial provider coverage and rejects provider-
     await generateHeadlineClip({ ...fakeDependencies(directory, anchor, font), finisher: fakeFinisher((request) => { finished = request.plannedDurationSeconds; return request.plannedDurationSeconds; }) });
     assert.equal(finished, 4);
     await rm(join(directory, 'clip-safe-1.mp4')); await rm(join(directory, 'clip-safe-1.json'));
-    await assert.rejects(generateHeadlineClip({ ...fakeDependencies(directory, anchor, font), createVideoClient: () => ({ provider: 'fake-video', model: 'fake-model', generatePresenterVideo: async () => ({ ...video(4), rawDurationSeconds: 15 }) }) }), /incompatible with the selected duration plan/);
+    await assert.rejects(generateHeadlineClip({ ...fakeDependencies(directory, anchor, font), createVideoClient: () => ({ provider: 'fake-video', model: 'fake-model', promptAssetIdentity, generatePresenterVideo: async () => ({ ...video(4), rawDurationSeconds: 15 }) }) }), /incompatible with the selected duration plan/);
     await assert.rejects(readFile(join(directory, 'clip-safe-1.mp4')));
     await assert.rejects(readFile(join(directory, 'clip-safe-1.json')));
-    await assert.rejects(generateHeadlineClip({ ...fakeDependencies(directory, anchor, font), createVideoClient: () => ({ provider: 'fake-video', model: 'fake-model', generatePresenterVideo: async () => ({ ...video(4), operationId: '/tmp/provider-response' }) }) }), /provenance was unsafe/);
+    await assert.rejects(generateHeadlineClip({ ...fakeDependencies(directory, anchor, font), createVideoClient: () => ({ provider: 'fake-video', model: 'fake-model', promptAssetIdentity, generatePresenterVideo: async () => ({ ...video(4), operationId: '/tmp/provider-response' }) }) }), /provenance was unsafe/);
     await assert.rejects(readFile(join(directory, 'clip-safe-1.mp4')));
     await assert.rejects(readFile(join(directory, 'clip-safe-1.json')));
   });
@@ -90,7 +91,7 @@ test('headline defaults through the Agent Platform client while an injected clie
 
 test('headline sidecar records safe Agent Platform provider/model identity without changing its schema', async () => {
   await withAssets(async (directory, anchor, font) => {
-    await generateHeadlineClip({ ...fakeDependencies(directory, anchor, font), createVideoClient: () => ({ provider: 'google-agent-platform-veo', model: 'veo-3.1-generate-001', generatePresenterVideo: async (request: { maxSeconds: number }) => ({ ...video(request.maxSeconds), provider: 'google-agent-platform-veo', model: 'veo-3.1-generate-001' }) }) });
+    await generateHeadlineClip({ ...fakeDependencies(directory, anchor, font), createVideoClient: () => ({ provider: 'google-agent-platform-veo', model: 'veo-3.1-generate-001', promptAssetIdentity, generatePresenterVideo: async (request: { maxSeconds: number }) => ({ ...video(request.maxSeconds), provider: 'google-agent-platform-veo', model: 'veo-3.1-generate-001' }) }) });
     const sidecar = JSON.parse(await readFile(join(directory, 'clip-safe-1.json'), 'utf8'));
     validateHeadlineSidecar(sidecar);
     assert.deepEqual(sidecar.videoProvider.provider, 'google-agent-platform-veo');
@@ -136,7 +137,7 @@ test('headline workflow rejects selected-font lower-third overflow before provid
 });
 
 function fakeDependencies(directory: string, anchor: string, font: string, text = 'A short factual presenter sentence.') {
-  return { inputFile: manifest, articleId: 'example-article-1', anchorReferencePaths: [anchor], fontPath: font, artifactsRoot: directory, createClipId: () => 'clip-safe-1', createTextClient: () => ({ provider: 'fake-text', model: 'fake-model', generateStructuredJson: async () => ({ provider: 'fake-text', model: 'fake-model', requestId: 'request-1', outputText: JSON.stringify({ text }) }) }), createVideoClient: () => ({ provider: 'fake-video', model: 'fake-model', generatePresenterVideo: async (request: { maxSeconds: number }) => video(request.maxSeconds) }), finisher: fakeFinisher((request) => request.plannedDurationSeconds) };
+  return { inputFile: manifest, articleId: 'example-article-1', anchorReferencePaths: [anchor], fontPath: font, artifactsRoot: directory, createClipId: () => 'clip-safe-1', createTextClient: () => ({ provider: 'fake-text', model: 'fake-model', generateStructuredJson: async () => ({ provider: 'fake-text', model: 'fake-model', requestId: 'request-1', outputText: JSON.stringify({ text }) }) }), createVideoClient: () => ({ provider: 'fake-video', model: 'fake-model', promptAssetIdentity, generatePresenterVideo: async (request: { maxSeconds: number }) => video(request.maxSeconds) }), finisher: fakeFinisher((request) => request.plannedDurationSeconds) };
 }
 function video(plannedDurationSeconds: number) { const durationPlan = planPresenterVideoDuration(plannedDurationSeconds); const operationIds = Array.from({ length: durationPlan.extensionCount + 1 }, (_, index) => `operation-${index + 1}`); return { provider: 'fake-video', model: 'fake-model', requestId: operationIds[0], operationId: operationIds.at(-1), operationIds, generationOperationCount: durationPlan.extensionCount + 1, mimeType: 'video/mp4', bytes: new Uint8Array([1]), rawDurationSeconds: durationPlan.rawProviderDurationSeconds, durationPlan }; }
 function fakeFinisher(duration: (request: { readonly plannedDurationSeconds: number }) => number) { return { preflightLowerThird: async (request: { headline: string; sourceDisplayName: string }) => ({ headline: request.headline, sourceDisplayName: request.sourceDisplayName }), finish: async (request: { outputPath: string; plannedDurationSeconds: number }) => { await writeFile(request.outputPath, 'finished'); return { outputPath: request.outputPath, ffmpegVersion: 'ffmpeg version fake', durationMs: 1, probe: { durationSeconds: duration(request), containerNames: ['mp4'], streamTypes: ['video', 'audio'], video: { codecName: 'h264', width: 1080, height: 1920, pixelFormat: 'yuv420p', averageFrameRate: { numerator: 30, denominator: 1, value: 30 } }, audio: { codecName: 'aac', sampleRate: 48000, channels: 2 } } }; } }; }

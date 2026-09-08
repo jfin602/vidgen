@@ -14,6 +14,7 @@ import {
   type SpeechGenerationResult,
   type VideoGenerationClient,
   type VideoGenerationResult,
+  type VeoPromptAssetIdentity,
 } from '../core/generated-media.ts';
 import {
   DEFAULT_MAX_ANCHOR_REFERENCE_BYTES,
@@ -30,8 +31,8 @@ import { VIDGEN_ENGINE_VERSION } from '../version.ts';
 
 export const MEDIA_RUN_ARTIFACT_NAME = 'media-run.json';
 export const GENERATED_MEDIA_ARTIFACT_NAME = 'generated-media.json';
-export const GENERATED_MEDIA_SCHEMA_VERSION = '1';
-export const GENERATED_MEDIA_INPUT_CONTRACT_VERSION = '1';
+export const GENERATED_MEDIA_SCHEMA_VERSION = '2';
+export const GENERATED_MEDIA_INPUT_CONTRACT_VERSION = '2';
 export { DEFAULT_MAX_ANCHOR_REFERENCE_BYTES } from '../core/anchor-reference.ts';
 export const DEFAULT_MAX_GENERATED_ASSET_BYTES = 100_000_000;
 
@@ -52,6 +53,7 @@ export interface MediaUnitRecord {
   readonly mimeType?: string;
   readonly provider?: string;
   readonly configuredModel?: string;
+  readonly promptAssetIdentity?: VeoPromptAssetIdentity;
   readonly returnedModel?: string;
   readonly voice?: string;
   readonly requestId?: string;
@@ -343,7 +345,7 @@ function effectiveFingerprint(workspace: ValidatedPlannedWorkspace, unit: Genera
   const isSpeech = unit.role.kind === 'voiceover';
   const client = isSpeech ? speech : video;
   if (client === undefined) throw new VidGenError('configuration', 'Required generated-media client is unavailable.');
-  return sha256(canonicalJson({ contractVersion: GENERATED_MEDIA_INPUT_CONTRACT_VERSION, clipPlanFingerprint: workspace.clipPlanFingerprint, template: { id: workspace.template.id, version: workspace.template.version }, unit, provider: client.provider, configuredModel: client.model, ...(isSpeech ? { voice: speech!.voice } : {}), ...(unit.role.kind === 'presenter' ? { referenceImages: references.map(({ sha256: hash, mimeType }) => ({ sha256: hash, mimeType })) } : {}), ...(isSpeech ? {} : { requestMode: 'veo-portrait-720p' }) }));
+  return sha256(canonicalJson({ contractVersion: GENERATED_MEDIA_INPUT_CONTRACT_VERSION, clipPlanFingerprint: workspace.clipPlanFingerprint, template: { id: workspace.template.id, version: workspace.template.version }, unit, provider: client.provider, configuredModel: client.model, ...(isSpeech ? { voice: speech!.voice } : { promptAssetIdentity: video!.promptAssetIdentity, requestMode: 'veo-portrait-720p' }), ...(unit.role.kind === 'presenter' ? { referenceImages: references.map(({ sha256: hash, mimeType }) => ({ sha256: hash, mimeType })) } : {}) }));
 }
 
 function pendingRecord(unit: GeneratedMediaUnit, fingerprint: string): MediaUnitRecord { return { unitId: unit.unitId, segment: unit.segment, role: unit.role, effectiveGenerationInputFingerprint: fingerprint, status: 'pending' }; }
@@ -354,7 +356,7 @@ async function persistGeneratedResult(directory: string, unit: GeneratedMediaUni
   await writeBinaryAtomically(join(directory, ...assetPath.split('/')), result.bytes);
   const provider = result.provider;
   const configuredModel = unit.role.kind === 'voiceover' ? speech!.model : video!.model;
-  return { unitId: unit.unitId, segment: unit.segment, role: unit.role, effectiveGenerationInputFingerprint: fingerprint, status: 'ready', provenance: 'generated', assetPath, sha256: sha256(result.bytes), byteSize: result.bytes.byteLength, mimeType: result.mimeType, provider, configuredModel, returnedModel: result.model, ...(unit.role.kind === 'voiceover' ? { voice: (result as SpeechGenerationResult).voice } : {}), ...(result.requestId === undefined ? {} : { requestId: result.requestId }), ...(result.operationId === undefined ? {} : { operationId: result.operationId }), ...('operationIds' in result && result.operationIds !== undefined ? { operationIds: result.operationIds } : {}), ...('generationOperationCount' in result && result.generationOperationCount !== undefined ? { generationOperationCount: result.generationOperationCount } : {}), ...(result.durationSeconds === undefined ? {} : { durationSeconds: result.durationSeconds }) };
+  return { unitId: unit.unitId, segment: unit.segment, role: unit.role, effectiveGenerationInputFingerprint: fingerprint, status: 'ready', provenance: 'generated', assetPath, sha256: sha256(result.bytes), byteSize: result.bytes.byteLength, mimeType: result.mimeType, provider, configuredModel, returnedModel: result.model, ...(unit.role.kind === 'voiceover' ? { voice: (result as SpeechGenerationResult).voice } : { promptAssetIdentity: video!.promptAssetIdentity }), ...(result.requestId === undefined ? {} : { requestId: result.requestId }), ...(result.operationId === undefined ? {} : { operationId: result.operationId }), ...('operationIds' in result && result.operationIds !== undefined ? { operationIds: result.operationIds } : {}), ...('generationOperationCount' in result && result.generationOperationCount !== undefined ? { generationOperationCount: result.generationOperationCount } : {}), ...(result.durationSeconds === undefined ? {} : { durationSeconds: result.durationSeconds }) };
 }
 
 function reusablePriorRecord(prior: unknown, workspace: ValidatedPlannedWorkspace, unit: GeneratedMediaUnit, fingerprint: string): MediaUnitRecord | undefined {
@@ -377,7 +379,7 @@ async function readJson(path: string): Promise<unknown> { try { return JSON.pars
 async function readOptionalJson(path: string): Promise<unknown | undefined> { try { return await readJson(path); } catch { return undefined; } }
 async function removeIfExists(path: string): Promise<void> { try { await rm(path); } catch (cause: any) { if (cause?.code !== 'ENOENT') throw new VidGenError('artifact', 'Unable to invalidate generated-media manifest.', { cause }); } }
 
-function validateReadyRecord(value: unknown, unit: GeneratedMediaUnit): MediaUnitRecord { const record = object(value, 'Generated-media asset'); rejectExtra(record, ['unitId', 'segment', 'role', 'effectiveGenerationInputFingerprint', 'status', 'provenance', 'assetPath', 'sha256', 'byteSize', 'mimeType', 'provider', 'configuredModel', 'returnedModel', 'voice', 'requestId', 'operationId', 'operationIds', 'generationOperationCount', 'durationSeconds', 'failure'], 'Generated-media asset'); if (record.status !== 'ready' || record.unitId !== unit.unitId || !sameSegment(record.segment, unit.segment) || !sameRole(record.role, unit.role) || !isHash(record.effectiveGenerationInputFingerprint) || typeof record.assetPath !== 'string' || !safeRelativePath(record.assetPath) || !isHash(record.sha256) || !Number.isSafeInteger(record.byteSize) || record.byteSize < 1 || typeof record.mimeType !== 'string' || typeof record.provider !== 'string' || typeof record.configuredModel !== 'string' || typeof record.returnedModel !== 'string') throw invalidMedia('Generated-media manifest contains an invalid asset.'); if (record.assetPath !== expectedAsset(unit).path || record.mimeType !== expectedAsset(unit).mimeType) throw invalidMedia('Generated-media manifest asset path or media type is incompatible.'); return record as MediaUnitRecord; }
+function validateReadyRecord(value: unknown, unit: GeneratedMediaUnit): MediaUnitRecord { const record = object(value, 'Generated-media asset'); rejectExtra(record, ['unitId', 'segment', 'role', 'effectiveGenerationInputFingerprint', 'status', 'provenance', 'assetPath', 'sha256', 'byteSize', 'mimeType', 'provider', 'configuredModel', 'promptAssetIdentity', 'returnedModel', 'voice', 'requestId', 'operationId', 'operationIds', 'generationOperationCount', 'durationSeconds', 'failure'], 'Generated-media asset'); if (record.status !== 'ready' || record.unitId !== unit.unitId || !sameSegment(record.segment, unit.segment) || !sameRole(record.role, unit.role) || !isHash(record.effectiveGenerationInputFingerprint) || typeof record.assetPath !== 'string' || !safeRelativePath(record.assetPath) || !isHash(record.sha256) || !Number.isSafeInteger(record.byteSize) || record.byteSize < 1 || typeof record.mimeType !== 'string' || typeof record.provider !== 'string' || typeof record.configuredModel !== 'string' || typeof record.returnedModel !== 'string' || (unit.role.kind === 'voiceover' ? record.promptAssetIdentity !== undefined : !isPromptAssetIdentity(record.promptAssetIdentity))) throw invalidMedia('Generated-media manifest contains an invalid asset.'); if (record.assetPath !== expectedAsset(unit).path || record.mimeType !== expectedAsset(unit).mimeType) throw invalidMedia('Generated-media manifest asset path or media type is incompatible.'); return record as MediaUnitRecord; }
 function validateReferenceIdentity(value: unknown, ordinal: number): ReferenceImageIdentity { const reference = object(value, 'Generated-media reference'); rejectExtra(reference, ['ordinal', 'basename', 'mimeType', 'sha256', 'byteSize'], 'Generated-media reference'); if (reference.ordinal !== ordinal || typeof reference.basename !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$/.test(reference.basename) || !['image/png', 'image/jpeg', 'image/webp'].includes(reference.mimeType as string) || !isHash(reference.sha256) || !Number.isSafeInteger(reference.byteSize) || (reference.byteSize as number) < 1) throw invalidMedia('Generated-media manifest contains an invalid reference identity.'); return reference as ReferenceImageIdentity; }
 function sha256(value: string | Uint8Array): string { return createHash('sha256').update(value).digest('hex'); }
 function timestamp(date: Date): string { if (Number.isNaN(date.valueOf())) throw new VidGenError('invalid_argument', 'Media clock produced an invalid timestamp.'); return date.toISOString(); }
@@ -388,6 +390,7 @@ function stringValue(value: Record<string, unknown>, key: string): string { if (
 function isRecord(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === 'object' && !Array.isArray(value); }
 function isSafeId(value: unknown): boolean { return typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value); }
 function isHash(value: unknown): boolean { return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value); }
+function isPromptAssetIdentity(value: unknown): value is VeoPromptAssetIdentity { return isRecord(value) && typeof value.basename === 'string' && /^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$/.test(value.basename) && isHash(value.sha256) && Number.isSafeInteger(value.byteSize) && value.byteSize > 0 && Object.keys(value).length === 3; }
 function isTemplate(value: unknown): value is Record<string, unknown> { return isRecord(value) && typeof value.id === 'string' && value.id.trim().length > 0 && typeof value.version === 'string' && value.version.trim().length > 0; }
 function sameTemplate(left: unknown, right: unknown): boolean { return isTemplate(left) && isTemplate(right) && left.id === right.id && left.version === right.version; }
 function sameSegment(left: unknown, right: GeneratedMediaUnit['segment']): boolean { return isRecord(left) && left.id === right.id && left.startSeconds === right.startSeconds && left.endSeconds === right.endSeconds; }

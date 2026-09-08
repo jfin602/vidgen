@@ -16,6 +16,7 @@ import { writeJsonAtomically } from '../../../src/shared/atomic-json.ts';
 
 const storyFingerprint = 'a'.repeat(64);
 const runId = 'planned-media-test';
+const promptAssetIdentity = { basename: 'veo-prompts.json', sha256: 'c'.repeat(64), byteSize: 1 };
 
 test('media workflow dispatches the deterministic five units, persists a complete manifest, and reuses matching assets', async () => {
   await withWorkspace(async (directory) => {
@@ -29,6 +30,7 @@ test('media workflow dispatches the deterministic five units, persists a complet
     const manifest = JSON.parse(await readFile(join(directory, GENERATED_MEDIA_ARTIFACT_NAME), 'utf8')) as any;
     assert.deepEqual(manifest.assets.map((asset: any) => asset.unitId), ['u01', 'u02', 'u03', 'u04', 'u05']);
     assert.deepEqual(manifest.assets.map((asset: any) => asset.assetPath), ['assets/presenter/u01.mp4', 'assets/video/u02.mp4', 'assets/audio/u03.wav', 'assets/presenter/u04.mp4', 'assets/presenter/u05.mp4']);
+    assert.deepEqual(manifest.assets.filter((asset: any) => asset.role.kind !== 'voiceover').map((asset: any) => asset.promptAssetIdentity), [promptAssetIdentity, promptAssetIdentity, promptAssetIdentity, promptAssetIdentity]);
     assert.equal(JSON.stringify(manifest).includes(directory), false);
     assert.equal(JSON.stringify(manifest).includes('anchor.png'), true);
     const second = fakes();
@@ -165,6 +167,17 @@ test('Agent Platform provider identity invalidates legacy cinematic reuse withou
   });
 });
 
+test('a changed Veo prompt asset regenerates every video unit while reusing voiceover', async () => {
+  await withWorkspace(async (directory) => {
+    const reference = join(directory, 'anchor.png'); await writeFile(reference, png(1));
+    await generateStoryMedia({ storyDirectory: directory, anchorReferencePaths: [reference], ...fakes(), now: clock() });
+    const changed = fakes('video-v1', 'speech-v1', 'voice-a', 'fake-video', 'fake-speech', 'd'.repeat(64));
+    await generateStoryMedia({ storyDirectory: directory, anchorReferencePaths: [reference], ...changed, now: clock() });
+    assert.deepEqual(changed.videoUnits, ['u01', 'u02', 'u04', 'u05']);
+    assert.deepEqual(changed.speechUnits, []);
+  });
+});
+
 test('Agent Platform speech provider identity invalidates legacy voiceover reuse', async () => {
   await withWorkspace(async (directory) => {
     const reference = join(directory, 'anchor.png'); await writeFile(reference, png(1));
@@ -191,9 +204,9 @@ test('shared approved anchor references retain local MIME, byte, and hash valida
   });
 });
 
-function fakes(videoModel = 'video-v1', speechModel = 'speech-v1', voice = 'voice-a', videoProvider = 'fake-video', speechProvider = 'fake-speech') {
+function fakes(videoModel = 'video-v1', speechModel = 'speech-v1', voice = 'voice-a', videoProvider = 'fake-video', speechProvider = 'fake-speech', promptHash = 'c'.repeat(64)) {
   const videoUnits: string[] = []; const speechUnits: string[] = [];
-  const video: VideoGenerationClient = { provider: videoProvider, model: videoModel, generateVideo: async (request) => { videoUnits.push(request.unit.unitId); return videoResult(request.unit.unitId, videoProvider); } };
+  const video: VideoGenerationClient = { provider: videoProvider, model: videoModel, promptAssetIdentity: { ...promptAssetIdentity, sha256: promptHash }, generateVideo: async (request) => { videoUnits.push(request.unit.unitId); return videoResult(request.unit.unitId, videoProvider); } };
   const speech: SpeechGenerationClient = { provider: speechProvider, model: speechModel, voice, generateSpeech: async (request) => { speechUnits.push(request.unit.unitId); return { provider: speechProvider, model: speechModel, voice, requestId: `s-${request.unit.unitId}`, mimeType: 'audio/wav', bytes: new Uint8Array([82, 73, 70, 70, 1]), durationSeconds: 1 }; } };
   return { video, speech, videoUnits, speechUnits, createVideoClient: () => video, createSpeechClient: () => speech };
 }

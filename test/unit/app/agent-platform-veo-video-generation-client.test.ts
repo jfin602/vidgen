@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import test from 'node:test';
 
 import { createApprovedReferenceImage, type GeneratedMediaUnit } from '../../../src/core/generated-media.ts';
 import { planPresenterVideoDuration } from '../../../src/core/presenter-video.ts';
 import { VidGenError } from '../../../src/core/error.ts';
+import { join } from 'node:path';
 import {
   GOOGLE_CLOUD_LOCATION_ENV,
   GOOGLE_CLOUD_PROJECT_ENV,
@@ -14,12 +17,14 @@ import {
   type GoogleAgentPlatformVeoEnvironment,
   type GoogleAgentPlatformVeoVideoGenerationClientOptions,
 } from '../../../src/integrations/google/agent-platform-veo-video-generation.ts';
+import { loadVeoPromptSpec, renderVeoPrompt } from '../../../src/integrations/google/veo-prompt-spec.ts';
 
 const project = 'vidgen-test-project';
 const model = 'veo-3.1-generate-001';
 const token = 'agent-platform-test-token-never-surface';
 const storyText = 'A city council approved the pilot program after a public meeting.';
 const image = createApprovedReferenceImage('image/png', new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 3]));
+const promptFile = join(process.cwd(), 'test', 'fixtures', 'veo-prompts.json');
 
 test('Agent Platform Veo uses injected ADC bearer auth and documented regional inline request/result shapes', async () => {
   const calls: FetchCall[] = []; let authCalls = 0;
@@ -31,7 +36,7 @@ test('Agent Platform Veo uses injected ADC bearer auth and documented regional i
   const headers = new Headers(calls[0]!.init.headers);
   assert.equal(headers.get('authorization'), `Bearer ${token}`); assert.equal(headers.get('x-goog-api-key'), null);
   assert.deepEqual(body(calls[0]!).parameters, { aspectRatio: '9:16', durationSeconds: 8, resolution: '720p', sampleCount: 1 });
-  assert.match(String((body(calls[0]!).instances as Array<Record<string, unknown>>)[0]!.prompt), /Create a portrait news B-roll video\..*Do not add dialogue or voice narration\./);
+  assert.match(String((body(calls[0]!).instances as Array<Record<string, unknown>>)[0]!.prompt), /^CINEMATIC_CONTENT_INITIAL:/);
   assert.equal(JSON.stringify(body(calls[0]!)).includes('storageUri'), false);
 });
 
@@ -46,12 +51,59 @@ test('Agent Platform Veo sends one to three PNG/JPEG asset references exactly an
     { image: { bytesBase64Encoded: Buffer.from(jpeg.bytes).toString('base64'), mimeType: 'image/jpeg' }, referenceType: 'asset' },
     { image: { bytesBase64Encoded: Buffer.from(image.bytes).toString('base64'), mimeType: 'image/png' }, referenceType: 'asset' },
   ]);
-  assert.match(String((body(calls[0]!).instances as Array<Record<string, unknown>>)[0]!.prompt), new RegExp(`assigned dialogue: "${storyText}"`));
+  assert.match(String((body(calls[0]!).instances as Array<Record<string, unknown>>)[0]!.prompt), new RegExp(`DIALOGUE=${storyText}`));
   let authCalls = 0; let fetchCalls = 0;
   const webp = createApprovedReferenceImage('image/webp', new Uint8Array([1]));
   const rejecting = clientFor(async () => { fetchCalls += 1; return operation('bad', true, videoBytes([1])); }, { getAccessToken: async () => { authCalls += 1; return token; } });
   await assert.rejects(rejecting.generateVideo({ unit: presenterUnit(8), referenceImages: [webp] }), safeError);
   assert.equal(authCalls, 0); assert.equal(fetchCalls, 0);
+});
+
+test('all seven Veo request shapes use the configured templates and preserve dynamic values', async () => {
+  const prompts: string[] = [];
+  const collect = async (run: (client: GoogleAgentPlatformVeoVideoGenerationClient) => Promise<void>, responses: Response[]) => {
+    const calls: FetchCall[] = []; await run(clientFor(sequenceFetch(calls, responses))); prompts.push(...calls.map((call) => String((body(call).instances as Array<Record<string, unknown>>)[0]!.prompt)));
+  };
+  await collect((client) => client.generatePresenterVideo({ spokenText: 'short dialogue', referenceImages: [image], maxSeconds: 4 }), [operation('simple-initial', true, videoBytes([1]))]);
+  await collect((client) => client.generatePresenterVideo({ spokenText: Array.from({ length: 22 }, (_, index) => `word${index}`).join(' '), referenceImages: [image], maxSeconds: 9 }), [operation('simple-with-extension', true, videoBytes([1])), operation('simple-extension', true, videoBytes([2]))]);
+  await collect((client) => client.generateVideo({ unit: presenterUnit(9), referenceImages: [image] }), [operation('presenter-initial', true, videoBytes([1])), operation('presenter-extension', true, videoBytes([2]))]);
+  await collect((client) => client.generateVideo({ unit: contentUnit(9) }), [operation('content-initial', true, videoBytes([1])), operation('content-extension', true, videoBytes([2]))]);
+  assert.deepEqual(prompts.map((prompt) => prompt.split(':')[0]), ['SIMPLE_INITIAL', 'SIMPLE_INITIAL_EXTENSION', 'SIMPLE_EXTENSION', 'CINEMATIC_PRESENTER_INITIAL', 'CINEMATIC_PRESENTER_EXTENSION', 'CINEMATIC_CONTENT_INITIAL', 'CINEMATIC_CONTENT_EXTENSION']);
+  assert.equal(prompts[0]!.includes('DIALOGUE=short dialogue'), true);
+  assert.equal(prompts[3]!.includes(`spoken hook: ${storyText}`), true);
+  assert.equal(prompts[4]!.includes(`spoken hook: ${storyText}`), true);
+  assert.equal(prompts[5]!.includes(`spoken narration: ${storyText}`), true);
+  assert.equal(prompts[6]!.includes(`spoken narration: ${storyText}`), true);
+  assert.equal(prompts.some((prompt) => prompt.includes('undefined')), false);
+  assert.equal(prompts.some((prompt) => prompt.includes('{{')), false);
+});
+
+test('prompt specs fail safely, substitute once, and use one stable byte snapshot', async () => {
+  const loaded = loadVeoPromptSpec({ VIDGEN_VEO_PROMPT_FILE: promptFile });
+  assert.equal(renderVeoPrompt('simplePresenterInitial', loaded.templates.simplePresenterInitial, { dialogue: '{{context}}', context: 'ignored', retainedExtensionSeconds: 'ignored' }).includes('{{context}}'), true);
+  await withPromptFile(async (path) => {
+    const source = JSON.parse(await readFile(promptFile, 'utf8')) as Record<string, string>;
+    await writeFile(path, JSON.stringify({ ...source, simplePresenterInitial: 'changed {{dialogue}}' }));
+    const snapshotCalls: FetchCall[] = []; const first = new GoogleAgentPlatformVeoVideoGenerationClient({ environment: environment(path), fetch: sequenceFetch(snapshotCalls, [operation('snapshot', true, videoBytes([1]))]), getAccessToken: async () => token, pollIntervalMs: 1, sleep: async () => {} });
+    await writeFile(path, JSON.stringify({ ...source, simplePresenterInitial: 'later {{dialogue}}' }));
+    const calls: FetchCall[] = []; const stable = new GoogleAgentPlatformVeoVideoGenerationClient({ environment: environment(path), fetch: sequenceFetch(calls, [operation('later', true, videoBytes([1]))]), getAccessToken: async () => token, pollIntervalMs: 1, sleep: async () => {} });
+    const firstCalls: FetchCall[] = []; const fixed = new GoogleAgentPlatformVeoVideoGenerationClient({ environment: environment(promptFile), fetch: sequenceFetch(firstCalls, [operation('fixed', true, videoBytes([1]))]), getAccessToken: async () => token, pollIntervalMs: 1, sleep: async () => {} });
+    await first.generatePresenterVideo({ spokenText: 'literal {{context}}', referenceImages: [image], maxSeconds: 4 });
+    await stable.generatePresenterVideo({ spokenText: 'dialogue', referenceImages: [image], maxSeconds: 4 });
+    await fixed.generatePresenterVideo({ spokenText: 'dialogue', referenceImages: [image], maxSeconds: 4 });
+    assert.match(String((body(snapshotCalls[0]!).instances as Array<Record<string, unknown>>)[0]!.prompt), /^changed literal \{\{context\}\}/);
+    assert.match(String((body(firstCalls[0]!).instances as Array<Record<string, unknown>>)[0]!.prompt), /^SIMPLE_INITIAL:/);
+    assert.match(String((body(calls[0]!).instances as Array<Record<string, unknown>>)[0]!.prompt), /^later /);
+  });
+  await withPromptFile(async (path) => {
+    await writeFile(path, JSON.stringify({ simplePresenterInitial: 'x' }));
+    let auth = 0; let network = 0;
+    assert.throws(() => new GoogleAgentPlatformVeoVideoGenerationClient({ environment: environment(path), fetch: async () => { network += 1; return operation('never', true, videoBytes([1])); }, getAccessToken: async () => { auth += 1; return token; } }), (error: unknown) => hasConfiguration(error) && !String(error).includes(path));
+    assert.equal(auth, 0); assert.equal(network, 0);
+    const source = JSON.parse(await readFile(promptFile, 'utf8')) as Record<string, string>;
+    await writeFile(path, JSON.stringify({ ...source, simplePresenterInitial: '{{unknown}}' }));
+    assert.throws(() => new GoogleAgentPlatformVeoVideoGenerationClient({ environment: environment(path) }), hasConfiguration);
+  });
 });
 
 test('Agent Platform Veo accepts a name-only start as pending and polls its exact full operation name', async () => {
@@ -113,7 +165,7 @@ test('Agent Platform Veo preserves simple retained-window speech timing and uses
       assert.equal(JSON.stringify(body(calls[1]!)).includes(Buffer.from(videoBytes([1])).toString('base64')), true);
       const prompts = calls.map((call) => String((body(call).instances as Array<Record<string, unknown>>)[0]!.prompt));
       const dialogue = prompts.map(assignedDialogue).join(' '); assert.equal(dialogue, words);
-      assert.match(prompts[1]!, new RegExp(`first ${Math.min(seconds, 15) - 8} seconds`));
+      assert.match(prompts[1]!, new RegExp(`within ${Math.min(seconds, 15) - 8} seconds`));
     }
   });
 });
@@ -124,7 +176,7 @@ test('Agent Platform Veo preserves cinematic extension provenance and safely rej
     const result = await clientFor(sequenceFetch(calls, [operation('initial', true, videoBytes([7])), operation('extension', true, videoBytes([8]))])).generateVideo({ unit: contentUnit(9) });
     assert.deepEqual(result.operationIds, [operationName('initial'), operationName('extension')]); assert.equal(result.durationSeconds, 15);
     assert.equal(JSON.stringify(body(calls[1]!)).includes(Buffer.from(videoBytes([7])).toString('base64')), true);
-    assert.match(String((body(calls[1]!).instances as Array<Record<string, unknown>>)[0]!.prompt), /Continue the same supplied visual treatment.*Do not add dialogue or voice narration\./);
+    assert.match(String((body(calls[1]!).instances as Array<Record<string, unknown>>)[0]!.prompt), /^CINEMATIC_CONTENT_EXTENSION:/);
   });
   const cases: readonly [string, FetchImplementation, ClientOptions?][] = [
     ['auth', async () => operation('never', true, videoBytes([1])), { getAccessToken: async () => { throw new Error(token); } }],
@@ -152,7 +204,9 @@ test('unsafe Agent Platform configuration fails in construction before auth or n
 
 interface FetchCall { readonly url: string | URL | Request; readonly init: RequestInit; }
 type ClientOptions = Omit<GoogleAgentPlatformVeoVideoGenerationClientOptions, 'environment' | 'fetch'>;
-function clientFor(fetch: FetchImplementation, options: ClientOptions = {}, overrides: GoogleAgentPlatformVeoEnvironment = {}): GoogleAgentPlatformVeoVideoGenerationClient { return new GoogleAgentPlatformVeoVideoGenerationClient({ environment: { [GOOGLE_CLOUD_PROJECT_ENV]: project, [GOOGLE_CLOUD_LOCATION_ENV]: 'us-central1', [VIDGEN_VIDEO_MODEL_ENV]: model, ...overrides }, fetch, getAccessToken: async () => token, pollIntervalMs: 1, sleep: async () => {}, ...options }); }
+function clientFor(fetch: FetchImplementation, options: ClientOptions = {}, overrides: GoogleAgentPlatformVeoEnvironment = {}): GoogleAgentPlatformVeoVideoGenerationClient { return new GoogleAgentPlatformVeoVideoGenerationClient({ environment: { [GOOGLE_CLOUD_PROJECT_ENV]: project, [GOOGLE_CLOUD_LOCATION_ENV]: 'us-central1', [VIDGEN_VIDEO_MODEL_ENV]: model, VIDGEN_VEO_PROMPT_FILE: promptFile, ...overrides }, fetch, getAccessToken: async () => token, pollIntervalMs: 1, sleep: async () => {}, ...options }); }
+function environment(path: string): GoogleAgentPlatformVeoEnvironment { return { [GOOGLE_CLOUD_PROJECT_ENV]: project, [GOOGLE_CLOUD_LOCATION_ENV]: 'us-central1', [VIDGEN_VIDEO_MODEL_ENV]: model, VIDGEN_VEO_PROMPT_FILE: path }; }
+async function withPromptFile(run: (path: string) => Promise<void>): Promise<void> { const directory = await mkdtemp(join(tmpdir(), 'vidgen-prompts-')); const path = join(directory, 'veo-prompts.json'); try { await run(path); } finally { await rm(directory, { recursive: true, force: true }); } }
 function sequenceFetch(calls: FetchCall[], responses: Response[]): FetchImplementation { return async (url, init = {}) => { calls.push({ url, init }); const response = responses.shift(); if (response === undefined) throw new Error('unexpected fetch'); return response; }; }
 function operation(id: string, done: boolean, bytes?: Uint8Array): Response { return json({ name: operationName(id), done, ...(done && bytes === undefined ? { response: { videos: [] } } : {}), ...(bytes === undefined ? {} : { response: { videos: [{ mimeType: 'video/mp4', bytesBase64Encoded: Buffer.from(bytes).toString('base64') }] } }) }); }
 function operationName(id: string): string { return `projects/${project}/locations/us-central1/publishers/google/models/${model}/operations/${id}`; }
@@ -161,6 +215,6 @@ function body(call: FetchCall): Record<string, unknown> { return JSON.parse(Stri
 function videoBytes(bytes: number[]): Uint8Array { return new Uint8Array([0, 0, 0, 16, 0x66, 0x74, 0x79, 0x70, ...bytes]); }
 function contentUnit(seconds: number): GeneratedMediaUnit { return { unitId: 'u02', segment: { id: 'content', startSeconds: 5, endSeconds: 5 + seconds }, role: { id: 'content-video', kind: 'video' }, targetDurationSeconds: seconds, content: [{ slotId: 'narration', usage: 'spoken', text: storyText }], spokenText: storyText }; }
 function presenterUnit(seconds: number): GeneratedMediaUnit { return { unitId: 'u01', segment: { id: 'hook', startSeconds: 0, endSeconds: seconds }, role: { id: 'opening-anchor', kind: 'presenter' }, targetDurationSeconds: seconds, content: [{ slotId: 'hook', usage: 'spoken', text: storyText }], spokenText: storyText }; }
-function assignedDialogue(prompt: string): string { const match = /assigned dialogue: "([\s\S]*?)"\./.exec(prompt); assert.notEqual(match, null); return match![1]!; }
+function assignedDialogue(prompt: string): string { const match = /DIALOGUE=([\s\S]*?)\./.exec(prompt); assert.notEqual(match, null); return match![1]!; }
 function hasConfiguration(error: unknown): boolean { return error instanceof VidGenError && error.code === 'configuration'; }
 function safeError(error: unknown): boolean { const message = error instanceof Error ? error.message : String(error); assert.equal(message.includes(token), false); assert.equal(message.includes(storyText), false); return error instanceof VidGenError && error.code === 'generated_media'; }

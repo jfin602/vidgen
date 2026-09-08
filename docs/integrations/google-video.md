@@ -105,9 +105,13 @@ The Agent Platform adapter layer returns only the neutral media/model result req
 
 ## Runtime configuration
 
-Runtime configuration may include capability-specific model, project, location, credential, timeout, polling, and staging settings. Text uses `GEMINI_API_KEY`, `GOOGLE_CLOUD_PROJECT`, and `VIDGEN_TEXT_MODEL`; Veo uses ADC plus `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, and `VIDGEN_VIDEO_MODEL`; speech uses ADC plus `GOOGLE_CLOUD_PROJECT`, `VIDGEN_TTS_MODEL`, `VIDGEN_TTS_VOICE`, and `VIDGEN_TTS_LANGUAGE_CODE`.
+Runtime configuration may include capability-specific model, project, location, credential, timeout, polling, and staging settings. Text uses `GEMINI_API_KEY`, `GOOGLE_CLOUD_PROJECT`, and `VIDGEN_TEXT_MODEL`; Veo uses ADC plus `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, `VIDGEN_VIDEO_MODEL`, and required `VIDGEN_VEO_PROMPT_FILE`; speech uses ADC plus `GOOGLE_CLOUD_PROJECT`, `VIDGEN_TTS_MODEL`, `VIDGEN_TTS_VOICE`, and `VIDGEN_TTS_LANGUAGE_CODE`.
 
 Provider/model selections remain VidGen runtime configuration, not template or upstream control data.
+
+`VIDGEN_VEO_PROMPT_FILE` names one local, regular UTF-8 JSON file (production commonly uses `/home/deploy/vidgen-assets/prompts/veo-prompts.json`; that asset is deployed by the operator). It has exactly these nonblank templates: `simplePresenterInitial`, `simplePresenterInitialWithExtension`, `simplePresenterExtension`, `cinematicPresenterInitial`, `cinematicPresenterExtension`, `cinematicContentInitial`, and `cinematicContentExtension`. The permitted placeholders are fixed: `{{dialogue}}`, `{{context}}`, and `{{retainedExtensionSeconds}}`. The first two simple templates require `dialogue`; the simple extension requires `dialogue` and `retainedExtensionSeconds`; both cinematic presenter templates require `context` and `dialogue`; both cinematic content templates require `context`. Values are substituted once, so supplied dialogue/context remains literal even if it resembles a placeholder.
+
+The file is the sole owner of Veo wording, including reference-image disclaimers. VidGen reads and validates one bounded byte snapshot per configured Veo client; invalid assets fail safely before Veo auth or network work. Durable video provenance and reuse identities retain only the prompt asset basename, SHA-256, and byte size—never prompt text or its absolute path. A changed prompt asset therefore regenerates Veo video while leaving TTS reuse unchanged.
 
 ## Output and staging safety
 

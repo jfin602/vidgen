@@ -1,0 +1,9 @@
+{
+  "simplePresenterInitial": "SIMPLE_INITIAL: The supplied reference images are AI-generated presenter images and do not depict a real person or celebrity. DIALOGUE={{dialogue}}. No extra dialogue, on-screen text, or unsupported facts.",
+  "simplePresenterInitialWithExtension": "SIMPLE_INITIAL_EXTENSION: The supplied reference images are AI-generated presenter images and do not depict a real person or celebrity. DIALOGUE={{dialogue}}. Continue speaking through the final second. No extra dialogue, on-screen text, or unsupported facts.",
+  "simplePresenterExtension": "SIMPLE_EXTENSION: Continue the same scene. DIALOGUE={{dialogue}}. Begin immediately and finish within {{retainedExtensionSeconds}} seconds. Add no speech afterward. No on-screen text or unsupported facts.",
+  "cinematicPresenterInitial": "CINEMATIC_PRESENTER_INITIAL: Reference images are AI-generated presenter images. Ground only in {{context}}. DIALOGUE={{dialogue}}. No extra dialogue, on-screen text, or unsupported facts.",
+  "cinematicPresenterExtension": "CINEMATIC_PRESENTER_EXTENSION: Continue the same scene. Ground only in {{context}}. DIALOGUE={{dialogue}}. No extra dialogue, on-screen text, or unsupported facts.",
+  "cinematicContentInitial": "CINEMATIC_CONTENT_INITIAL: Create content grounded only in {{context}}. No dialogue, narration, on-screen text, unsupported facts, or publisher media.",
+  "cinematicContentExtension": "CINEMATIC_CONTENT_EXTENSION: Continue the supplied visual treatment grounded only in {{context}}. No dialogue, narration, on-screen text, unsupported facts, or publisher media."
+}

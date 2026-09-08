@@ -8,6 +8,13 @@ import type { ApprovedReferenceImage } from './anchor-reference.ts';
 
 export { createApprovedReferenceImage, type ApprovedReferenceImage } from './anchor-reference.ts';
 
+/** Safe identity for the immutable Veo prompt-asset snapshot used by a client. */
+export interface VeoPromptAssetIdentity {
+  readonly basename: string;
+  readonly sha256: string;
+  readonly byteSize: number;
+}
+
 /** One template-declared content value required to realize a generated-media unit. */
 export interface GeneratedMediaContentValue {
   readonly slotId: string;
@@ -105,6 +112,8 @@ export interface VideoGenerationClient {
   readonly provider: string;
   /** The stable configured model identity, available before a provider call. */
   readonly model: string;
+  /** The stable, non-secret Veo prompt-asset identity available before a provider call. */
+  readonly promptAssetIdentity: VeoPromptAssetIdentity;
   generateVideo(request: VideoGenerationRequest): Promise<VideoGenerationResult>;
 }
 
