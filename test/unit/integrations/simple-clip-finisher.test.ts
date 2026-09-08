@@ -11,6 +11,7 @@ import { VidGenError } from '../../../src/core/error.ts';
 import {
   assertSimpleLowerThirdPixels,
   buildSimpleClipFinishArgs,
+  buildSimpleLowerThirdLayout,
   buildSimpleLowerThirdMeasurementArgs,
   LocalSimpleClipFinisher,
   SIMPLE_CLIP_FINISHING_POLICY,
@@ -45,17 +46,38 @@ test('simple lower third consumes automatic wrap separators without changing gov
   assert.ok(exactWord.every((line) => line.length <= 32 && line.trim() === line));
 });
 
-test('simple lower-third policy is bottom-anchored, padded, centered, and rejects measured glyph overflow', () => {
-  const { outer, inner, padding, headline, source } = SIMPLE_CLIP_FINISHING_POLICY.lowerThird;
-  assert.equal(outer.y + outer.height, SIMPLE_CLIP_FINISHING_POLICY.output.height);
-  assert.equal(inner.x - outer.x, padding.left); assert.equal(outer.x + outer.width - (inner.x + inner.width), padding.right);
-  assert.equal(inner.y - outer.y, padding.top); assert.equal(outer.y + outer.height - (inner.y + inner.height), padding.bottom);
-  assert.ok(Object.values(padding).every((value) => value > 0));
-  assertSimpleLowerThirdPixels(layoutPixels([[headline.x, headline.y], [inner.x + inner.width - 1, headline.y + headline.height - 1], [source.x, source.y], [inner.x + inner.width - 1, source.y + source.height - 1]]));
-  assert.throws(() => assertSimpleLowerThirdPixels(layoutPixels([[headline.x, headline.y], [inner.x + inner.width, headline.y], [source.x, source.y]])), hasSimpleClip);
-  assert.throws(() => assertSimpleLowerThirdPixels(layoutPixels([[headline.x + 5, headline.y], [inner.x + inner.width - 1, headline.y + headline.height - 1], [source.x, source.y], [inner.x + inner.width - 1, source.y + source.height - 1]])), hasSimpleClip);
-  const args = buildSimpleLowerThirdMeasurementArgs(['font.ttf', 'simple-headline.txt', 'simple-source.txt']);
-  assert.match(args.join(' '), /textfile=simple-headline\.txt/); assert.match(args.join(' '), /boxw=888:boxh=284:text_align=TC/); assert.match(args.join(' '), /boxw=888:boxh=40:text_align=TC/); assert.doesNotMatch(args.join(' '), /Example News/);
+test('simple lower-third derives its full-width, bottom-anchored height from actual wrapped lines', () => {
+  for (const [lineCount, height] of [[1, 236], [2, 296], [5, 476]] as const) {
+    const lowerThird = validateSimpleLowerThird(wrappedLineHeadline(lineCount), 'Example News');
+    const layout = buildSimpleLowerThirdLayout(lowerThird);
+    assert.equal(lowerThird.headline.split('\n').length, lineCount);
+    assert.deepEqual(layout.outer, { x: 0, y: 1920 - height, width: 1080, height });
+    assert.equal(layout.outer.y + layout.outer.height, SIMPLE_CLIP_FINISHING_POLICY.output.height);
+  }
+  const veniceLowerThird = validateSimpleLowerThird('‘Possible Love’: What The Critics Are Saying About Lee Chang-dong’s Korean Drama — Venice', 'Example News');
+  const venice = buildSimpleLowerThirdLayout(veniceLowerThird);
+  assert.equal(veniceLowerThird.headline.split('\n').length, 4);
+  assert.equal(venice.headline.height, 224);
+  assert.deepEqual(venice.outer, { x: 0, y: 1504, width: 1080, height: 416 });
+  assert.equal(SIMPLE_CLIP_FINISHING_POLICY.lowerThird.panel.color, '0x336699');
+  assert.equal(SIMPLE_CLIP_FINISHING_POLICY.lowerThird.panel.opacity, 0.77);
+  assert.equal(JSON.stringify(SIMPLE_CLIP_FINISHING_POLICY.lowerThird).includes('620'), false);
+});
+
+test('simple lower-third finishing, selected-font measurement, and pixel validation share the derived layout', () => {
+  const lowerThird = validateSimpleLowerThird(wrappedLineHeadline(2), 'Example News');
+  const layout = buildSimpleLowerThirdLayout(lowerThird);
+  const { text } = SIMPLE_CLIP_FINISHING_POLICY.lowerThird;
+  assert.equal(layout.headline.x, 96); assert.equal(layout.source.x, 96); assert.equal(text.width, 888);
+  assertSimpleLowerThirdPixels(layoutPixels([[layout.headline.x, layout.headline.y], [text.x + text.width - 1, layout.headline.y + layout.headline.height - 1], [layout.source.x, layout.source.y], [text.x + text.width - 1, layout.source.y + layout.source.height - 1]]), layout);
+  assert.throws(() => assertSimpleLowerThirdPixels(layoutPixels([[layout.headline.x, layout.headline.y], [text.x + text.width, layout.headline.y], [layout.source.x, layout.source.y]]), layout), hasSimpleClip);
+  assert.throws(() => assertSimpleLowerThirdPixels(layoutPixels([[layout.headline.x + 5, layout.headline.y], [text.x + text.width - 1, layout.headline.y + layout.headline.height - 1], [layout.source.x, layout.source.y], [text.x + text.width - 1, layout.source.y + layout.source.height - 1]]), layout), hasSimpleClip);
+  const measurement = buildSimpleLowerThirdMeasurementArgs(layout, ['font.ttf', 'simple-headline.txt', 'simple-source.txt']).join(' ');
+  const finishing = buildSimpleClipFinishArgs('raw.mp4', 'candidate.mp4', layout, ['font.ttf', 'simple-headline.txt', 'simple-source.txt']).join(' ');
+  for (const expression of ['fontsize=44:x=96:y=1672:boxw=888:boxh=104:text_align=TC:line_spacing=16', 'fontsize=32:x=96:y=1832:boxw=888:boxh=40:text_align=TC']) {
+    assert.match(measurement, new RegExp(expression)); assert.match(finishing, new RegExp(expression));
+  }
+  assert.doesNotMatch(measurement, /Example News/);
 });
 
 test('simple finisher stages hostile article text, retains sub-eight speech coverage, and keeps FFmpeg argv-only', async () => {
@@ -84,11 +106,11 @@ test('simple finisher stages hostile article text, retains sub-eight speech cove
     assert.doesNotMatch(graph, /\b(?:a)?trim=/);
     assert.ok(calls.some((call) => call.args.includes('-shortest')));
     assert.match(graph, /loudnorm=I=-16:LRA=11:TP=-1.5/);
-    assert.match(graph, /drawbox=x=48:y=1300:w=984:h=620:color=0x336699@0\.77:t=fill/);
+    assert.match(graph, /drawbox=x=0:y=1624:w=1080:h=296:color=0x336699@0\.77:t=fill/);
     assert.doesNotMatch(graph, /color=0x336699:t=fill/);
     assert.doesNotMatch(graph, /drawbox=.*color=(?:black|0x000000)(?:@|:)/);
-    assert.match(graph, /fontsize=44:x=96:y=1372:boxw=888:boxh=284:text_align=TC:line_spacing=16/);
-    assert.match(graph, /fontsize=32:x=96:y=1712:boxw=888:boxh=40:text_align=TC/);
+    assert.match(graph, /fontsize=44:x=96:y=1672:boxw=888:boxh=104:text_align=TC:line_spacing=16/);
+    assert.match(graph, /fontsize=32:x=96:y=1832:boxw=888:boxh=40:text_align=TC/);
     assert.match(graph, /drawtext=fontfile=font\.ttf:textfile=simple-headline\.txt:expansion=none/);
     assert.match(graph, /textfile=simple-source\.txt:expansion=none/);
     assert.doesNotMatch(graph, /quote|second line|\[x\]|Source/);
@@ -138,7 +160,7 @@ test('simple finishing process failures stay bounded and never expose diagnostic
 });
 
 test('simple finish graph has one input and no cinematic concat path', () => {
-  const args = buildSimpleClipFinishArgs('raw.mp4', 'candidate.mp4', ['font.ttf', 'simple-headline.txt', 'simple-source.txt']);
+  const args = buildSimpleClipFinishArgs('raw.mp4', 'candidate.mp4', buildSimpleLowerThirdLayout(validateSimpleLowerThird('A safe headline', 'Example News')), ['font.ttf', 'simple-headline.txt', 'simple-source.txt']);
   assert.deepEqual(args.filter((item) => item === '-i').length, 1);
   const graph = args[args.indexOf('-filter_complex') + 1]!;
   assert.doesNotMatch(graph, /concat|AssemblyPlan|voiceover/i);
@@ -147,6 +169,7 @@ test('simple finish graph has one input and no cinematic concat path', () => {
 });
 
 function request(directory: string, raw: string, font: string) { return { rawPresenterVideoPath: raw, fontPath: font, headline: 'A safe headline', sourceDisplayName: 'Example News', workDirectory: directory, outputPath: join(directory, 'candidate.mp4') }; }
+function wrappedLineHeadline(lineCount: number): string { return Array.from({ length: lineCount }, () => 'x'.repeat(32)).join(' '); }
 function rawProbe(durationSeconds: number): LocalMediaProbe { return { durationSeconds, containerNames: ['mp4'], streamTypes: ['video', 'audio'], video: video(), audio: audio() }; }
 function finalProbe(durationSeconds: number): LocalMediaProbe { return { durationSeconds, containerNames: ['mov', 'mp4'], streamTypes: ['video', 'audio'], video: video(), audio: audio() }; }
 function video() { return { codecName: 'h264', width: 1080, height: 1920, pixelFormat: 'yuv420p', averageFrameRate: { numerator: 30, denominator: 1, value: 30 } }; }
