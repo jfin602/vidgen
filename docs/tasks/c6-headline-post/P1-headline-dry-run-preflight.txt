@@ -1,0 +1,56 @@
+TASK: Correction 6 / P1 — Headline dry-run preflight
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Add `--dry-run` to the existing `vidgen headline` path so an operator can run and inspect the complete pre-Veo headline preparation while suppressing only the actual Veo video-generation request.
+
+Read BOOT.md and inspect the current headline CLI/workflow, simple-copy generation, presenter duration planning, local anchor/font validation, lower-third/FFmpeg preflight, provider boundaries, artifact safety, and focused tests before editing. Keep this correction inside the existing Phase 6 simple path.
+
+MUST REMAIN TRUE
+
+- `vidgen headline` keeps its current required inputs, maxSeconds 4-20 contract, normal generation behavior, and successful flat MP4/JSON publication semantics.
+- `--dry-run` is a standalone boolean CLI flag. Existing value options and one-to-three repeatable `--anchor-reference` behavior remain deterministic and strict.
+- Dry run must execute the same governed StoryInput selection, local anchor/font validation, selected-font lower-third/FFmpeg preflight, structured-text presenter-copy generation, copy validation, and deterministic duration planning that a normal headline run reaches before Veo.
+- Dry run suppresses the actual Veo presenter-video generation call. It must not upload/request/generate Veo media or claim Veo authentication, quota, model access, operation, or video-generation proof.
+- Because no Veo presenter media exists, dry run must not fabricate a production-ready final MP4 or reuse the normal successful headline sidecar as if generation completed.
+- Dry run must persist durable, clearly identified inspection files under the configured headline artifacts root. At minimum preserve the generated presenter text as an inspectable text artifact and a safe structured dry-run metadata artifact containing the governed headline/source identity, requested/planned duration, reference/font identities, and safe provider/model/provenance facts needed to understand the prepared run.
+- Dry-run inspection artifacts must contain no secrets, image bytes, authorization data, raw provider responses, absolute local paths, or false final-media identity. Use atomic publication/cleanup patterns so temporary files do not masquerade as completed dry-run artifacts.
+- Refactor only as needed so dry run and normal generation share authoritative validation/copy/duration behavior rather than duplicating rules.
+- Normal `headline` without `--dry-run` must still call Veo, finish through FFmpeg, and publish the same MP4/JSON success contract as before.
+- CLI output and failures remain bounded and safe; preserve every cinematic command and durable contract unchanged.
+- Package and engine version remain 0.6.5.
+
+PROOF
+
+Focused tests must cover:
+- parsing `headline --dry-run` as a value-less flag while preserving existing headline options and rejecting malformed/repeated use;
+- dry run exercises governed input, local assets, selected-font/lower-third, FFmpeg preflight, structured-text generation, and duration planning;
+- dry run does call the structured-text client but never calls the Veo video-generation method;
+- successful dry run leaves the required inspectable text + structured metadata artifacts and no production-ready final MP4/normal final sidecar;
+- dry-run artifacts are safe, clearly marked as dry-run/non-final, and contain no secret/local-path/raw-response leakage;
+- failed dry runs clean temporary state and do not leave a false-success artifact set;
+- normal `headline` behavior still performs Veo generation and publishes the unchanged successful result contract.
+
+Run focused headline/CLI/simple-copy/simple-finisher tests, `npm run check`, `node src/cli.ts --help`, and `git diff --check`.
+
+Downstream-required capability -> owning implementation/export -> focused proof:
+
+validated StoryInput + local presentation inputs -> shared headline preflight -> dry-run and normal-path validation tests.
+
+validated presenter copy -> deterministic duration plan -> dry-run inspection artifacts and normal generation tests.
+
+prepared pre-Veo state -> durable dry-run inspection boundary -> artifact/safety tests.
+
+NON-GOALS
+
+Do not add publishing, VidGen Poster integration, fake/generated placeholder video, Veo network calls in dry-run mode, cinematic changes, fan-out, queues/databases, new providers, new dependencies, roadmap/documentation edits, or unrelated cleanup in P1.
+
+FINAL RESPONSE
+
+Report the dry-run contract, text-generation behavior, exact Veo action suppressed, inspection artifacts produced, cleanup/safety behavior, exact validation run, and confirmation that normal headline behavior and version 0.6.5 remain unchanged.
