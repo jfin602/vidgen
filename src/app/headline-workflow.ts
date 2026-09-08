@@ -17,24 +17,39 @@ import { VIDGEN_ENGINE_VERSION } from '../version.ts';
 
 export const DEFAULT_HEADLINE_ARTIFACTS_ROOT = 'artifacts/headline-clips';
 export const HEADLINE_SIDECAR_SCHEMA_VERSION = '2';
-export interface HeadlineWorkflowDependencies { readonly inputFile: string; readonly articleId: string; readonly maxSeconds?: number; readonly anchorReferencePaths: readonly string[]; readonly fontPath: string; readonly artifactsRoot?: string; readonly loadManifest?: typeof loadNgestVidGenManifestFile; readonly createTextClient?: () => StructuredTextModelClient; readonly createVideoClient?: () => PresenterVideoGenerationClient; readonly finisher?: Pick<LocalSimpleClipFinisher, 'preflightLowerThird' | 'finish'>; readonly createClipId?: () => string; readonly writeJson?: typeof writeJsonAtomically; readonly engineVersion?: string; readonly onProgress?: (message: string) => void; }
+export const HEADLINE_DRY_RUN_METADATA_SCHEMA_VERSION = '1';
+export interface HeadlineWorkflowDependencies { readonly inputFile: string; readonly articleId: string; readonly maxSeconds?: number; readonly anchorReferencePaths: readonly string[]; readonly fontPath: string; readonly artifactsRoot?: string; readonly dryRun?: true; readonly loadManifest?: typeof loadNgestVidGenManifestFile; readonly createTextClient?: () => StructuredTextModelClient; readonly createVideoClient?: () => PresenterVideoGenerationClient; readonly finisher?: Pick<LocalSimpleClipFinisher, 'preflightLowerThird' | 'finish'>; readonly createClipId?: () => string; readonly writeJson?: typeof writeJsonAtomically; readonly engineVersion?: string; readonly onProgress?: (message: string) => void; }
 export interface HeadlineWorkflowResult { readonly clipId: string; readonly finalPath: string; readonly metadataPath: string; readonly sha256: string; readonly durationSeconds: number; }
+export interface HeadlineDryRunResult { readonly dryRun: true; readonly clipId: string; readonly presenterTextPath: string; readonly metadataPath: string; readonly plannedDurationSeconds: number; }
 
 /** Produces one flat MP4/sidecar pair without entering the cinematic workspace. */
-export async function generateHeadlineClip(dependencies: HeadlineWorkflowDependencies): Promise<HeadlineWorkflowResult> {
+export async function generateHeadlineClip(dependencies: HeadlineWorkflowDependencies): Promise<HeadlineWorkflowResult | HeadlineDryRunResult> {
   const maxSeconds = dependencies.maxSeconds ?? 20; assertSimpleClipMaxSeconds(maxSeconds);
   const inputFile = nonBlank(dependencies.inputFile, '--input-file requires a non-empty file path.'); const articleId = nonBlank(dependencies.articleId, '--article-id requires a non-empty articleId.'); const fontPath = nonBlank(dependencies.fontPath, '--font-file requires a non-empty file path.');
-  const clipId = safeClipId((dependencies.createClipId ?? randomUUID)()); const root = resolve(dependencies.artifactsRoot ?? DEFAULT_HEADLINE_ARTIFACTS_ROOT); const finalPath = join(root, `${clipId}.mp4`); const metadataPath = join(root, `${clipId}.json`); const workDirectory = join(root, `.tmp-${clipId}`);
+  const clipId = safeClipId((dependencies.createClipId ?? randomUUID)()); const root = resolve(dependencies.artifactsRoot ?? DEFAULT_HEADLINE_ARTIFACTS_ROOT); const finalPath = join(root, `${clipId}.mp4`); const metadataPath = join(root, `${clipId}.json`); const dryRunTextPath = join(root, `${clipId}.dry-run.txt`); const dryRunMetadataPath = join(root, `${clipId}.dry-run.json`); const workDirectory = join(root, `.tmp-${clipId}`);
   const manifest = await (dependencies.loadManifest ?? loadNgestVidGenManifestFile)(inputFile); const story = buildStoryInput(buildCanonicalInput(manifest), articleId); validateSimpleLowerThird(story.article.headline, story.article.source.displayName); progress(dependencies, 'Headline input and story validation complete.');
-  const references = await loadApprovedAnchorReferences(dependencies.anchorReferencePaths, 10_000_000); if (references.length < 1 || references.length > 3) throw new VidGenError('invalid_argument', 'Headline requires one to three --anchor-reference values.'); const font = await fileIdentity(fontPath, 100_000_000, 'Font file'); const finisher = dependencies.finisher ?? new LocalSimpleClipFinisher(); await mkdir(root, { recursive: true }); await assertUnpublished(finalPath, metadataPath);
+  const references = await loadApprovedAnchorReferences(dependencies.anchorReferencePaths, 10_000_000); if (references.length < 1 || references.length > 3) throw new VidGenError('invalid_argument', 'Headline requires one to three --anchor-reference values.'); const font = await fileIdentity(fontPath, 100_000_000, 'Font file'); const finisher = dependencies.finisher ?? new LocalSimpleClipFinisher(); await mkdir(root, { recursive: true }); await assertUnpublished(...(dependencies.dryRun === true ? [dryRunTextPath, dryRunMetadataPath] : [finalPath, metadataPath]));
   let published = false;
   try {
     await mkdir(workDirectory, { recursive: false });
     const lowerThird = await finisher.preflightLowerThird({ headline: story.article.headline, sourceDisplayName: story.article.source.displayName, fontPath, workDirectory }); progress(dependencies, 'Headline lower-third and font preflight complete.');
-    const videoClient = dependencies.createVideoClient === undefined ? createConfiguredVideoClient(process.env, { onProgress: (event) => progress(dependencies, event.stage === 'operation_started' ? `Veo operation ${event.operationNumber} started.` : event.stage === 'operation_completed' ? `Veo operation ${event.operationNumber} completed.` : `Veo operation ${event.operationNumber} pending (poll ${event.pollNumber}).`) }) : undefined;
     progress(dependencies, 'Presenter copy generation starting.');
     const copy = await generateSimpleClipCopy(story, maxSeconds, (dependencies.createTextClient ?? (() => new GoogleGeminiStructuredTextModelClient()))()); progress(dependencies, 'Presenter copy generation completed.');
     const plannedDurationSeconds = getSimpleClipPlannedDurationSeconds(copy.copy.text, maxSeconds); const plan = planPresenterVideoDuration(plannedDurationSeconds); progress(dependencies, `Planned final duration: ${plannedDurationSeconds} seconds.`);
+    if (dependencies.dryRun === true) {
+      const metadata = buildHeadlineDryRunMetadata(clipId, story, copy, references.map(({ identity }) => identity), font, maxSeconds, plannedDurationSeconds, plan, basename(dryRunTextPath), dependencies.engineVersion ?? VIDGEN_ENGINE_VERSION);
+      try {
+        await writeTextAtomically(dryRunTextPath, copy.copy.text);
+        await (dependencies.writeJson ?? writeJsonAtomically)({ writeFile, rename, unlink: async (path) => rm(path, { force: true }) }, dryRunMetadataPath, metadata);
+      } catch (cause) {
+        await Promise.all([rm(dryRunTextPath, { force: true }), rm(dryRunMetadataPath, { force: true })].map((operation) => operation.catch(() => undefined)));
+        throw new VidGenError('artifact', 'Unable to publish headline dry-run inspection artifacts.', { cause });
+      }
+      published = true;
+      progress(dependencies, 'Headline dry-run inspection artifacts published; Veo generation suppressed.');
+      return { dryRun: true, clipId, presenterTextPath: dryRunTextPath, metadataPath: dryRunMetadataPath, plannedDurationSeconds };
+    }
+    const videoClient = dependencies.createVideoClient === undefined ? createConfiguredVideoClient(process.env, { onProgress: (event) => progress(dependencies, event.stage === 'operation_started' ? `Veo operation ${event.operationNumber} started.` : event.stage === 'operation_completed' ? `Veo operation ${event.operationNumber} completed.` : `Veo operation ${event.operationNumber} pending (poll ${event.pollNumber}).`) }) : undefined;
     const activeVideoClient = videoClient ?? dependencies.createVideoClient!();
     progress(dependencies, `Configured Veo model: ${activeVideoClient.model}.`); progress(dependencies, `Reference images: ${references.length}.`); progress(dependencies, `Veo extension required: ${plan.extensionCount === 1 ? 'yes' : 'no'}.`); progress(dependencies, 'Veo generation starting.');
     const video = await activeVideoClient.generatePresenterVideo({ spokenText: copy.copy.text, referenceImages: references.map(({ image }) => image), maxSeconds: plannedDurationSeconds }); validateVideoResult(video, plan);
@@ -44,7 +59,34 @@ export async function generateHeadlineClip(dependencies: HeadlineWorkflowDepende
     await rename(candidatePath, finalPath); published = true;
     try { await (dependencies.writeJson ?? writeJsonAtomically)({ writeFile, rename, unlink: async (path) => rm(path, { force: true }) }, metadataPath, sidecar); } catch (cause) { await Promise.all([rm(finalPath, { force: true }), rm(metadataPath, { force: true })].map((operation) => operation.catch(() => undefined))); published = false; throw new VidGenError('artifact', 'Unable to publish headline clip metadata.', { cause }); }
     progress(dependencies, 'Headline final publication completed.'); return { clipId, finalPath, metadataPath, sha256: sha256(bytes), durationSeconds: finished.probe.durationSeconds };
-  } finally { await rm(workDirectory, { recursive: true, force: true }).catch(() => undefined); if (!published) await rm(finalPath, { force: true }).catch(() => undefined); }
+  } finally { await rm(workDirectory, { recursive: true, force: true }).catch(() => undefined); if (!published) await Promise.all([rm(finalPath, { force: true }), rm(dryRunTextPath, { force: true }), rm(dryRunMetadataPath, { force: true })].map((operation) => operation.catch(() => undefined))); }
+}
+
+function buildHeadlineDryRunMetadata(clipId: string, story: StoryInput, copy: SimpleClipCopyResult, references: readonly ReferenceImageIdentity[], font: FileIdentity, maxSeconds: number, plannedDurationSeconds: number, plan: ReturnType<typeof planPresenterVideoDuration>, presenterTextFilename: string, engineVersion: string) {
+  return {
+    schemaVersion: HEADLINE_DRY_RUN_METADATA_SCHEMA_VERSION,
+    kind: 'headline-dry-run',
+    status: 'prepared_non_final',
+    clipId,
+    governedInput: { articleId: story.article.articleId, headline: story.article.headline, sourceDisplayName: story.article.source.displayName, storyFingerprint: story.storyFingerprint, sourceInputFingerprint: story.provenance.sourceInputFingerprint },
+    requestedMaxSeconds: maxSeconds,
+    plannedDurationSeconds,
+    presenterDurationPlan: { rawCoverageSeconds: plan.rawProviderDurationSeconds, extensionCount: plan.extensionCount },
+    presenterText: { filename: presenterTextFilename, sha256: sha256(Buffer.from(copy.copy.text)), byteSize: Buffer.byteLength(copy.copy.text) },
+    textProvider: safeProvider(copy.provider, copy.model, copy.requestId),
+    videoGeneration: { requested: false, status: 'suppressed' },
+    references,
+    font,
+    finishing: { policy: SIMPLE_CLIP_FINISHING_POLICY.version, lowerThirdPreflight: 'completed' },
+    engineVersion: safeToken(engineVersion, 'engine version'),
+  };
+}
+
+async function writeTextAtomically(finalPath: string, text: string): Promise<void> {
+  const temporaryPath = `${finalPath}.tmp-${randomUUID()}`;
+  let created = false;
+  try { await writeFile(temporaryPath, text, { encoding: 'utf8', flag: 'wx' }); created = true; await rename(temporaryPath, finalPath); }
+  catch (cause) { if (created) await rm(temporaryPath, { force: true }).catch(() => undefined); throw cause; }
 }
 
 function buildHeadlineSidecar(clipId: string, story: StoryInput, copy: SimpleClipCopyResult, video: PresenterVideoGenerationResult, promptAssetIdentity: { readonly basename: string; readonly sha256: string; readonly byteSize: number }, references: readonly ReferenceImageIdentity[], font: FileIdentity, maxSeconds: number, plannedDurationSeconds: number, durationSeconds: number, filename: string, bytes: Uint8Array, ffmpegVersion: string, engineVersion: string) { return { schemaVersion: HEADLINE_SIDECAR_SCHEMA_VERSION, clipId, article: story.article, profile: story.profile, publication: story.publication, story: { fingerprint: story.storyFingerprint, provenance: story.provenance }, presenterText: copy.copy.text, requestedMaxSeconds: maxSeconds, plannedDurationSeconds, finalDurationSeconds: durationSeconds, final: { filename, sha256: sha256(bytes), byteSize: bytes.byteLength, technical: { output: SIMPLE_CLIP_FINISHING_POLICY.output, audio: SIMPLE_CLIP_FINISHING_POLICY.audio } }, textProvider: safeProvider(copy.provider, copy.model, copy.requestId), videoProvider: { ...safeProvider(video.provider, video.model, video.requestId), promptAssetIdentity: safeFileIdentity(promptAssetIdentity), ...(video.operationId === undefined ? {} : { operationId: safeToken(video.operationId, 'video operation') }), ...(video.operationIds === undefined ? {} : { operationIds: video.operationIds.map((id) => safeToken(id, 'video operation')) }), ...(video.generationOperationCount === undefined ? {} : { generationOperationCount: video.generationOperationCount }) }, references, font, finishing: { policy: SIMPLE_CLIP_FINISHING_POLICY.version, ffmpegVersion: safeFfmpegVersion(ffmpegVersion) }, engineVersion: safeToken(engineVersion, 'engine version') }; }

@@ -31,6 +31,37 @@ test('headline workflow emits only useful safe stage progress when requested', a
   });
 });
 
+test('headline dry run completes governed pre-Veo preparation, writes safe non-final inspection artifacts, and never creates Veo media', async () => {
+  await withAssets(async (directory, anchor, font) => {
+    let preflightCalls = 0; let textCalls = 0; let videoClientCalls = 0; let finishCalls = 0;
+    const result = await generateHeadlineClip({
+      ...fakeDependencies(directory, anchor, font),
+      dryRun: true,
+      finisher: {
+        preflightLowerThird: async (request) => { preflightCalls += 1; assert.equal(request.fontPath, font); return { headline: request.headline, sourceDisplayName: request.sourceDisplayName }; },
+        finish: async () => { finishCalls += 1; throw new Error('dry run must not finish video'); },
+      },
+      createTextClient: () => ({ provider: 'fake-text', model: 'fake-model', generateStructuredJson: async () => { textCalls += 1; return { provider: 'fake-text', model: 'fake-model', requestId: 'request-1', outputText: JSON.stringify({ text: 'A short factual presenter sentence.' }), rawResponse: 'secret-provider-response C:\\private\\response.json' }; } }),
+      createVideoClient: () => { videoClientCalls += 1; throw new Error('dry run must not construct Veo client'); },
+    });
+    assert.equal(result.dryRun, true); if (result.dryRun !== true) throw new Error('expected dry run result');
+    assert.equal(preflightCalls, 1); assert.equal(textCalls, 1); assert.equal(videoClientCalls, 0); assert.equal(finishCalls, 0); assert.equal(result.plannedDurationSeconds, 4);
+    assert.equal(await readFile(result.presenterTextPath, 'utf8'), 'A short factual presenter sentence.');
+    const metadata = JSON.parse(await readFile(result.metadataPath, 'utf8'));
+    assert.deepEqual(metadata.videoGeneration, { requested: false, status: 'suppressed' }); assert.equal(metadata.kind, 'headline-dry-run'); assert.equal(metadata.status, 'prepared_non_final'); assert.equal(metadata.governedInput.articleId, 'example-article-1'); assert.equal(metadata.requestedMaxSeconds, 20); assert.equal(metadata.plannedDurationSeconds, 4); assert.equal(metadata.presenterDurationPlan.rawCoverageSeconds, 8); assert.equal(metadata.references[0].basename, 'anchor.png'); assert.equal(metadata.font.basename, 'font.ttf'); assert.equal(metadata.presenterText.filename, 'clip-safe-1.dry-run.txt');
+    const serialized = JSON.stringify(metadata); assert.doesNotMatch(serialized, new RegExp(directory.replace(/[\\]/g, '\\\\'))); assert.doesNotMatch(serialized, /secret-provider-response|private\\response|rawResponse|authorization|data:image|iVBOR|\.mp4/i);
+    await assert.rejects(readFile(join(directory, 'clip-safe-1.mp4'))); await assert.rejects(readFile(join(directory, 'clip-safe-1.json'))); assert.deepEqual((await readdir(directory)).filter((item) => item.includes('.tmp-')), []);
+  });
+});
+
+test('headline dry run removes its inspection artifacts when metadata publication fails', async () => {
+  await withAssets(async (directory, anchor, font) => {
+    await assert.rejects(generateHeadlineClip({ ...fakeDependencies(directory, anchor, font), dryRun: true, writeJson: async () => { throw new Error('secret-token'); } }), /Unable to publish headline dry-run inspection artifacts/);
+    for (const name of ['clip-safe-1.dry-run.txt', 'clip-safe-1.dry-run.json', 'clip-safe-1.mp4', 'clip-safe-1.json']) await assert.rejects(readFile(join(directory, name)));
+    assert.deepEqual((await readdir(directory)).filter((item) => item.includes('.tmp-')), []);
+  });
+});
+
 test('short copy under the default ceiling makes only the initial eight-second provider request', async () => {
   await withAssets(async (directory, anchor, font) => {
     let requested: number | undefined;

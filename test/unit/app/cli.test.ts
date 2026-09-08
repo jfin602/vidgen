@@ -12,6 +12,7 @@ test('CLI parses its help, run, manual story, planning, media, and assembly surf
   assert.deepEqual(parseCliArgs(['-h']), { kind: 'help' });
   assert.deepEqual(parseCliArgs(['run']), { kind: 'run' });
   assert.deepEqual(parseCliArgs(['headline', '--input-file', 'fixture.json', '--article-id', 'article-2', '--anchor-reference', 'anchor.png', '--font-file', 'font.ttf']), { kind: 'headline', inputFile: 'fixture.json', articleId: 'article-2', maxSeconds: 20, anchorReferencePaths: ['anchor.png'], fontPath: 'font.ttf' });
+  assert.deepEqual(parseCliArgs(['headline', '--dry-run', '--input-file', 'fixture.json', '--article-id', 'article-2', '--anchor-reference', 'anchor.png', '--font-file', 'font.ttf']), { kind: 'headline', inputFile: 'fixture.json', articleId: 'article-2', maxSeconds: 20, anchorReferencePaths: ['anchor.png'], fontPath: 'font.ttf', dryRun: true });
   assert.deepEqual(parseCliArgs(['headline', '--verbose', '--input-file', 'fixture.json', '--article-id', 'article-2', '--anchor-reference', 'anchor.png', '--font-file', 'font.ttf']), { kind: 'headline', inputFile: 'fixture.json', articleId: 'article-2', maxSeconds: 20, anchorReferencePaths: ['anchor.png'], fontPath: 'font.ttf', verbose: true });
   assert.deepEqual(parseCliArgs(['headline', '--input-file', 'fixture.json', '--article-id', 'article-2', '--max-seconds', '4', '--anchor-reference', 'anchor.png', '--font-file', 'font.ttf', '--artifacts-root', 'clips']), { kind: 'headline', inputFile: 'fixture.json', articleId: 'article-2', maxSeconds: 4, anchorReferencePaths: ['anchor.png'], fontPath: 'font.ttf', artifactsRoot: 'clips' });
   assert.deepEqual(parseCliArgs(['run', '--artifacts-root', 'tmp/runs']), {
@@ -98,6 +99,8 @@ test('CLI rejects unknown commands and invalid arguments deterministically', () 
   );
   assert.throws(() => parseCliArgs(['media']), /Media requires --story-dir/);
   assert.throws(() => parseCliArgs(['headline', '--input-file', 'fixture.json', '--article-id', 'article-1', '--anchor-reference', 'a', '--font-file', 'font.ttf', '--max-seconds', '3']), /whole number from 4 through 20/);
+  assert.throws(() => parseCliArgs(['headline', '--input-file', 'fixture.json', '--article-id', 'article-1', '--anchor-reference', 'a', '--font-file', 'font.ttf', '--dry-run', '--dry-run']), /must not be repeated/);
+  assert.throws(() => parseCliArgs(['headline', '--input-file', 'fixture.json', '--article-id', 'article-1', '--anchor-reference', 'a', '--font-file', 'font.ttf', '--dry-run', 'value']), /Unknown headline argument/);
   assert.throws(() => parseCliArgs(['assemble', '--intro', 'intro.mp4']), /Assemble requires --story-dir/);
   assert.throws(() => parseCliArgs(['media', '--story-dir', 'story', '--anchor-reference', 'a', '--anchor-reference', 'b', '--anchor-reference', 'c', '--anchor-reference', 'd']), /at most three/);
 });
@@ -258,6 +261,14 @@ test('headline verbose forwards safe pipeline progress while normal headline out
   };
   assert.match(await run(true), /Veo operation 1 pending \(poll 1\)/);
   assert.doesNotMatch(await run(false), /Veo generation starting/);
+});
+
+test('headline dry run delegates the value-less flag and never reports final media', async () => {
+  const stdout: string[] = []; let receivedDryRun = false;
+  const code = await runCli(['headline', '--dry-run', '--input-file', 'fixture.json', '--article-id', 'article-2', '--anchor-reference', 'anchor.png', '--font-file', 'font.ttf'], { writeStdout: (text) => stdout.push(text), writeStderr: () => undefined }, {
+    generateHeadline: async (input) => { receivedDryRun = input.dryRun === true; return { dryRun: true, clipId: 'headline-1', presenterTextPath: 'headline-1.dry-run.txt', metadataPath: 'headline-1.dry-run.json', plannedDurationSeconds: 4 }; },
+  });
+  const output = stdout.join(''); assert.equal(code, 0); assert.equal(receivedDryRun, true); assert.match(output, /dry_run_ready/); assert.match(output, /presenterText: headline-1\.dry-run\.txt/); assert.doesNotMatch(output, /final:|sha256:|\.mp4/);
 });
 
 test('headline failure renders only explicit safe provider diagnostics', async () => {

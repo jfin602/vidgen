@@ -21,7 +21,7 @@ Usage:
   vidgen plan --input-file <manifest.json> --article-id <articleId> [--template <templateId>] [--artifacts-root <directory>]
   vidgen media --story-dir <directory> [--anchor-reference <image-path> ...]
   vidgen assemble --story-dir <directory> [--intro <intro-video-path>] [--outro <outro-video-path>] [--font-file <font-path>]
-  vidgen headline --input-file <manifest.json> --article-id <articleId> [--max-seconds <4-20>] --anchor-reference <image-path> [--anchor-reference <image-path> ...] --font-file <font-path> [--artifacts-root <directory>] [--verbose]
+  vidgen headline --input-file <manifest.json> --article-id <articleId> [--max-seconds <4-20>] --anchor-reference <image-path> [--anchor-reference <image-path> ...] --font-file <font-path> [--artifacts-root <directory>] [--dry-run] [--verbose]
 
 Available commands:
   help, --help, -h  Show this help message.
@@ -70,6 +70,7 @@ Headline options:
   --anchor-reference <path>     Required local presenter image; repeat one to three times.
   --font-file <font-path>       Required local lower-third font.
   --artifacts-root <directory>  Write flat pairs here (default: ${DEFAULT_HEADLINE_ARTIFACTS_ROOT}).
+  --dry-run                     Prepare and persist inspection artifacts without requesting Veo video.
   --verbose                      Print safe headline pipeline progress.
 `;
 
@@ -111,7 +112,7 @@ export interface AssembleCommand {
   readonly outroPath?: string;
   readonly fontPath?: string;
 }
-export interface HeadlineCommand { readonly kind: 'headline'; readonly inputFile: string; readonly articleId: string; readonly maxSeconds: number; readonly anchorReferencePaths: readonly string[]; readonly fontPath: string; readonly artifactsRoot?: string; readonly verbose?: true; }
+export interface HeadlineCommand { readonly kind: 'headline'; readonly inputFile: string; readonly articleId: string; readonly maxSeconds: number; readonly anchorReferencePaths: readonly string[]; readonly fontPath: string; readonly artifactsRoot?: string; readonly dryRun?: true; readonly verbose?: true; }
 
 export type CliCommand = HelpCommand | RunCommand | StoryCommand | PlanCommand | MediaCommand | AssembleCommand | HeadlineCommand;
 
@@ -231,7 +232,11 @@ export async function runCli(
       return 0;
     }
     if (command.kind === 'headline') {
-      const result = await (dependencies.generateHeadline ?? generateHeadlineClip)({ inputFile: command.inputFile, articleId: command.articleId, maxSeconds: command.maxSeconds, anchorReferencePaths: command.anchorReferencePaths, fontPath: command.fontPath, ...(command.artifactsRoot === undefined ? {} : { artifactsRoot: command.artifactsRoot }), ...(command.verbose === true ? { onProgress: (message: string) => output.writeStdout(`${message}\n`) } : {}) });
+      const result = await (dependencies.generateHeadline ?? generateHeadlineClip)({ inputFile: command.inputFile, articleId: command.articleId, maxSeconds: command.maxSeconds, anchorReferencePaths: command.anchorReferencePaths, fontPath: command.fontPath, ...(command.artifactsRoot === undefined ? {} : { artifactsRoot: command.artifactsRoot }), ...(command.dryRun === true ? { dryRun: true } : {}), ...(command.verbose === true ? { onProgress: (message: string) => output.writeStdout(`${message}\n`) } : {}) });
+      if (result.dryRun === true) {
+        output.writeStdout(`Headline ${result.clipId} is dry_run_ready.\npresenterText: ${result.presenterTextPath}\nmetadata: ${result.metadataPath}\nplannedDurationSeconds: ${result.plannedDurationSeconds}\n`);
+        return 0;
+      }
       output.writeStdout(`Headline ${result.clipId} is final_ready.\nfinal: ${result.finalPath}\nmetadata: ${result.metadataPath}\nsha256: ${result.sha256}\ndurationSeconds: ${result.durationSeconds}\n`);
       return 0;
     }
@@ -262,12 +267,13 @@ export async function runCli(
 }
 
 function parseHeadlineCommand(args: readonly string[]): HeadlineCommand {
-  const values: Partial<Record<'inputFile' | 'articleId' | 'fontPath' | 'artifactsRoot' | 'maxSeconds', string>> = {}; let verbose = false;
+  const values: Partial<Record<'inputFile' | 'articleId' | 'fontPath' | 'artifactsRoot' | 'maxSeconds', string>> = {}; let verbose = false; let dryRun = false;
   const anchors: string[] = [];
   const names: Record<string, keyof typeof values | 'anchor'> = { '--input-file': 'inputFile', '--article-id': 'articleId', '--font-file': 'fontPath', '--artifacts-root': 'artifactsRoot', '--max-seconds': 'maxSeconds', '--anchor-reference': 'anchor' };
   for (let i = 0; i < args.length;) {
     const option = args[i]; const key = names[option ?? '']; const value = args[i + 1];
     if (option === '--verbose') { if (verbose) throw invalidArgument('Headline option --verbose must not be repeated.'); verbose = true; i += 1; continue; }
+    if (option === '--dry-run') { if (dryRun) throw invalidArgument('Headline option --dry-run must not be repeated.'); dryRun = true; i += 1; continue; }
     if (key === undefined) throw invalidArgument(`Unknown headline argument: ${JSON.stringify(option)}.`);
     if (value === undefined || value.trim().length === 0) throw invalidArgument(`${option} requires exactly one non-empty value.`);
     if (key === 'anchor') { if (anchors.length >= 3) throw invalidArgument('Headline accepts at most three --anchor-reference values.'); anchors.push(value); }
@@ -280,7 +286,7 @@ function parseHeadlineCommand(args: readonly string[]): HeadlineCommand {
   if (anchors.length === 0) throw invalidArgument('Headline requires one to three --anchor-reference values.');
   const maxSeconds = values.maxSeconds === undefined ? 20 : Number(values.maxSeconds);
   if (!Number.isInteger(maxSeconds) || maxSeconds < 4 || maxSeconds > 20) throw invalidArgument('Headline --max-seconds must be a whole number from 4 through 20.');
-  return { kind: 'headline', inputFile: values.inputFile, articleId: values.articleId, fontPath: values.fontPath, maxSeconds, anchorReferencePaths: anchors, ...(values.artifactsRoot === undefined ? {} : { artifactsRoot: values.artifactsRoot }), ...(verbose ? { verbose: true } : {}) };
+  return { kind: 'headline', inputFile: values.inputFile, articleId: values.articleId, fontPath: values.fontPath, maxSeconds, anchorReferencePaths: anchors, ...(values.artifactsRoot === undefined ? {} : { artifactsRoot: values.artifactsRoot }), ...(dryRun ? { dryRun: true } : {}), ...(verbose ? { verbose: true } : {}) };
 }
 
 function parseMediaCommand(args: readonly string[]): MediaCommand {
