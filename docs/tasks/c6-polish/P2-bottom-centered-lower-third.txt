@@ -14,13 +14,20 @@ Read BOOT.md and inspect current P1 result, simple FFmpeg finisher, selected-fon
 
 VISIBLE TREATMENT
 
-Keep the current 1080x1920 output and existing lower-third width/height/padding/font sizing unless a minimal adjustment is required to satisfy the exact treatment below.
+Keep the current 1080x1920 output and current font sizing/line spacing unless a minimal adjustment is required to satisfy the exact treatment below.
 
-1. Bottom placement
-- The visible lower-third background panel must be flush against the bottom edge of the 1920-pixel frame.
-- Preserve the current outer panel height of 620 pixels and side geometry unless a focused implementation constraint requires otherwise.
-- With the current geometry this means the outer panel bottom is exactly y=1920 (equivalently y=1300 for height 620).
-- Preserve the current internal vertical offsets/padding relative to the panel unless a measured overflow requires the smallest safe adjustment.
+1. Full-width, content-height, bottom placement
+- The visible lower-third background panel must span the entire frame width: x=0, width=1080.
+- The panel must be flush against the bottom edge of the 1920-pixel frame.
+- Remove the fixed 620-pixel panel height.
+- Compute panel height deterministically from the wrapped content for that clip.
+- Panel height must grow/shrink from the actual wrapped headline line count plus the one source line, the existing intended headline/source separation, and explicit top/bottom padding.
+- A shorter one- or two-line headline must therefore produce a shorter panel than a four- or five-line headline.
+- Do not reserve unused vertical space for the maximum five-line case.
+- After content height is known, derive panel y as `1920 - panelHeight` so its bottom edge is always exactly y=1920.
+- Keep safe horizontal inset/padding for text inside the full-width panel; full-width panel does not mean glyphs may touch the frame edges.
+- Preserve positive top/bottom padding and source separation. Use the current padding/spacing intent unless measured selected-font fit requires the smallest safe adjustment.
+- The content-height calculation and selected-font measurement must agree: no clipping, overlap, or unnecessary fixed-height blank area.
 
 2. Background
 - Keep RGB `#336699`.
@@ -61,7 +68,10 @@ Preserve:
 PROOF
 
 Focused tests must prove:
+- outer panel is exactly x=0 and width=1080;
 - outer panel bottom edge is exactly the 1920 frame bottom;
+- panel height is derived from the actual wrapped headline line count plus one source line/padding/separation, with no fixed 620px height or reserved unused maximum-line space;
+- fixtures with different wrapped headline line counts produce different deterministic panel heights while remaining bottom-anchored;
 - panel color is `#336699` at exactly 77% opacity;
 - no old opaque `#336699` or black/translucent-black panel treatment remains;
 - headline and source are horizontally center-aligned within the safe area;
@@ -80,4 +90,4 @@ Do not alter presenter copy, Veo prompt wording, model/auth/polling, provider du
 
 FINAL RESPONSE
 
-Report exact bottom geometry, `#336699` at 77% opacity, center-alignment behavior, v3 finishing provenance, selected-font safety proof, P1 regression proof, broad validation, and unchanged 0.6.5 version.
+Report exact full-width/bottom geometry, the deterministic content-height rule and example heights for at least two different wrapped line counts, `#336699` at 77% opacity, center-alignment behavior, v3 finishing provenance, selected-font safety proof, P1 regression proof, broad validation, and unchanged 0.6.5 version.
