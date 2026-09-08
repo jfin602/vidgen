@@ -1,0 +1,51 @@
+TASK: Correction 6 / P1 — Complete lower-third v2 treatment
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra Medium`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Reconcile the already-landed lower-third safe-area implementation with the owner's final visible treatment. Do not redo the font-measurement/layout work from commit `2b5f054abd2b52b3707b814a002cd3a2ca26773e`; repair only the residual differences in current main.
+
+CURRENT PUSHED STATE
+
+Inspect current source before editing. The prior P1 already landed:
+- `simple-clip-finishing-policy-v2`;
+- explicit outer/inner safe-area geometry;
+- staged-font FFmpeg pixel measurement before provider creation;
+- bounded wrapping and the Venice/Lee Chang-dong regression;
+- one-input simple FFmpeg finishing.
+
+Current main still renders the lower-third box as `black@0.72`, even though the owner later changed the requirement to `#336699`. The static headline schema also still constrains finishing policy to v1 while runtime finishing provenance is v2.
+
+REQUIRED CHANGE
+
+- Render the lower-third panel as opaque RGB `#336699`.
+- Keep the existing v2 geometry, font sizes, line spacing, staged text files, selected-font measurement, pre-provider rejection, and full governed headline/source preservation unchanged unless a focused defect requires a bounded repair.
+- Keep white headline/source text unless current implementation requires no change.
+- Make runtime and static headline-sidecar validation agree on `simple-clip-finishing-policy-v2`.
+- Do not change headline sidecar shape in this prompt; P2 owns the later Veo prompt-file provenance/schema change.
+- Preserve 1080x1920, 30 fps, H.264/yuv420p, AAC stereo 48 kHz, loudnorm, trim behavior, one-input finishing, CLI grammar, provider behavior, cinematic assembly, and package/engine version 0.6.5.
+
+PROOF
+
+Focused tests must prove:
+- the FFmpeg lower-third panel is exactly opaque RGB `#336699`, not black or translucent black;
+- current outer/inner safe-area and positive padding remain intact;
+- the Venice headline still preserves the exact governed text after deterministic wrapping;
+- selected-font overflow still rejects before text/Veo provider creation;
+- runtime finishing provenance and `schemas/headline-clip.schema.json` both require v2;
+- hostile display text still enters FFmpeg only through staged text files.
+
+Run focused simple-clip-finisher/headline-workflow tests, `npm run check`, `node src/cli.ts --help`, and `git diff --check`.
+
+NON-GOALS
+
+Do not touch Veo prompt construction, prompt files, text generation, TTS, Google auth/model/polling, ngest, cinematic semantics, or Phase 7 in P1.
+
+FINAL RESPONSE
+
+Report the exact color treatment, v2 schema/runtime reconciliation, focused/broad validation, preserved safe-area behavior, and unchanged 0.6.5 version.
