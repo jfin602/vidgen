@@ -1,0 +1,122 @@
+TASK: Correction 6 / P2 — External Veo presenter prompt assets
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Move the operator-tunable initial Veo presenter prompt wording out of TypeScript and into bounded external text assets so the owner can tune presenter behavior between runs without a code change. Keep dynamic dialogue, story grounding, extension timing/continuity, safety constraints, request construction, and provider behavior engine-owned.
+
+Read BOOT.md, the Google video integration notes, provider-neutral video contracts, Agent Platform Veo adapter, simple headline workflow/sidecar, cinematic media workflow/reuse fingerprinting/generated-media provenance, and focused tests before editing.
+
+RUNTIME PROMPT-ASSET CONTRACT
+
+Support two independently configured local prompt files:
+- `VIDGEN_VEO_SIMPLE_PRESENTER_PROMPT_FILE` for the simple headline presenter's initial Veo request;
+- `VIDGEN_VEO_CINEMATIC_PRESENTER_PROMPT_FILE` for the preserved cinematic presenter's initial Veo request.
+
+Production configuration may point them at:
+- `/home/deploy/vidgen-assets/prompts/veo-presenter-simple.txt`;
+- `/home/deploy/vidgen-assets/prompts/veo-presenter-cinematic.txt`.
+
+Do not hardcode the deployment path in source. The environment variables own the absolute local paths.
+
+Each configured prompt asset must be a regular local UTF-8 text file, non-blank after normalization, and bounded to a small explicit maximum size. Reject missing, unreadable, non-file, oversized, malformed, or blank prompt assets with a safe configuration/generation error before ADC/Veo network work for the affected presenter path. Do not expose file contents, absolute paths, secrets, or raw filesystem errors in public errors.
+
+Resolve one stable prompt asset identity from the exact bytes used for request construction. A mid-run file edit must not cause fingerprint/provenance bytes to disagree with request bytes; the next configured run/client may pick up the changed file.
+
+PROMPT OWNERSHIP
+
+The external prompt asset owns only operator-tunable presenter/style guidance for the initial presenter request. It is literal text, not a template language: do not interpolate placeholders or let the file control dialogue, story data, operation IDs, paths, auth, models, duration, reference encoding, or output settings.
+
+VidGen must continue to append/own the dynamic and safety-critical constraints, including:
+- the exact assigned dialogue;
+- simple/cinematic story grounding where currently required;
+- extension continuity and retained-window timing;
+- no extra dialogue;
+- no generated readable on-screen text;
+- no unsupported story facts;
+- the existing provider/request restrictions.
+
+For initial presenter requests, add the engine-owned factual statement:
+
+`The supplied reference images are AI-generated presenter images and do not depict a real person or celebrity.`
+
+Remove hardcoded presenter-instruction uses of `news`:
+- replace the hardcoded `news-presenter` wording with `presenter`;
+- remove the hardcoded `visual/news context` wording from cinematic presenter scaffolding while preserving the same ClipPlan grounding meaning.
+
+Do not rewrite operator prompt-file contents or governed story/dialogue if they independently contain the word `news`. Do not change the separate B-roll/content-video prompt in this correction.
+
+The intended starting external prompt files should use presenter wording rather than news-presenter wording, for example:
+- simple: `Create a portrait presenter video. Preserve the intended presenter appearance from the supplied reference images. Use natural presenter movement, eye contact, and delivery.`
+- cinematic: `Create a portrait presenter video. Preserve the intended presenter appearance from the supplied reference images. Maintain a polished presenter performance consistent with the supplied visual context.`
+
+These examples are operator assets, not hardcoded fallback prompts. If the required configured asset is absent, fail rather than silently reverting to the old TypeScript prose.
+
+PROVENANCE / REUSE
+
+Prompt edits must change generation identity.
+
+- Record only safe prompt-asset identity needed for reproducibility: basename, SHA-256, and byte size. Never persist the absolute prompt path or prompt text.
+- Add the active simple presenter prompt identity to the headline clip sidecar and its runtime/schema validation. Bump the headline sidecar schema version as required by the shape change; do not mislabel a changed schema as version 1.
+- Add the active cinematic presenter prompt identity to durable generated-media provenance for presenter generation. Bump the generated-media schema version as required by the shape change.
+- Include the cinematic prompt asset identity in the effective generation input fingerprint/reuse decision for presenter units. Editing the external prompt must invalidate presenter reuse while leaving unrelated video/voiceover reuse semantics unchanged.
+- Existing persisted records that lack prompt identity must never be falsely reused as if they were generated under the current external prompt. Preserve compatibility where practical for unrelated/non-presenter records, but prefer safe regeneration over ambiguous presenter reuse.
+- The identity used for fingerprinting/provenance must describe the exact prompt bytes used for the provider request.
+
+PRESERVED BEHAVIOR
+
+- One to three approved PNG/JPEG presenter references remain unchanged.
+- Veo request model, Agent Platform ADC auth, regional endpoints, polling, operation provenance, inline MP4 handling, duration planning, resolution/aspect ratio/sample count, and error sanitization remain unchanged.
+- Exact assigned dialogue semantics remain unchanged.
+- Simple 4-20 second ceiling and current 8-second initial-generation behavior remain unchanged.
+- Cinematic extension behavior remains unchanged.
+- Text generation, TTS, lower-third rendering, ngest, ClipPlan/AssemblyTemplate semantics, FFmpeg assembly, CLI grammar, and package/engine version remain unchanged.
+- The external prompt is configuration/runtime creative input, not governed ngest input and not a new upstream control surface.
+
+PROOF
+
+Focused tests must prove:
+- simple and cinematic initial presenter requests use the exact configured prompt-file text plus engine-owned constraints;
+- the configured prompt file is treated literally, with no placeholder interpolation;
+- hardcoded presenter scaffolding no longer uses `news-presenter` or `visual/news context`;
+- the engine-owned AI-generated-reference statement is present on initial presenter requests;
+- exact assigned dialogue remains present and unchanged;
+- extension prompts retain current continuity/timing behavior and do not falsely claim that reference images are supplied on extension calls;
+- missing/blank/non-file/oversized/malformed prompt assets fail safely before Veo auth/network for the affected path;
+- prompt contents and absolute paths never appear in public errors, sidecars, generated-media manifests, or provider provenance;
+- headline sidecar provenance records basename/hash/size for the simple prompt asset under the correctly bumped schema version;
+- generated-media provenance records basename/hash/size for the cinematic presenter prompt under the correctly bumped schema version;
+- changing only the cinematic prompt-file bytes changes presenter effective-generation fingerprint and prevents stale presenter reuse, while unrelated content-video and voiceover reuse remains stable;
+- the reference payload, model parameters, auth headers, endpoint/polling semantics, operation provenance, and safe provider failures are unchanged;
+- B-roll/content-video prompt behavior is unchanged.
+
+Update the narrow runtime configuration/integration documentation so operators know the two environment variables, external-asset ownership, starting file locations/content, failure behavior, and safe provenance rules. Do not commit production prompt files under `/home/deploy` or claim to modify the VPS filesystem.
+
+Run focused Agent Platform Veo, headline-workflow/sidecar, media-workflow/generated-media/reuse tests, `npm run check`, `node src/cli.ts --help`, and `git diff --check`.
+
+Downstream-required capability -> owning implementation/export -> focused proof:
+
+operator-tunable presenter guidance -> bounded external prompt-asset loader/configuration -> next run uses changed file bytes without source edits.
+
+exact dialogue/safety/story rules -> engine-owned prompt assembly -> external file cannot replace or template dynamic constraints.
+
+reproducible simple artifact -> headline sidecar prompt identity -> basename/hash/size match the bytes used for Veo request construction.
+
+safe cinematic reuse -> effective presenter generation fingerprint + generated-media prompt provenance -> prompt edits invalidate only affected presenter reuse.
+
+NON-GOALS
+
+Do not externalize structured-text prompts, TTS prompts, B-roll/content-video prompts, extension timing logic, model/auth configuration, FFmpeg filters, or ngest controls. Do not add remote prompt URLs, prompt databases, hot-reload services, a generic templating language, or a broad configuration framework. Do not weaken provider safety handling or attempt to bypass Veo policy decisions.
+
+LIVE QUALIFICATION
+
+No live Veo call is required for Codex closeout. Mocked tests prove request construction/configuration/provenance only. After human review, the owner will create/update the configured files under `/home/deploy/vidgen-assets/prompts/` and perform the next live presenter smoke. Do not claim that the AI-generated-reference wording changes Veo safety classification until a live provider result is observed.
+
+FINAL RESPONSE
+
+Report the external prompt-file contract, environment variables, prompt ownership split, AI-generated-reference statement, removal of hardcoded presenter `news` wording, prompt provenance/reuse behavior, schema-version changes, validation, preserved provider behavior, and confirmation that project version 0.6.5 is unchanged.
