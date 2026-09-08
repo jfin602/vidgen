@@ -267,3 +267,15 @@ test('headline failure renders only explicit safe provider diagnostics', async (
   });
   const output = stderr.join(''); assert.equal(code, 2); assert.match(output, /providerCode: 3/); assert.match(output, /providerStatus: INVALID_ARGUMENT/); assert.match(output, /supportCode: 15236754/); assert.match(output, /providerMessage: Request rejected by provider\./); assert.doesNotMatch(output, new RegExp(token)); assert.doesNotMatch(output, /\{"authorization"/);
 });
+
+test('headline verbose renders only sanitized Veo runtime diagnostics', async () => {
+  const run = async (verbose: boolean) => {
+    const stderr: string[] = []; const token = 'secret-access-token'; const prompt = 'Secret presenter dialogue.';
+    const code = await runCli(['headline', '--input-file', 'fixture.json', '--article-id', 'article-2', '--anchor-reference', 'anchor.png', '--font-file', 'font.ttf', ...(verbose ? ['--verbose'] : [])], { writeStdout: () => undefined, writeStderr: (text) => stderr.push(text) }, {
+      generateHeadline: async () => { throw new VidGenError('generated_media', 'Agent Platform Veo result processing failed.', { cause: new RangeError(`Bearer ${token} ${prompt} C:\\private\\response.json`), safeProviderDiagnostic: { veoStage: 'result_decode', internalError: 'RangeError', internalMessage: `Bearer ${token} ${prompt} C:\\private\\response.json` } }); },
+    });
+    const output = stderr.join(''); assert.equal(code, 2); assert.doesNotMatch(output, new RegExp(token)); assert.doesNotMatch(output, new RegExp(prompt)); assert.doesNotMatch(output, /C:\\private/); return output;
+  };
+  const verbose = await run(true); assert.match(verbose, /veoStage: result_decode/); assert.match(verbose, /internalError: RangeError/); assert.match(verbose, /internalMessage: Internal runtime error\./);
+  assert.doesNotMatch(await run(false), /veoStage|internalError|internalMessage/);
+});

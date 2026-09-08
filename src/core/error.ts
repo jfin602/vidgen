@@ -29,6 +29,10 @@ export interface SafeProviderDiagnostic {
   readonly providerStatus?: string;
   readonly supportCode?: string;
   readonly providerMessage?: string;
+  /** Adapter-owned runtime facts, shown only by explicitly verbose commands. */
+  readonly veoStage?: 'auth' | 'start_request' | 'poll_request' | 'operation_parse' | 'result_decode';
+  readonly internalError?: string;
+  readonly internalMessage?: string;
 }
 
 export interface VidGenErrorOptions {
@@ -72,11 +76,18 @@ export function sanitizeProviderDiagnostic(value: unknown): SafeProviderDiagnost
   const providerStatus = safeProviderStatus(source.providerStatus);
   const supportCode = safeSupportCode(source.supportCode);
   const providerMessage = safeProviderMessage(source.providerMessage);
+  const veoStage = safeVeoStage(source.veoStage);
+  const internalError = safeInternalError(source.internalError);
+  const internalMessage = safeInternalMessage(source.internalMessage)
+    ?? (veoStage === undefined ? undefined : 'Internal runtime error.');
   const diagnostic: SafeProviderDiagnostic = {
     ...(providerCode === undefined ? {} : { providerCode }),
     ...(providerStatus === undefined ? {} : { providerStatus }),
     ...(supportCode === undefined ? {} : { supportCode }),
     ...(providerMessage === undefined ? {} : { providerMessage }),
+    ...(veoStage === undefined ? {} : { veoStage }),
+    ...(internalError === undefined ? {} : { internalError }),
+    ...(internalMessage === undefined ? {} : { internalMessage }),
   };
   return Object.keys(diagnostic).length === 0 ? undefined : diagnostic;
 }
@@ -89,5 +100,13 @@ function safeProviderStatus(value: unknown): string | undefined { return typeof 
 function safeSupportCode(value: unknown): string | undefined { return (typeof value === 'string' || typeof value === 'number') && /^\d{1,16}$/.test(String(value)) ? String(value) : undefined; }
 function safeProviderMessage(value: unknown): string | undefined {
   return typeof value === 'string' && /^[\x20-\x7e]{1,240}$/.test(value) && !/[{}\[\]"]/u.test(value) && !sensitive(value) && !/(?:file:|(?:^|[\s'(])(?:[A-Za-z]:[\\/]|[\\/]))/iu.test(value) ? value : undefined;
+}
+function safeVeoStage(value: unknown): SafeProviderDiagnostic['veoStage'] | undefined {
+  return value === 'auth' || value === 'start_request' || value === 'poll_request' || value === 'operation_parse' || value === 'result_decode' ? value : undefined;
+}
+function safeInternalError(value: unknown): string | undefined { return typeof value === 'string' && /^[A-Za-z][A-Za-z0-9]{0,63}$/.test(value) ? value : undefined; }
+function safeInternalMessage(value: unknown): string | undefined {
+  const message = safeProviderMessage(value);
+  return message !== undefined && /^(?:Cannot |Invalid |The |Failed |Unexpected |Stream |Response |Body |Buffer |JSON |Reader |Operation |Abort|Timeout|Out of memory|Expected |Maximum call stack)/u.test(message) ? message : undefined;
 }
 function sensitive(value: string): boolean { return /\b(?:authorization|bearer|token|api[-_ ]?key|x-goog-api-key|cookie)\b/iu.test(value); }

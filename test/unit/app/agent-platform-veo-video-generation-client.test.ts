@@ -209,6 +209,58 @@ test('Agent Platform Veo retains only sanitized terminal operation diagnostics',
   await assert.rejects(clientFor(sequenceFetch([], [tokenCode])).generateVideo({ unit: contentUnit(8) }), (error: unknown) => error instanceof VidGenError && error.safeProviderDiagnostic?.providerCode === undefined && !String(error).includes(token));
 });
 
+test('Agent Platform Veo classifies native runtime failures without exposing provider or media data', async (context) => {
+  const unsafe = `Bearer ${token}; ${storyText}; C:\\secrets\\response.json; {"authorization":"Bearer ${token}"}; AAAA-video-bytes`;
+  const runtimeError = (stage: string) => (error: unknown) => {
+    const diagnostic = error instanceof VidGenError ? error.safeProviderDiagnostic : undefined;
+    assert.equal(error instanceof VidGenError && error.code === 'generated_media', true);
+    assert.equal(diagnostic?.veoStage, stage);
+    assert.equal(diagnostic?.internalError === 'TypeError' || diagnostic?.internalError === 'RangeError', true);
+    assert.equal(diagnostic?.internalMessage, 'Internal runtime error.');
+    const rendered = `${String(error)}\n${JSON.stringify(diagnostic)}`;
+    for (const value of [token, storyText, 'C:\\secrets\\response.json', '{"authorization"', 'AAAA-video-bytes']) assert.equal(rendered.includes(value), false);
+    return true;
+  };
+  await context.test('auth', async () => {
+    await assert.rejects(clientFor(async () => operation('never', true, videoBytes([1])), { getAccessToken: async () => { throw new TypeError("Cannot read properties of undefined (reading 'value')"); } }).generateVideo({ unit: contentUnit(8) }), (error: unknown) => error instanceof VidGenError && error.code === 'generated_media' && error.safeProviderDiagnostic?.veoStage === 'auth' && error.safeProviderDiagnostic.internalError === 'TypeError' && error.safeProviderDiagnostic.internalMessage === "Cannot read properties of undefined (reading 'value')");
+  });
+  await context.test('start fetch', async () => {
+    await assert.rejects(clientFor(async () => { throw new TypeError(unsafe); }).generateVideo({ unit: contentUnit(8) }), runtimeError('start_request'));
+  });
+  await context.test('poll fetch', async () => {
+    let calls = 0;
+    await assert.rejects(clientFor(async () => {
+      calls += 1;
+      if (calls === 1) return operation('pending');
+      throw new TypeError(unsafe);
+    }).generateVideo({ unit: contentUnit(8) }), runtimeError('poll_request'));
+  });
+  await context.test('response stream', async () => {
+    const stream = new ReadableStream<Uint8Array>({ start(controller) { controller.error(new TypeError(unsafe)); } });
+    await assert.rejects(clientFor(async () => new Response(stream, { status: 200 })).generateVideo({ unit: contentUnit(8) }), runtimeError('operation_parse'));
+  });
+  await context.test('terminal operation inspection', async () => {
+    const client = clientFor(sequenceFetch([], [json({ ignored: true })]));
+    const originalParse = JSON.parse;
+    JSON.parse = (() => new Proxy({ name: operationName('native'), done: true }, { get(target, property, receiver) { if (property === 'done') throw new RangeError(unsafe); return Reflect.get(target, property, receiver); } })) as typeof JSON.parse;
+    try {
+      await assert.rejects(client.generateVideo({ unit: contentUnit(8) }), runtimeError('operation_parse'));
+    } finally { JSON.parse = originalParse; }
+  });
+  await context.test('inline MP4 decoding', async () => {
+    const originalFrom = Buffer.from;
+    Object.defineProperty(Buffer, 'from', { configurable: true, writable: true, value: (value: string, encoding?: BufferEncoding) => { if (encoding === 'base64') throw new RangeError(unsafe); return originalFrom(value, encoding); } });
+    try {
+      await assert.rejects(clientFor(sequenceFetch([], [operation('decode', true, videoBytes([1]))])).generateVideo({ unit: contentUnit(8) }), runtimeError('result_decode'));
+    } finally { Object.defineProperty(Buffer, 'from', { configurable: true, writable: true, value: originalFrom }); }
+  });
+});
+
+test('Agent Platform Veo ignores native progress callback failures', async () => {
+  const result = await clientFor(sequenceFetch([], [operation('progress-error', true, videoBytes([1]))]), { onProgress: () => { throw new TypeError(`Bearer ${token}`); } }).generateVideo({ unit: contentUnit(8) });
+  assert.equal(result.operationId, operationName('progress-error'));
+});
+
 test('unsafe Agent Platform configuration fails in construction before auth or network', () => {
   let authCalls = 0; let fetchCalls = 0;
   for (const environment of [

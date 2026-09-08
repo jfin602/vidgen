@@ -163,8 +163,10 @@ export async function runCli(
   output: CliOutput,
   dependencies: CliDependencies = {},
 ): Promise<number> {
+  let verbose = false;
   try {
     const command = parseCliArgs(args);
+    verbose = command.kind === 'headline' && command.verbose === true;
     if (command.kind === 'help') {
       output.writeStdout(helpText);
       return 0;
@@ -253,7 +255,7 @@ export async function runCli(
       : 'VidGen failed unexpectedly.';
     const category = isVidGenError(error) ? error.code : 'unexpected';
     const diagnostic = isVidGenError(error) ? error.safeProviderDiagnostic : undefined;
-    const details = diagnostic === undefined ? '' : `${diagnostic.providerCode === undefined ? '' : `providerCode: ${diagnostic.providerCode}\n`}${diagnostic.providerStatus === undefined ? '' : `providerStatus: ${diagnostic.providerStatus}\n`}${diagnostic.supportCode === undefined ? '' : `supportCode: ${diagnostic.supportCode}\n`}${diagnostic.providerMessage === undefined ? '' : `providerMessage: ${diagnostic.providerMessage}\n`}`;
+    const details = diagnostic === undefined ? '' : `${diagnostic.providerCode === undefined ? '' : `providerCode: ${diagnostic.providerCode}\n`}${diagnostic.providerStatus === undefined ? '' : `providerStatus: ${diagnostic.providerStatus}\n`}${diagnostic.supportCode === undefined ? '' : `supportCode: ${diagnostic.supportCode}\n`}${diagnostic.providerMessage === undefined ? '' : `providerMessage: ${diagnostic.providerMessage}\n`}${!verbose || diagnostic.veoStage === undefined ? '' : `veoStage: ${diagnostic.veoStage}\ninternalError: ${diagnostic.internalError ?? 'Error'}\ninternalMessage: ${diagnostic.internalMessage ?? 'Internal runtime error.'}\n`}`;
     output.writeStderr(`Run failed [${category}]: ${message} Run "vidgen --help" for usage.\n${details}`);
     return 2;
   }

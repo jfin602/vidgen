@@ -111,29 +111,35 @@ export class GoogleAgentPlatformVeoVideoGenerationClient implements VideoGenerat
   }
 
   async generateVideo(request: VideoGenerationRequest): Promise<VideoGenerationResult> {
-    validateVideoRequest(request);
-    const extensionCount = requiredExtensionCount(request.unit.targetDurationSeconds);
-    this.assertExtensionCount(extensionCount);
-    const dialogue = request.unit.role.kind === 'presenter' ? partitionCinematicSpeech(request.unit.spokenText, extensionCount + 1) : [];
-    const generated = await this.generateSequence(
-      buildInitialRequest(request, dialogue[0], this.prompts), extensionCount,
-      (previous, index) => buildExtensionRequest(request, previous, dialogue[index + 1], this.prompts),
-    );
-    return resultFor(this, generated, INITIAL_DURATION_SECONDS + (extensionCount * EXTENSION_DURATION_SECONDS));
+    return this.withRuntimeClassification(async (stage) => {
+      validateVideoRequest(request);
+      const extensionCount = requiredExtensionCount(request.unit.targetDurationSeconds);
+      this.assertExtensionCount(extensionCount);
+      const dialogue = request.unit.role.kind === 'presenter' ? partitionCinematicSpeech(request.unit.spokenText, extensionCount + 1) : [];
+      const generated = await this.generateSequence(
+        buildInitialRequest(request, dialogue[0], this.prompts), extensionCount,
+        (previous, index) => buildExtensionRequest(request, previous, dialogue[index + 1], this.prompts), stage,
+      );
+      stage.value = 'result_decode';
+      return resultFor(this, generated, INITIAL_DURATION_SECONDS + (extensionCount * EXTENSION_DURATION_SECONDS));
+    });
   }
 
   async generatePresenterVideo(request: PresenterVideoGenerationRequest): Promise<PresenterVideoGenerationResult> {
-    assertPresenterVideoGenerationRequest(request);
-    assertAgentPlatformReferences(request.referenceImages);
-    const durationPlan = planPresenterVideoDuration(request.maxSeconds);
-    this.assertExtensionCount(durationPlan.extensionCount);
-    const dialogue = partitionSimplePresenterSpeech(request.spokenText, request.maxSeconds);
-    const retainedExtensionSeconds = Math.min(request.maxSeconds, durationPlan.rawProviderDurationSeconds) - INITIAL_DURATION_SECONDS;
-    const generated = await this.generateSequence(
-      buildSimpleInitialRequest(request, dialogue[0]!, durationPlan.extensionCount > 0, this.prompts), durationPlan.extensionCount,
-      (previous, index) => buildSimpleExtensionRequest(previous, dialogue[index + 1] ?? '', retainedExtensionSeconds, this.prompts),
-    );
-    return { ...resultFor(this, generated), rawDurationSeconds: durationPlan.rawProviderDurationSeconds, durationPlan };
+    return this.withRuntimeClassification(async (stage) => {
+      assertPresenterVideoGenerationRequest(request);
+      assertAgentPlatformReferences(request.referenceImages);
+      const durationPlan = planPresenterVideoDuration(request.maxSeconds);
+      this.assertExtensionCount(durationPlan.extensionCount);
+      const dialogue = partitionSimplePresenterSpeech(request.spokenText, request.maxSeconds);
+      const retainedExtensionSeconds = Math.min(request.maxSeconds, durationPlan.rawProviderDurationSeconds) - INITIAL_DURATION_SECONDS;
+      const generated = await this.generateSequence(
+        buildSimpleInitialRequest(request, dialogue[0]!, durationPlan.extensionCount > 0, this.prompts), durationPlan.extensionCount,
+        (previous, index) => buildSimpleExtensionRequest(previous, dialogue[index + 1] ?? '', retainedExtensionSeconds, this.prompts), stage,
+      );
+      stage.value = 'result_decode';
+      return { ...resultFor(this, generated), rawDurationSeconds: durationPlan.rawProviderDurationSeconds, durationPlan };
+    });
   }
 
   private assertExtensionCount(count: number): void {
@@ -144,15 +150,18 @@ export class GoogleAgentPlatformVeoVideoGenerationClient implements VideoGenerat
     initialBody: Record<string, unknown>,
     extensionCount: number,
     extensionBody: (previous: InlineVideo, extensionIndex: number) => Record<string, unknown>,
+    stage: VeoStageTracker,
   ): Promise<GeneratedSequence> {
+    stage.value = 'auth';
     const token = await this.accessToken();
     const deadline = this.now() + this.totalTimeoutMs;
     const operationIds: string[] = [];
-    let completed = await this.startAndWait(initialBody, token, deadline, 1);
+    let completed = await this.startAndWait(initialBody, token, deadline, 1, stage);
     operationIds.push(completed.operationName);
     let video = completed.video;
     for (let index = 0; index < extensionCount; index += 1) {
-      completed = await this.startAndWait(extensionBody(video, index), token, deadline, index + 2);
+      stage.value = 'start_request';
+      completed = await this.startAndWait(extensionBody(video, index), token, deadline, index + 2, stage);
       operationIds.push(completed.operationName);
       video = completed.video;
     }
@@ -169,41 +178,55 @@ export class GoogleAgentPlatformVeoVideoGenerationClient implements VideoGenerat
       if (typeof token !== 'string' || !SAFE_ACCESS_TOKEN.test(token)) throw new Error('invalid token');
       return token;
     } catch (cause) {
-      throw providerFailure('Agent Platform Veo authentication failed.', cause);
+      if (cause instanceof VidGenError) throw cause;
+      throw runtimeFailure('auth', cause);
     } finally { if (timer !== undefined) clearTimeout(timer); }
   }
 
-  private async startAndWait(body: Record<string, unknown>, token: string, deadline: number, operationNumber: number): Promise<CompletedOperation> {
+  private async startAndWait(body: Record<string, unknown>, token: string, deadline: number, operationNumber: number, stage: VeoStageTracker): Promise<CompletedOperation> {
     this.assertBeforeDeadline(deadline);
-    const started = await this.requestJson(this.modelUrl(':predictLongRunning'), body, token);
+    stage.value = 'start_request';
+    const started = await this.requestJson(this.modelUrl(':predictLongRunning'), body, token, 'start_request');
+    stage.value = 'operation_parse';
     const operationName = this.operationNameFrom(started);
     this.progress({ stage: 'operation_started', operationNumber });
     let operation = started;
     let polls = 0;
-    while (!operationDone(operation)) {
+    while (true) {
+      stage.value = 'operation_parse';
+      if (operationDone(operation)) break;
       this.assertBeforeDeadline(deadline);
       if (polls >= Math.ceil(this.totalTimeoutMs / this.pollIntervalMs)) throw providerFailure('Agent Platform Veo video generation timed out.');
-      try { await this.sleep(this.pollIntervalMs); } catch (cause) { throw providerFailure('Agent Platform Veo video generation polling failed.', cause); }
+      stage.value = 'poll_request';
+      await this.sleep(this.pollIntervalMs);
       this.assertBeforeDeadline(deadline);
-      operation = await this.requestJson(this.modelUrl(':fetchPredictOperation'), { operationName }, token);
+      stage.value = 'poll_request';
+      operation = await this.requestJson(this.modelUrl(':fetchPredictOperation'), { operationName }, token, 'poll_request');
       polls += 1;
+      stage.value = 'operation_parse';
       if (!operationDone(operation)) this.progress({ stage: 'operation_pending', operationNumber, pollNumber: polls });
     }
-    const completed = completedOperation(operation, operationName, this.maxVideoBytes);
+    stage.value = 'operation_parse';
+    const completed = completedOperation(operation, operationName, this.maxVideoBytes, () => { stage.value = 'result_decode'; });
     this.progress({ stage: 'operation_completed', operationNumber });
     return completed;
   }
 
-  private async requestJson(url: string, body: Record<string, unknown>, token: string): Promise<unknown> {
+  private async requestJson(url: string, body: Record<string, unknown>, token: string, requestStage: 'start_request' | 'poll_request'): Promise<unknown> {
     let response: Response;
     try {
       response = await this.fetchWithTimeout(url, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify(body), redirect: 'error' });
     } catch (cause) {
       if (cause instanceof VidGenError) throw cause;
-      throw providerFailure('Unable to reach the Agent Platform Veo video service.', cause);
+      throw runtimeFailure(requestStage, cause);
     }
-    if (!response.ok) throw providerFailure('Agent Platform Veo video service returned an unsuccessful response.');
-    return parseBoundedJson(response, this.maxResponseBytes);
+    try {
+      if (!response.ok) throw providerFailure('Agent Platform Veo video service returned an unsuccessful response.');
+      return await parseBoundedJson(response, this.maxResponseBytes);
+    } catch (cause) {
+      if (cause instanceof VidGenError) throw cause;
+      throw runtimeFailure('operation_parse', cause);
+    }
   }
 
   private modelUrl(suffix: ':predictLongRunning' | ':fetchPredictOperation'): string {
@@ -228,6 +251,11 @@ export class GoogleAgentPlatformVeoVideoGenerationClient implements VideoGenerat
 
   private assertBeforeDeadline(deadline: number): void { if (this.now() >= deadline) throw providerFailure('Agent Platform Veo video generation timed out.'); }
   private progress(event: GoogleAgentPlatformVeoProgressEvent): void { try { this.onProgress?.(event); } catch {} }
+
+  private async withRuntimeClassification<T>(work: (stage: VeoStageTracker) => Promise<T>): Promise<T> {
+    const stage: VeoStageTracker = { value: 'start_request' };
+    try { return await work(stage); } catch (cause) { throw runtimeFailure(stage.value, cause); }
+  }
 }
 
 function resultFor(client: GoogleAgentPlatformVeoVideoGenerationClient, generated: GeneratedSequence, durationSeconds?: number): VideoGenerationResult {
@@ -290,12 +318,13 @@ function partitionCinematicSpeech(text: string, chunks: number): readonly string
 function requiredExtensionCount(seconds: number): number { return Math.max(0, Math.ceil((seconds - INITIAL_DURATION_SECONDS) / EXTENSION_DURATION_SECONDS)); }
 function operationDone(payload: unknown): boolean { const operation = record(payload); if (operation === undefined || (operation.done !== undefined && typeof operation.done !== 'boolean')) throw providerFailure('Agent Platform Veo video service returned a malformed operation.'); if (operation.error !== undefined) throw providerFailure('Agent Platform Veo video generation failed.', undefined, operationDiagnostic(operation)); return operation.done === true; }
 
-function completedOperation(payload: unknown, operationName: string, maxVideoBytes: number): CompletedOperation {
+function completedOperation(payload: unknown, operationName: string, maxVideoBytes: number, beforeDecode: () => void): CompletedOperation {
   const operation = record(payload); const response = operation === undefined ? undefined : record(operation.response);
   if (operation === undefined || response === undefined || filtered(response)) throw providerFailure('Agent Platform Veo video generation failed or completed without a video result.');
   if (operation.error !== undefined) throw providerFailure('Agent Platform Veo video generation failed.', undefined, operationDiagnostic(operation));
   const videos = response.videos; const video = Array.isArray(videos) && videos.length === 1 ? record(videos[0]) : undefined;
   if (video === undefined || video.mimeType !== 'video/mp4' || typeof video.bytesBase64Encoded !== 'string') throw providerFailure('Agent Platform Veo video generation completed without a valid inline MP4 result.');
+  beforeDecode();
   return { operationName, video: decodeInlineMp4(video.bytesBase64Encoded, maxVideoBytes) };
 }
 
@@ -308,13 +337,12 @@ function decodeInlineMp4(value: string, maxBytes: number): InlineVideo {
   return { mimeType: 'video/mp4', bytes };
 }
 
-async function parseBoundedJson(response: Response, maxBytes: number): Promise<unknown> { const bytes = await readBoundedBytes(response, maxBytes); try { return JSON.parse(new TextDecoder().decode(bytes)) as unknown; } catch (cause) { throw providerFailure('Agent Platform Veo video service returned invalid JSON.', cause); } }
+async function parseBoundedJson(response: Response, maxBytes: number): Promise<unknown> { const bytes = await readBoundedBytes(response, maxBytes); return JSON.parse(new TextDecoder().decode(bytes)) as unknown; }
 async function readBoundedBytes(response: Response, maxBytes: number): Promise<Uint8Array> {
   const length = response.headers.get('content-length'); if (length !== null && /^\d+$/.test(length) && Number(length) > maxBytes) throw providerFailure('Agent Platform Veo operation response exceeded the maximum supported size.');
   if (response.body === null) throw providerFailure('Agent Platform Veo video service returned an unreadable response.');
   const reader = response.body.getReader(); const chunks: Uint8Array[] = []; let size = 0;
   try { while (true) { const next = await reader.read(); if (next.done) break; size += next.value.byteLength; if (size > maxBytes) { await reader.cancel(); throw providerFailure('Agent Platform Veo operation response exceeded the maximum supported size.'); } chunks.push(next.value); } }
-  catch (cause) { if (cause instanceof VidGenError) throw cause; throw providerFailure('Agent Platform Veo video service returned an unreadable response.', cause); }
   finally { reader.releaseLock(); }
   const bytes = new Uint8Array(size); let offset = 0; for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; } return bytes;
 }
@@ -341,6 +369,17 @@ function supportCode(error: Record<string, unknown>, message: string | undefined
   return /\bsupport(?:[ -]?code)?\s*[:#-]?\s*(\d{1,16})\b/iu.exec(message ?? '')?.[1];
 }
 function providerFailure(message: string, cause?: unknown, safeProviderDiagnostic?: unknown): VidGenError { return new VidGenError('generated_media', message, { ...(cause === undefined ? {} : { cause }), ...(safeProviderDiagnostic === undefined ? {} : { safeProviderDiagnostic }) }); }
+type VeoProcessingStage = NonNullable<ReturnType<typeof sanitizeProviderDiagnostic>>['veoStage'];
+interface VeoStageTracker { value: NonNullable<VeoProcessingStage>; }
+function runtimeFailure(stage: NonNullable<VeoProcessingStage>, cause: unknown): VidGenError {
+  if (cause instanceof VidGenError) return cause;
+  return new VidGenError('generated_media', stage === 'result_decode' || stage === 'operation_parse' ? 'Agent Platform Veo result processing failed.' : stage === 'auth' ? 'Agent Platform Veo authentication failed.' : 'Agent Platform Veo video request failed.', {
+    cause,
+    safeProviderDiagnostic: { veoStage: stage, internalError: internalErrorName(cause), internalMessage: internalErrorMessage(cause) },
+  });
+}
+function internalErrorName(cause: unknown): string { try { return typeof (cause as { name?: unknown })?.name === 'string' && /^[A-Za-z][A-Za-z0-9]{0,63}$/.test((cause as { name: string }).name) ? (cause as { name: string }).name : 'Error'; } catch { return 'Error'; } }
+function internalErrorMessage(cause: unknown): string { try { const message = (cause as { message?: unknown })?.message; return typeof message === 'string' ? message : 'Internal runtime error.'; } catch { return 'Internal runtime error.'; } }
 
 interface InlineVideo { readonly mimeType: 'video/mp4'; readonly bytes: Uint8Array; }
 interface CompletedOperation { readonly operationName: string; readonly video: InlineVideo; }
