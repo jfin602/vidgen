@@ -74,7 +74,7 @@ test('simple lower-third finishing, selected-font measurement, and pixel validat
   assert.throws(() => assertSimpleLowerThirdPixels(layoutPixels([[layout.headline.x + 5, layout.headline.y], [text.x + text.width - 1, layout.headline.y + layout.headline.height - 1], [layout.source.x, layout.source.y], [text.x + text.width - 1, layout.source.y + layout.source.height - 1]]), layout), hasSimpleClip);
   const measurement = buildSimpleLowerThirdMeasurementArgs(layout, ['font.ttf', 'simple-headline.txt', 'simple-source.txt']).join(' ');
   const finishing = buildSimpleClipFinishArgs('raw.mp4', 'candidate.mp4', layout, ['font.ttf', 'simple-headline.txt', 'simple-source.txt']).join(' ');
-  for (const expression of ['fontsize=44:x=96:y=1672:boxw=888:boxh=104:text_align=TC:line_spacing=16', 'fontsize=32:x=96:y=1832:boxw=888:boxh=40:text_align=TC']) {
+  for (const expression of ['fontsize=44:x=96:y=1672:boxw=888:boxh=104:text_align=C:line_spacing=16', 'fontsize=32:x=96:y=1832:boxw=888:boxh=40:text_align=C']) {
     assert.match(measurement, new RegExp(expression)); assert.match(finishing, new RegExp(expression));
   }
   assert.doesNotMatch(measurement, /Example News/);
@@ -109,8 +109,8 @@ test('simple finisher stages hostile article text, retains sub-eight speech cove
     assert.match(graph, /drawbox=x=0:y=1624:w=1080:h=296:color=0x336699@0\.77:t=fill/);
     assert.doesNotMatch(graph, /color=0x336699:t=fill/);
     assert.doesNotMatch(graph, /drawbox=.*color=(?:black|0x000000)(?:@|:)/);
-    assert.match(graph, /fontsize=44:x=96:y=1672:boxw=888:boxh=104:text_align=TC:line_spacing=16/);
-    assert.match(graph, /fontsize=32:x=96:y=1832:boxw=888:boxh=40:text_align=TC/);
+    assert.match(graph, /fontsize=44:x=96:y=1672:boxw=888:boxh=104:text_align=C:line_spacing=16/);
+    assert.match(graph, /fontsize=32:x=96:y=1832:boxw=888:boxh=40:text_align=C/);
     assert.match(graph, /drawtext=fontfile=font\.ttf:textfile=simple-headline\.txt:expansion=none/);
     assert.match(graph, /textfile=simple-source\.txt:expansion=none/);
     assert.doesNotMatch(graph, /quote|second line|\[x\]|Source/);

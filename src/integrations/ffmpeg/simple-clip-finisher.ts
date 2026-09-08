@@ -180,7 +180,7 @@ export function assertSimpleLowerThirdPixels(pixels: Uint8Array, layout: SimpleL
 }
 
 function lowerThirdDrawtext(textFile: string, text: { readonly x: number; readonly y: number; readonly fontSize: number; readonly height: number; readonly lineSpacing?: number }): string {
-  return `drawtext=fontfile=font.ttf:textfile=${textFile}:expansion=none:fontcolor=white:fontsize=${text.fontSize}:x=${text.x}:y=${text.y}:boxw=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.text.width}:boxh=${text.height}:text_align=TC${text.lineSpacing === undefined ? '' : `:line_spacing=${text.lineSpacing}`}`;
+  return `drawtext=fontfile=font.ttf:textfile=${textFile}:expansion=none:fontcolor=white:fontsize=${text.fontSize}:x=${text.x}:y=${text.y}:boxw=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.text.width}:boxh=${text.height}:text_align=C${text.lineSpacing === undefined ? '' : `:line_spacing=${text.lineSpacing}`}`;
 }
 
 interface PixelBounds { readonly left: number; readonly right: number; readonly top: number; readonly bottom: number; }
