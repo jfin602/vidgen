@@ -271,6 +271,84 @@ test('headline dry run delegates the value-less flag and never reports final med
   const output = stdout.join(''); assert.equal(code, 0); assert.equal(receivedDryRun, true); assert.match(output, /dry_run_ready/); assert.match(output, /presenterText: headline-1\.dry-run\.txt/); assert.doesNotMatch(output, /final:|sha256:|\.mp4/);
 });
 
+test('headline-post parses one, two, and three ordered platform values', () => {
+  const base = ['--input-file', 'fixture.json', '--article-id', 'article-2', '--anchor-reference', 'anchor.png', '--font-file', 'font.ttf'];
+  for (const [platforms, expected] of [
+    [['x'], ['x']],
+    [['x', 'meta'], ['x', 'meta']],
+    [['bluesky', 'x'], ['bluesky', 'x']],
+    [['bluesky', 'meta', 'x'], ['bluesky', 'meta', 'x']],
+  ] as const) {
+    const args = ['headline-post', ...base, ...platforms.flatMap((platform) => ['--platform', platform])];
+    assert.deepEqual(parseCliArgs(args).platforms, expected);
+  }
+  assert.match(helpText, /headline-post/);
+});
+
+test('headline-post rejects invalid platform lists before any work', async () => {
+  const base = ['headline-post', '--input-file', 'fixture.json', '--article-id', 'article-2', '--anchor-reference', 'anchor.png', '--font-file', 'font.ttf'];
+  for (const suffix of [[], ['--platform', 'x', '--platform', 'x'], ['--platform', 'x,meta'], ['--platform', ''], ['--platform', 'mastodon'], ['--platform', 'x', '--platform', 'meta', '--platform', 'bluesky', '--platform', 'x']]) {
+    let generated = 0; let poster = 0;
+    const code = await runCli([...base, ...suffix], { writeStdout: () => undefined, writeStderr: () => undefined }, {
+      generateHeadline: async () => { generated += 1; throw new Error('must not generate'); },
+      runPoster: async () => { poster += 1; throw new Error('must not run'); },
+    });
+    assert.equal(code, 2); assert.equal(generated, 0); assert.equal(poster, 0);
+  }
+});
+
+test('headline-post doctors all platforms before one generation, then posts the same final pair and exact caption in order', async () => {
+  const calls: string[][] = []; let generated = 0;
+  const code = await runCli(headlinePostArgs(['x', 'meta', 'bluesky']), { writeStdout: () => undefined, writeStderr: () => undefined }, {
+    runPoster: async (args) => { calls.push([...args]); },
+    generateHeadline: async () => { generated += 1; assert.deepEqual(calls, [['doctor', 'x'], ['doctor', 'meta'], ['doctor', 'bluesky']]); return completedHeadline('clip path; safe.mp4', 'A "quoted" headline; $HOME', 'Source & Co'); },
+  });
+  assert.equal(code, 0); assert.equal(generated, 1);
+  assert.deepEqual(calls, [
+    ['doctor', 'x'], ['doctor', 'meta'], ['doctor', 'bluesky'],
+    ['post', 'x', '--video', 'clip path; safe.mp4', '--text', '"A "quoted" headline; $HOME" by Source & Co'],
+    ['post', 'meta', '--video', 'clip path; safe.mp4', '--text', '"A "quoted" headline; $HOME" by Source & Co'],
+    ['post', 'bluesky', '--video', 'clip path; safe.mp4', '--text', '"A "quoted" headline; $HOME" by Source & Co'],
+  ]);
+});
+
+test('headline-post doctor failure prevents generation and all posts', async () => {
+  const calls: string[][] = []; let generated = 0;
+  const code = await runCli(headlinePostArgs(['bluesky', 'x']), { writeStdout: () => undefined, writeStderr: () => undefined }, {
+    runPoster: async (args) => { calls.push([...args]); if (args[1] === 'x') throw new Error('raw token must stay private'); },
+    generateHeadline: async () => { generated += 1; return completedHeadline(); },
+  });
+  assert.equal(code, 2); assert.equal(generated, 0); assert.deepEqual(calls, [['doctor', 'bluesky'], ['doctor', 'x']]);
+});
+
+test('headline-post dry run doctors platforms and generates P1 inspection state once without posting', async () => {
+  const calls: string[][] = []; let generated = 0;
+  const code = await runCli([...headlinePostArgs(['x', 'meta']), '--dry-run'], { writeStdout: () => undefined, writeStderr: () => undefined }, {
+    runPoster: async (args) => { calls.push([...args]); },
+    generateHeadline: async (input) => { generated += 1; assert.equal(input.dryRun, true); return { dryRun: true, clipId: 'headline-1', presenterTextPath: 'headline-1.dry-run.txt', metadataPath: 'headline-1.dry-run.json', plannedDurationSeconds: 4 }; },
+  });
+  assert.equal(code, 0); assert.equal(generated, 1); assert.deepEqual(calls, [['doctor', 'x'], ['doctor', 'meta']]);
+});
+
+test('headline-post continues after a failed post, keeps later attempts, and reports no child diagnostic', async () => {
+  const stdout: string[] = []; const stderr: string[] = []; const calls: string[][] = [];
+  const code = await runCli(headlinePostArgs(['x', 'meta', 'bluesky']), { writeStdout: (text) => stdout.push(text), writeStderr: (text) => stderr.push(text) }, {
+    runPoster: async (args) => { calls.push([...args]); if (args[0] === 'post' && args[1] === 'meta') throw new Error('Bearer secret-child-output'); },
+    generateHeadline: async () => completedHeadline('finished.mp4'),
+  });
+  assert.equal(code, 2); assert.deepEqual(calls.slice(-3).map((args) => args[1]), ['x', 'meta', 'bluesky']);
+  assert.match(stdout.join(''), /Poster x: published\.|Poster meta: failed\.|Poster bluesky: published\./); assert.match(stdout.join(''), /final: finished\.mp4/); assert.doesNotMatch(`${stdout.join('')}${stderr.join('')}`, /secret-child-output/);
+});
+
+test('headline-post generation failure never posts', async () => {
+  const calls: string[][] = [];
+  const code = await runCli(headlinePostArgs(['x']), { writeStdout: () => undefined, writeStderr: () => undefined }, {
+    runPoster: async (args) => { calls.push([...args]); },
+    generateHeadline: async () => { throw new VidGenError('simple_clip', 'Headline generation failed safely.'); },
+  });
+  assert.equal(code, 2); assert.deepEqual(calls, [['doctor', 'x']]);
+});
+
 test('headline failure renders only explicit safe provider diagnostics', async () => {
   const stderr: string[] = []; const token = 'secret-access-token';
   const code = await runCli(['headline', '--input-file', 'fixture.json', '--article-id', 'article-2', '--anchor-reference', 'anchor.png', '--font-file', 'font.ttf'], { writeStdout: () => undefined, writeStderr: (text) => stderr.push(text) }, {
@@ -290,3 +368,6 @@ test('headline verbose renders only sanitized Veo runtime diagnostics', async ()
   const verbose = await run(true); assert.match(verbose, /veoStage: result_decode/); assert.match(verbose, /internalError: RangeError/); assert.match(verbose, /internalMessage: Internal runtime error\./);
   assert.doesNotMatch(await run(false), /veoStage|internalError|internalMessage/);
 });
+
+function headlinePostArgs(platforms: readonly string[]) { return ['headline-post', '--input-file', 'fixture.json', '--article-id', 'article-2', '--anchor-reference', 'anchor.png', '--font-file', 'font.ttf', ...platforms.flatMap((platform) => ['--platform', platform])]; }
+function completedHeadline(finalPath = 'clip.mp4', headline = 'A governed headline', sourceDisplayName = 'Example News') { return { clipId: 'headline-1', finalPath, metadataPath: 'clip.json', sha256: 'a'.repeat(64), durationSeconds: 4, headline, sourceDisplayName }; }

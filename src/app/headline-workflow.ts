@@ -19,7 +19,7 @@ export const DEFAULT_HEADLINE_ARTIFACTS_ROOT = 'artifacts/headline-clips';
 export const HEADLINE_SIDECAR_SCHEMA_VERSION = '2';
 export const HEADLINE_DRY_RUN_METADATA_SCHEMA_VERSION = '1';
 export interface HeadlineWorkflowDependencies { readonly inputFile: string; readonly articleId: string; readonly maxSeconds?: number; readonly anchorReferencePaths: readonly string[]; readonly fontPath: string; readonly artifactsRoot?: string; readonly dryRun?: true; readonly loadManifest?: typeof loadNgestVidGenManifestFile; readonly createTextClient?: () => StructuredTextModelClient; readonly createVideoClient?: () => PresenterVideoGenerationClient; readonly finisher?: Pick<LocalSimpleClipFinisher, 'preflightLowerThird' | 'finish'>; readonly createClipId?: () => string; readonly writeJson?: typeof writeJsonAtomically; readonly engineVersion?: string; readonly onProgress?: (message: string) => void; }
-export interface HeadlineWorkflowResult { readonly clipId: string; readonly finalPath: string; readonly metadataPath: string; readonly sha256: string; readonly durationSeconds: number; }
+export interface HeadlineWorkflowResult { readonly clipId: string; readonly finalPath: string; readonly metadataPath: string; readonly sha256: string; readonly durationSeconds: number; readonly headline: string; readonly sourceDisplayName: string; }
 export interface HeadlineDryRunResult { readonly dryRun: true; readonly clipId: string; readonly presenterTextPath: string; readonly metadataPath: string; readonly plannedDurationSeconds: number; }
 
 /** Produces one flat MP4/sidecar pair without entering the cinematic workspace. */
@@ -58,7 +58,7 @@ export async function generateHeadlineClip(dependencies: HeadlineWorkflowDepende
     const bytes = await readFile(candidatePath); const sidecar = buildHeadlineSidecar(clipId, story, copy, video, activeVideoClient.promptAssetIdentity, references.map(({ identity }) => identity), font, maxSeconds, plannedDurationSeconds, finished.probe.durationSeconds, basename(finalPath), bytes, finished.ffmpegVersion, dependencies.engineVersion ?? VIDGEN_ENGINE_VERSION); validateHeadlineSidecar(sidecar);
     await rename(candidatePath, finalPath); published = true;
     try { await (dependencies.writeJson ?? writeJsonAtomically)({ writeFile, rename, unlink: async (path) => rm(path, { force: true }) }, metadataPath, sidecar); } catch (cause) { await Promise.all([rm(finalPath, { force: true }), rm(metadataPath, { force: true })].map((operation) => operation.catch(() => undefined))); published = false; throw new VidGenError('artifact', 'Unable to publish headline clip metadata.', { cause }); }
-    progress(dependencies, 'Headline final publication completed.'); return { clipId, finalPath, metadataPath, sha256: sha256(bytes), durationSeconds: finished.probe.durationSeconds };
+    progress(dependencies, 'Headline final publication completed.'); return { clipId, finalPath, metadataPath, sha256: sha256(bytes), durationSeconds: finished.probe.durationSeconds, headline: story.article.headline, sourceDisplayName: story.article.source.displayName };
   } finally { await rm(workDirectory, { recursive: true, force: true }).catch(() => undefined); if (!published) await Promise.all([rm(finalPath, { force: true }), rm(dryRunTextPath, { force: true }), rm(dryRunMetadataPath, { force: true })].map((operation) => operation.catch(() => undefined))); }
 }
 

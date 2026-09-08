@@ -10,6 +10,7 @@ import { planStoryWorkspace } from './app/clip-plan-workflow.ts';
 import { generateStoryMedia } from './app/media-workflow.ts';
 import { assembleStoryWorkspace } from './app/assembly-workflow.ts';
 import { DEFAULT_HEADLINE_ARTIFACTS_ROOT, generateHeadlineClip } from './app/headline-workflow.ts';
+import { runPosterCommand, type PosterCommandRunner, type PosterPlatform } from './app/poster-handoff.ts';
 import { isVidGenError, VidGenError } from './core/error.ts';
 
 export const helpText = `VidGen
@@ -22,6 +23,7 @@ Usage:
   vidgen media --story-dir <directory> [--anchor-reference <image-path> ...]
   vidgen assemble --story-dir <directory> [--intro <intro-video-path>] [--outro <outro-video-path>] [--font-file <font-path>]
   vidgen headline --input-file <manifest.json> --article-id <articleId> [--max-seconds <4-20>] --anchor-reference <image-path> [--anchor-reference <image-path> ...] --font-file <font-path> [--artifacts-root <directory>] [--dry-run] [--verbose]
+  vidgen headline-post --input-file <manifest.json> --article-id <articleId> [--max-seconds <4-20>] --anchor-reference <image-path> [--anchor-reference <image-path> ...] --font-file <font-path> --platform <bluesky|meta|x> [--platform <bluesky|meta|x> ...] [--artifacts-root <directory>] [--dry-run] [--verbose]
 
 Available commands:
   help, --help, -h  Show this help message.
@@ -31,6 +33,7 @@ Available commands:
   media            Generate raw story-local media from an existing ClipPlan.
   assemble         Assemble an existing media-ready story and write final/clip.mp4.
   headline         Generate one finished presenter-headline MP4 and metadata sidecar.
+  headline-post    Generate one headline clip, then hand it to selected Poster platforms.
 
 Run options:
   --artifacts-root <directory>  Write runs here (default: ${DEFAULT_ARTIFACTS_ROOT}).
@@ -72,6 +75,10 @@ Headline options:
   --artifacts-root <directory>  Write flat pairs here (default: ${DEFAULT_HEADLINE_ARTIFACTS_ROOT}).
   --dry-run                     Prepare and persist inspection artifacts without requesting Veo video.
   --verbose                      Print safe headline pipeline progress.
+
+Headline-post options:
+  Headline options plus --platform <bluesky|meta|x>, required one to three times in posting order.
+  VIDGEN_POSTER_ROOT names the independently installed VidGen Poster root.
 `;
 
 export interface HelpCommand {
@@ -113,8 +120,9 @@ export interface AssembleCommand {
   readonly fontPath?: string;
 }
 export interface HeadlineCommand { readonly kind: 'headline'; readonly inputFile: string; readonly articleId: string; readonly maxSeconds: number; readonly anchorReferencePaths: readonly string[]; readonly fontPath: string; readonly artifactsRoot?: string; readonly dryRun?: true; readonly verbose?: true; }
+export interface HeadlinePostCommand extends Omit<HeadlineCommand, 'kind'> { readonly kind: 'headline-post'; readonly platforms: readonly PosterPlatform[]; }
 
-export type CliCommand = HelpCommand | RunCommand | StoryCommand | PlanCommand | MediaCommand | AssembleCommand | HeadlineCommand;
+export type CliCommand = HelpCommand | RunCommand | StoryCommand | PlanCommand | MediaCommand | AssembleCommand | HeadlineCommand | HeadlinePostCommand;
 
 export interface CliOutput {
   writeStdout(text: string): void;
@@ -142,6 +150,7 @@ export function parseCliArgs(args: readonly string[]): CliCommand {
     case 'media': return parseMediaCommand(rest);
     case 'assemble': return parseAssembleCommand(rest);
     case 'headline': return parseHeadlineCommand(rest);
+    case 'headline-post': return parseHeadlinePostCommand(rest);
     default:
       if (command.startsWith('-')) {
         throw invalidArgument(`Unknown argument: ${JSON.stringify(command)}.`);
@@ -157,6 +166,7 @@ export interface CliDependencies {
   readonly generateMedia?: typeof generateStoryMedia;
   readonly assembleStory?: typeof assembleStoryWorkspace;
   readonly generateHeadline?: typeof generateHeadlineClip;
+  readonly runPoster?: PosterCommandRunner;
 }
 
 export async function runCli(
@@ -167,7 +177,7 @@ export async function runCli(
   let verbose = false;
   try {
     const command = parseCliArgs(args);
-    verbose = command.kind === 'headline' && command.verbose === true;
+    verbose = (command.kind === 'headline' || command.kind === 'headline-post') && command.verbose === true;
     if (command.kind === 'help') {
       output.writeStdout(helpText);
       return 0;
@@ -240,6 +250,27 @@ export async function runCli(
       output.writeStdout(`Headline ${result.clipId} is final_ready.\nfinal: ${result.finalPath}\nmetadata: ${result.metadataPath}\nsha256: ${result.sha256}\ndurationSeconds: ${result.durationSeconds}\n`);
       return 0;
     }
+    if (command.kind === 'headline-post') {
+      const runPoster = dependencies.runPoster ?? runPosterCommand;
+      for (const platform of command.platforms) {
+        try { await runPoster(['doctor', platform]); }
+        catch { throw new VidGenError('configuration', `VidGen Poster readiness failed for ${platform}.`); }
+      }
+      const result = await (dependencies.generateHeadline ?? generateHeadlineClip)({ inputFile: command.inputFile, articleId: command.articleId, maxSeconds: command.maxSeconds, anchorReferencePaths: command.anchorReferencePaths, fontPath: command.fontPath, ...(command.artifactsRoot === undefined ? {} : { artifactsRoot: command.artifactsRoot }), ...(command.dryRun === true ? { dryRun: true } : {}), ...(command.verbose === true ? { onProgress: (message: string) => output.writeStdout(`${message}\n`) } : {}) });
+      if (result.dryRun === true) {
+        output.writeStdout(`Headline ${result.clipId} is dry_run_ready.\npresenterText: ${result.presenterTextPath}\nmetadata: ${result.metadataPath}\nplannedDurationSeconds: ${result.plannedDurationSeconds}\n`);
+        return 0;
+      }
+      output.writeStdout(`Headline ${result.clipId} is final_ready.\nfinal: ${result.finalPath}\nmetadata: ${result.metadataPath}\nsha256: ${result.sha256}\ndurationSeconds: ${result.durationSeconds}\n`);
+      const caption = `"${result.headline}" by ${result.sourceDisplayName}`;
+      let failed = false;
+      for (const platform of command.platforms) {
+        try { await runPoster(['post', platform, '--video', result.finalPath, '--text', caption]); output.writeStdout(`Poster ${platform}: published.\n`); }
+        catch { failed = true; output.writeStdout(`Poster ${platform}: failed.\n`); }
+      }
+      if (failed) throw new VidGenError('unexpected', 'One or more VidGen Poster posts failed.');
+      return 0;
+    }
 
     const result = await (dependencies.createStory ?? createStoryWorkspace)({
       inputFile: command.inputFile,
@@ -267,26 +298,47 @@ export async function runCli(
 }
 
 function parseHeadlineCommand(args: readonly string[]): HeadlineCommand {
+  return { ...parseHeadlineOptions(args, 'Headline'), kind: 'headline' };
+}
+
+function parseHeadlinePostCommand(args: readonly string[]): HeadlinePostCommand {
+  const platforms: PosterPlatform[] = [];
+  const headlineArgs: string[] = [];
+  for (let i = 0; i < args.length;) {
+    const option = args[i];
+    if (option !== '--platform') { headlineArgs.push(option!); if (option !== '--dry-run' && option !== '--verbose') headlineArgs.push(args[i + 1]!); i += option === '--dry-run' || option === '--verbose' ? 1 : 2; continue; }
+    const value = args[i + 1];
+    if (value === undefined || value.trim().length === 0) throw invalidArgument('--platform requires exactly one non-empty value.');
+    if (!['bluesky', 'meta', 'x'].includes(value)) throw invalidArgument(`Headline-post platform is unsupported: ${JSON.stringify(value)}.`);
+    if (platforms.length >= 3) throw invalidArgument('Headline-post accepts at most three --platform values.');
+    if (platforms.includes(value as PosterPlatform)) throw invalidArgument(`Headline-post platform must not be repeated: ${JSON.stringify(value)}.`);
+    platforms.push(value as PosterPlatform); i += 2;
+  }
+  if (platforms.length === 0) throw invalidArgument('Headline-post requires one to three --platform values.');
+  return { ...parseHeadlineOptions(headlineArgs, 'Headline-post'), kind: 'headline-post', platforms };
+}
+
+function parseHeadlineOptions(args: readonly string[], name: 'Headline' | 'Headline-post'): Omit<HeadlineCommand, 'kind'> {
   const values: Partial<Record<'inputFile' | 'articleId' | 'fontPath' | 'artifactsRoot' | 'maxSeconds', string>> = {}; let verbose = false; let dryRun = false;
   const anchors: string[] = [];
   const names: Record<string, keyof typeof values | 'anchor'> = { '--input-file': 'inputFile', '--article-id': 'articleId', '--font-file': 'fontPath', '--artifacts-root': 'artifactsRoot', '--max-seconds': 'maxSeconds', '--anchor-reference': 'anchor' };
   for (let i = 0; i < args.length;) {
     const option = args[i]; const key = names[option ?? '']; const value = args[i + 1];
-    if (option === '--verbose') { if (verbose) throw invalidArgument('Headline option --verbose must not be repeated.'); verbose = true; i += 1; continue; }
-    if (option === '--dry-run') { if (dryRun) throw invalidArgument('Headline option --dry-run must not be repeated.'); dryRun = true; i += 1; continue; }
-    if (key === undefined) throw invalidArgument(`Unknown headline argument: ${JSON.stringify(option)}.`);
+    if (option === '--verbose') { if (verbose) throw invalidArgument(`${name} option --verbose must not be repeated.`); verbose = true; i += 1; continue; }
+    if (option === '--dry-run') { if (dryRun) throw invalidArgument(`${name} option --dry-run must not be repeated.`); dryRun = true; i += 1; continue; }
+    if (key === undefined) throw invalidArgument(`Unknown ${name.toLowerCase()} argument: ${JSON.stringify(option)}.`);
     if (value === undefined || value.trim().length === 0) throw invalidArgument(`${option} requires exactly one non-empty value.`);
-    if (key === 'anchor') { if (anchors.length >= 3) throw invalidArgument('Headline accepts at most three --anchor-reference values.'); anchors.push(value); }
-    else { if (values[key] !== undefined) throw invalidArgument(`Headline option ${option} must not be repeated.`); values[key] = value; }
+    if (key === 'anchor') { if (anchors.length >= 3) throw invalidArgument(`${name} accepts at most three --anchor-reference values.`); anchors.push(value); }
+    else { if (values[key] !== undefined) throw invalidArgument(`${name} option ${option} must not be repeated.`); values[key] = value; }
     i += 2;
   }
-  if (values.inputFile === undefined) throw invalidArgument('Headline requires --input-file <manifest.json>.');
-  if (values.articleId === undefined) throw invalidArgument('Headline requires --article-id <articleId>.');
-  if (values.fontPath === undefined) throw invalidArgument('Headline requires --font-file <font-path>.');
-  if (anchors.length === 0) throw invalidArgument('Headline requires one to three --anchor-reference values.');
+  if (values.inputFile === undefined) throw invalidArgument(`${name} requires --input-file <manifest.json>.`);
+  if (values.articleId === undefined) throw invalidArgument(`${name} requires --article-id <articleId>.`);
+  if (values.fontPath === undefined) throw invalidArgument(`${name} requires --font-file <font-path>.`);
+  if (anchors.length === 0) throw invalidArgument(`${name} requires one to three --anchor-reference values.`);
   const maxSeconds = values.maxSeconds === undefined ? 20 : Number(values.maxSeconds);
-  if (!Number.isInteger(maxSeconds) || maxSeconds < 4 || maxSeconds > 20) throw invalidArgument('Headline --max-seconds must be a whole number from 4 through 20.');
-  return { kind: 'headline', inputFile: values.inputFile, articleId: values.articleId, fontPath: values.fontPath, maxSeconds, anchorReferencePaths: anchors, ...(values.artifactsRoot === undefined ? {} : { artifactsRoot: values.artifactsRoot }), ...(dryRun ? { dryRun: true } : {}), ...(verbose ? { verbose: true } : {}) };
+  if (!Number.isInteger(maxSeconds) || maxSeconds < 4 || maxSeconds > 20) throw invalidArgument(`${name} --max-seconds must be a whole number from 4 through 20.`);
+  return { inputFile: values.inputFile, articleId: values.articleId, fontPath: values.fontPath, maxSeconds, anchorReferencePaths: anchors, ...(values.artifactsRoot === undefined ? {} : { artifactsRoot: values.artifactsRoot }), ...(dryRun ? { dryRun: true } : {}), ...(verbose ? { verbose: true } : {}) };
 }
 
 function parseMediaCommand(args: readonly string[]): MediaCommand {
