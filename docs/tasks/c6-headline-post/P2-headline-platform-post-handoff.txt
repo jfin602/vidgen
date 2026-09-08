@@ -1,0 +1,66 @@
+TASK: Correction 6 / P2 — Headline platform post handoff
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Add a fresh VidGen CLI command that hands a completed simple headline clip to the independently installed VidGen Poster for the explicitly selected publishing network while keeping all platform implementation owned by jfin602/vidgen-poster.
+
+Start from the P1 dry-run result. Inspect the current VidGen CLI/headline result contract and the current VidGen Poster CLI/platform contract before editing. Do not import Poster source code or reimplement platform behavior.
+
+MUST REMAIN TRUE
+
+- Add `vidgen headline-post` with the same headline generation inputs as `vidgen headline`, including `--dry-run`, plus required `--platform <bluesky|meta|x>`.
+- `--platform` must accept exactly `bluesky`, `meta`, or `x`; it has no implicit/default network. Missing, repeated, or unsupported values fail before any generation or Poster process call.
+- The selected platform is used unchanged for both Poster readiness and publication: `doctor <platform>` and `post <platform> --video <finished-mp4> --text <caption>`.
+- Platform-specific authentication, validation, upload, duplicate protection, receipts, API behavior, and capability support remain entirely owned by VidGen Poster. VidGen contains only the strict platform allowlist and orchestration.
+- Current Poster support must be treated as runtime truth. If the configured Poster build does not yet support the selected platform (including `x`), its doctor failure must stop safely before paid generation; VidGen must not fallback to another network or fake platform readiness.
+- The Poster installation root is runtime configuration via `VIDGEN_POSTER_ROOT`; do not hardcode a deployment path.
+- Invoke Poster only as an external process from the configured Poster repository/runtime using argument-vector execution with no shell interpolation. Platform, headline/source text, and paths are untrusted values and must remain discrete arguments.
+- Before paid structured-text/Veo generation, normal `headline-post` must complete the reusable local headline preflight and a successful Poster `doctor <selected-platform>` readiness check.
+- After readiness succeeds, run the existing normal headline generation path. Poster `post` may occur only after the finished MP4 and coupled sidecar reach the existing successful headline publication boundary.
+- Caption text for every selected platform is exactly `"<headline>" by <source display name>`, using the same governed Article/source identity that produced the clip. Do not summarize, rewrite, add hashtags, or generate social copy.
+- A real run must not pass Poster `--dry-run`; publication is delegated to the selected platform normally.
+- `headline-post --dry-run --platform <platform>` must run Poster `doctor <platform>` and the P1 headline dry-run contract. It still performs structured-text presenter-copy generation and persists P1 inspection artifacts, but suppresses Veo and must never invoke Poster `post`, upload media, or create an external post.
+- If headline generation fails, Poster post must never run. If Poster publishing fails after generation, preserve the completed VidGen MP4/sidecar, return nonzero, and report a safe publication-stage failure.
+- Do not forward or persist raw child stdout/stderr as trusted diagnostics. No secrets, authorization data, tokens, raw provider responses, or shell command strings may enter VidGen artifacts or public errors.
+- Do not add a VidGen `--allow-duplicate` path; Poster remains the duplicate/publication authority.
+- Existing `headline`, its P1 dry-run behavior, and all cinematic commands remain unchanged.
+- Package and engine version remain 0.6.5.
+
+PROOF
+
+Focused tests must cover:
+- `headline-post` parsing/help with required `--platform` and all three accepted values: `bluesky`, `meta`, and `x`;
+- missing, duplicate, malformed, and unsupported platform values fail before preflight/provider/Poster activity;
+- each accepted platform is forwarded exactly as one argument to matching Poster `doctor` and `post` commands;
+- missing/invalid Poster root or failed selected-platform doctor stops before paid generation;
+- dry run reaches selected-platform doctor and structured-text generation, produces P1 inspection artifacts, but never calls Veo or Poster post;
+- normal success invokes selected-platform Poster post only after headline final readiness;
+- exact caption construction, including whitespace, quotes, and shell-significant characters, reaches Poster as one `--text` argument with no shell interpretation;
+- generation failure never invokes Poster post;
+- Poster failure after generation leaves the completed headline MP4/sidecar intact and returns a safe failure;
+- no publishing credentials or raw child output are persisted/exposed;
+- existing headline and cinematic CLI regression coverage remains green.
+
+Run focused CLI/headline/handoff tests, `npm run check`, `node src/cli.ts --help`, and `git diff --check`.
+
+Downstream-required capability -> owning implementation/export -> focused proof:
+
+safe local headline readiness + inspectable pre-Veo state -> P1 shared dry-run/preflight -> ordering, artifact, and no-Veo tests.
+
+selected platform token -> VidGen strict allowlist + external Poster argument boundary -> three-platform forwarding tests.
+
+platform readiness/publish/duplicates/receipts -> VidGen Poster external CLI/adapters -> doctor/post contract tests with no platform implementation duplicated in VidGen.
+
+NON-GOALS
+
+Do not modify jfin602/vidgen-poster, implement or repair any Meta/Bluesky/X adapter in VidGen, add fallback publishing, multi-platform fan-out in one command, scheduling, generated captions, duplicate overrides, queues/databases, live ngest fan-out, cinematic behavior, provider behavior, or roadmap/documentation files.
+
+FINAL RESPONSE
+
+Report the `--platform` CLI contract, selected-platform doctor/post delegation, current Poster capability dependency, exact caption rule, dry-run behavior, failure semantics, exact validation run, and confirmation that Poster still owns publishing and version 0.6.5 remains unchanged.
