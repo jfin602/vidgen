@@ -35,6 +35,11 @@ export interface SimpleLowerThirdLayout {
   readonly source: { readonly x: number; readonly y: number; readonly fontSize: number; readonly height: number; readonly separation: number };
 }
 
+export interface SimpleLowerThirdGlyphBounds {
+  readonly headline: { readonly left: number; readonly right: number; readonly top: number; readonly bottom: number };
+  readonly source: { readonly left: number; readonly right: number; readonly top: number; readonly bottom: number };
+}
+
 export interface SimpleClipFinishingRequest extends SimpleLowerThird {
   readonly rawPresenterVideoPath: string;
   readonly fontPath: string;
@@ -63,17 +68,21 @@ export function validateSimpleLowerThird(headline: string, sourceDisplayName: st
 }
 
 /** Derives all simple-path geometry from the validated, wrapped headline. */
-export function buildSimpleLowerThirdLayout(lowerThird: SimpleLowerThird): SimpleLowerThirdLayout {
+export function buildSimpleLowerThirdLayout(lowerThird: SimpleLowerThird, glyphBounds?: SimpleLowerThirdGlyphBounds): SimpleLowerThirdLayout {
   const { output, lowerThird: policy } = SIMPLE_CLIP_FINISHING_POLICY;
   const headlineLineCount = lowerThird.headline.split('\n').length;
-  const headlineBlockHeight = (headlineLineCount * policy.headline.fontSize) + (Math.max(0, headlineLineCount - 1) * policy.headline.lineSpacing);
-  const panelHeight = policy.padding.top + headlineBlockHeight + policy.source.separation + policy.source.height + policy.padding.bottom;
+  const headline = glyphBounds?.headline ?? { left: 0, right: 0, top: 0, bottom: (headlineLineCount * policy.headline.fontSize) + (Math.max(0, headlineLineCount - 1) * policy.headline.lineSpacing) - 1 };
+  const source = glyphBounds?.source ?? { left: 0, right: 0, top: 0, bottom: policy.source.height - 1 };
+  const headlineBlockHeight = headline.bottom - headline.top + 1;
+  const sourceBlockHeight = source.bottom - source.top + 1;
+  const panelHeight = policy.padding.top + headlineBlockHeight + policy.source.separation + sourceBlockHeight + policy.padding.bottom;
   const panelY = output.height - panelHeight;
-  const headlineY = panelY + policy.padding.top;
+  const headlineY = panelY + policy.padding.top - headline.top;
+  const sourceY = headlineY + headline.bottom + 1 + policy.source.separation - source.top;
   return {
     outer: { x: policy.panel.x, y: panelY, width: policy.panel.width, height: panelHeight },
     headline: { x: policy.text.x, y: headlineY, fontSize: policy.headline.fontSize, lineSpacing: policy.headline.lineSpacing, height: headlineBlockHeight },
-    source: { x: policy.text.x, y: headlineY + headlineBlockHeight + policy.source.separation, fontSize: policy.source.fontSize, height: policy.source.height, separation: policy.source.separation },
+    source: { x: policy.text.x, y: sourceY, fontSize: policy.source.fontSize, height: sourceBlockHeight, separation: policy.source.separation },
   };
 }
 
@@ -101,7 +110,6 @@ export class LocalSimpleClipFinisher {
   /** Validates selected-font glyph bounds before a workflow creates any provider client. */
   async preflightLowerThird(request: Pick<SimpleClipFinishingRequest, 'headline' | 'sourceDisplayName' | 'fontPath' | 'workDirectory'>): Promise<SimpleLowerThird> {
     const lowerThird = validateSimpleLowerThird(request.headline, request.sourceDisplayName);
-    const layout = buildSimpleLowerThirdLayout(lowerThird);
     if (typeof request.workDirectory !== 'string' || request.workDirectory.trim().length === 0 || typeof request.fontPath !== 'string' || request.fontPath.trim().length === 0) throw invalidSimpleClip('Simple clip font and work directory are required.');
     const workDirectory = resolve(request.workDirectory);
     const info = await stat(workDirectory).catch(() => undefined);
@@ -109,14 +117,17 @@ export class LocalSimpleClipFinisher {
     await assertRegularLocalFile(request.fontPath, { maxBytes: 100_000_000 });
     await this.preflight();
     const staged = await stageAssets(request.fontPath, lowerThird, workDirectory);
-    try { await this.#validateStagedLayout(lowerThird, layout, staged, workDirectory); return lowerThird; }
+    try {
+      const glyphBounds = this.#dependencies.measureLowerThird === undefined ? await this.#measureGlyphBounds(staged, workDirectory) : undefined;
+      await this.#validateStagedLayout(lowerThird, buildSimpleLowerThirdLayout(lowerThird, glyphBounds), glyphBounds, staged, workDirectory);
+      return lowerThird;
+    }
     finally { await Promise.all(staged.map((path) => rm(path, { force: true }).catch(() => undefined))); }
   }
 
   async finish(request: SimpleClipFinishingRequest): Promise<SimpleClipFinishResult> {
     if (request === null || typeof request !== 'object') throw invalidSimpleClip('Simple clip finishing request is invalid.');
     const lowerThird = validateSimpleLowerThird(request.headline, request.sourceDisplayName);
-    const layout = buildSimpleLowerThirdLayout(lowerThird);
     const { workDirectory, outputPath } = await validateBoundary(request);
     await assertRegularLocalFile(request.rawPresenterVideoPath);
     await assertRegularLocalFile(request.fontPath, { maxBytes: 100_000_000 });
@@ -127,7 +138,9 @@ export class LocalSimpleClipFinisher {
     const staged = await stageAssets(request.fontPath, lowerThird, workDirectory);
     const started = Date.now();
     try {
-      await this.#validateStagedLayout(lowerThird, layout, staged, workDirectory);
+      const glyphBounds = this.#dependencies.measureLowerThird === undefined ? await this.#measureGlyphBounds(staged, workDirectory) : undefined;
+      const layout = buildSimpleLowerThirdLayout(lowerThird, glyphBounds);
+      await this.#validateStagedLayout(lowerThird, layout, glyphBounds, staged, workDirectory);
       await this.#renderer.run(buildSimpleClipFinishArgs(request.rawPresenterVideoPath, outputPath, layout, staged), 'FFmpeg could not finish the simple clip candidate.', workDirectory);
       const candidateProbe = await probe(outputPath, this.#dependencies.ffprobe);
       validateSimpleFinishedCandidate(candidateProbe, rawDurationSeconds);
@@ -137,12 +150,20 @@ export class LocalSimpleClipFinisher {
     }
   }
 
-  async #validateStagedLayout(lowerThird: SimpleLowerThird, layout: SimpleLowerThirdLayout, stagedPaths: readonly string[], workDirectory: string): Promise<void> {
+  async #measureGlyphBounds(stagedPaths: readonly string[], workDirectory: string): Promise<SimpleLowerThirdGlyphBounds> {
+    const pixelsPath = resolve(workDirectory, 'simple-lower-third-layout.raw');
+    try {
+      await this.#renderer.run(buildSimpleLowerThirdIntrinsicMeasurementArgs(stagedPaths), 'FFmpeg could not measure simple lower-third text.', workDirectory);
+      return simpleLowerThirdGlyphBounds(await readFile(pixelsPath));
+    } finally { await rm(pixelsPath, { force: true }).catch(() => undefined); }
+  }
+
+  async #validateStagedLayout(lowerThird: SimpleLowerThird, layout: SimpleLowerThirdLayout, glyphBounds: SimpleLowerThirdGlyphBounds | undefined, stagedPaths: readonly string[], workDirectory: string): Promise<void> {
     if (this.#dependencies.measureLowerThird !== undefined) return this.#dependencies.measureLowerThird(lowerThird);
     const pixelsPath = resolve(workDirectory, 'simple-lower-third-layout.raw');
     try {
       await this.#renderer.run(buildSimpleLowerThirdMeasurementArgs(layout, stagedPaths), 'FFmpeg could not validate simple lower-third layout.', workDirectory);
-      assertSimpleLowerThirdPixels(await readFile(pixelsPath), layout);
+      assertSimpleLowerThirdPixels(await readFile(pixelsPath), layout, glyphBounds);
     } finally { await rm(pixelsPath, { force: true }).catch(() => undefined); }
   }
 }
@@ -167,20 +188,32 @@ export function buildSimpleLowerThirdMeasurementArgs(layout: SimpleLowerThirdLay
   return ['-hide_banner', '-y', '-f', 'lavfi', '-i', `color=c=black:s=${output.width}x${output.height}:r=1`, '-vf', graph, '-frames:v', '1', '-pix_fmt', 'gray', '-f', 'rawvideo', 'simple-lower-third-layout.raw'];
 }
 
+/** Measures uncropped selected-font glyphs before assigning their final boxes. */
+export function buildSimpleLowerThirdIntrinsicMeasurementArgs(stagedPaths: readonly string[]): readonly string[] {
+  const [fontPath, headlinePath, sourcePath] = stagedPaths.map((path) => basename(path));
+  if (fontPath !== 'font.ttf' || headlinePath !== 'simple-headline.txt' || sourcePath !== 'simple-source.txt') throw invalidSimpleClip('Simple clip display staging failed.');
+  const { output, lowerThird } = SIMPLE_CLIP_FINISHING_POLICY;
+  const headline = { x: lowerThird.text.x, y: 0, fontSize: lowerThird.headline.fontSize, lineSpacing: lowerThird.headline.lineSpacing };
+  const source = { x: lowerThird.text.x, y: output.height / 2, fontSize: lowerThird.source.fontSize };
+  return ['-hide_banner', '-y', '-f', 'lavfi', '-i', `color=c=black:s=${output.width}x${output.height}:r=1`, '-vf', `${lowerThirdDrawtext('simple-headline.txt', headline)},${lowerThirdDrawtext('simple-source.txt', source)}`, '-frames:v', '1', '-pix_fmt', 'gray', '-f', 'rawvideo', 'simple-lower-third-layout.raw'];
+}
+
 /** Rejects any actual rendered glyph outside its assigned safe-area block. */
-export function assertSimpleLowerThirdPixels(pixels: Uint8Array, layout: SimpleLowerThirdLayout): void {
+export function assertSimpleLowerThirdPixels(pixels: Uint8Array, layout: SimpleLowerThirdLayout, expected?: SimpleLowerThirdGlyphBounds): void {
   const { output, lowerThird } = SIMPLE_CLIP_FINISHING_POLICY;
   if (pixels.byteLength !== output.width * output.height) throw invalidSimpleClip('Simple lower-third measurement output was invalid.');
   const background = pixels[0]!;
-  const headline = pixelBounds(pixels, layout.headline.y, layout.headline.y + layout.headline.height, output.width, background);
-  const source = pixelBounds(pixels, layout.source.y, layout.source.y + layout.source.height, output.width, background);
-  const inside = (bounds: PixelBounds, top: number, height: number) => bounds.left >= lowerThird.text.x && bounds.right < lowerThird.text.x + lowerThird.text.width && bounds.top >= top && bounds.bottom < top + height;
+  const expectedSourceTop = expected === undefined ? layout.source.y : layout.source.y + expected.source.top;
+  const headline = pixelBounds(pixels, expected === undefined ? layout.headline.y : layout.outer.y, expectedSourceTop, output.width, background);
+  const source = pixelBounds(pixels, expectedSourceTop, expected === undefined ? layout.source.y + layout.source.height : layout.outer.y + layout.outer.height, output.width, background);
+  const inside = (bounds: PixelBounds) => bounds.left >= lowerThird.text.x && bounds.right < lowerThird.text.x + lowerThird.text.width && bounds.top >= layout.outer.y + lowerThird.padding.top && bounds.bottom < layout.outer.y + layout.outer.height - lowerThird.padding.bottom;
   const centered = (bounds: PixelBounds) => Math.abs((bounds.left + bounds.right) - ((lowerThird.text.x * 2) + lowerThird.text.width - 1)) <= 4;
-  if (headline === undefined || source === undefined || !inside(headline, layout.headline.y, layout.headline.height) || !inside(source, layout.source.y, layout.source.height) || !centered(headline) || !centered(source) || source.top < layout.headline.y + layout.headline.height + layout.source.separation) throw invalidSimpleClip('Simple clip text cannot fit the deterministic lower-third safe area.');
+  const sameSize = (actual: PixelBounds, intrinsic: PixelBounds) => actual.right - actual.left === intrinsic.right - intrinsic.left && actual.bottom - actual.top === intrinsic.bottom - intrinsic.top;
+  if (layout.outer.y < 0 || headline === undefined || source === undefined || !inside(headline) || !inside(source) || !centered(headline) || !centered(source) || source.top !== headline.bottom + 1 + layout.source.separation || (expected !== undefined && (!sameSize(headline, expected.headline) || !sameSize(source, expected.source)))) throw invalidSimpleClip('Simple clip text cannot fit the deterministic lower-third safe area.');
 }
 
-function lowerThirdDrawtext(textFile: string, text: { readonly x: number; readonly y: number; readonly fontSize: number; readonly height: number; readonly lineSpacing?: number }): string {
-  return `drawtext=fontfile=font.ttf:textfile=${textFile}:expansion=none:fontcolor=white:fontsize=${text.fontSize}:x=${text.x}:y=${text.y}:boxw=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.text.width}:boxh=${text.height}:text_align=C${text.lineSpacing === undefined ? '' : `:line_spacing=${text.lineSpacing}`}`;
+function lowerThirdDrawtext(textFile: string, text: { readonly x: number; readonly y: number; readonly fontSize: number; readonly height?: number; readonly lineSpacing?: number }): string {
+  return `drawtext=fontfile=font.ttf:textfile=${textFile}:expansion=none:fontcolor=white:fontsize=${text.fontSize}:x=${text.x}:y=${text.y}:boxw=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.text.width}:text_align=C${text.lineSpacing === undefined ? '' : `:line_spacing=${text.lineSpacing}`}`;
 }
 
 interface PixelBounds { readonly left: number; readonly right: number; readonly top: number; readonly bottom: number; }
@@ -188,6 +221,16 @@ function pixelBounds(pixels: Uint8Array, startY: number, endY: number, width: nu
   let left = width; let right = -1; let top = endY; let bottom = -1;
   for (let y = startY; y < endY; y += 1) for (let x = 0; x < width; x += 1) if (pixels[(y * width) + x] !== background) { left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y); }
   return right < 0 ? undefined : { left, right, top, bottom };
+}
+
+function simpleLowerThirdGlyphBounds(pixels: Uint8Array): SimpleLowerThirdGlyphBounds {
+  const { output } = SIMPLE_CLIP_FINISHING_POLICY;
+  if (pixels.byteLength !== output.width * output.height) throw invalidSimpleClip('Simple lower-third measurement output was invalid.');
+  const background = pixels[0]!;
+  const headline = pixelBounds(pixels, 0, output.height / 2, output.width, background);
+  const source = pixelBounds(pixels, output.height / 2, output.height, output.width, background);
+  if (headline === undefined || source === undefined || headline.bottom === (output.height / 2) - 1 || source.bottom === output.height - 1) throw invalidSimpleClip('Simple clip text cannot fit the deterministic lower-third safe area.');
+  return { headline, source: { ...source, top: source.top - (output.height / 2), bottom: source.bottom - (output.height / 2) } };
 }
 
 function requireRawPresenterCoverage(probe: LocalMediaProbe): number {

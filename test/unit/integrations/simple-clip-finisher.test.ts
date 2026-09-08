@@ -64,6 +64,27 @@ test('simple lower-third derives its full-width, bottom-anchored height from act
   assert.equal(JSON.stringify(SIMPLE_CLIP_FINISHING_POLICY.lowerThird).includes('620'), false);
 });
 
+test('Venice headline uses uncropped selected-font bounds to keep its final line and source separate', () => {
+  const headline = "'Possible Love': What The Critics Are Saying About Lee Chang-dong's Korean Drama - Venice";
+  const lowerThird = validateSimpleLowerThird(headline, 'Deadline');
+  assert.equal(lowerThird.headline.split('\n').at(-1), 'Venice');
+  assert.equal(lowerThird.headline.replace(/\n/gu, ' '), headline);
+  const glyphBounds = {
+    headline: { left: 180, right: 899, top: 6, bottom: 270 },
+    source: { left: 470, right: 609, top: 5, bottom: 43 },
+  };
+  const layout = buildSimpleLowerThirdLayout(lowerThird, glyphBounds);
+  const headlineTop = layout.headline.y + glyphBounds.headline.top;
+  const headlineBottom = layout.headline.y + glyphBounds.headline.bottom;
+  const sourceTop = layout.source.y + glyphBounds.source.top;
+  const sourceBottom = layout.source.y + glyphBounds.source.bottom;
+  assert.equal(sourceTop, headlineBottom + 1 + layout.source.separation);
+  assert.ok(headlineTop >= layout.outer.y + SIMPLE_CLIP_FINISHING_POLICY.lowerThird.padding.top);
+  assert.ok(sourceBottom < layout.outer.y + layout.outer.height - SIMPLE_CLIP_FINISHING_POLICY.lowerThird.padding.bottom);
+  assertSimpleLowerThirdPixels(layoutPixels([[glyphBounds.headline.left, headlineTop], [glyphBounds.headline.right, headlineBottom], [glyphBounds.source.left, sourceTop], [glyphBounds.source.right, sourceBottom]]), layout, glyphBounds);
+  assert.throws(() => assertSimpleLowerThirdPixels(layoutPixels([[glyphBounds.headline.left, headlineTop], [glyphBounds.headline.right, headlineBottom - 1], [glyphBounds.source.left, sourceTop], [glyphBounds.source.right, sourceBottom]]), layout, glyphBounds), hasSimpleClip);
+});
+
 test('simple lower-third finishing, selected-font measurement, and pixel validation share the derived layout', () => {
   const lowerThird = validateSimpleLowerThird(wrappedLineHeadline(2), 'Example News');
   const layout = buildSimpleLowerThirdLayout(lowerThird);
@@ -74,7 +95,7 @@ test('simple lower-third finishing, selected-font measurement, and pixel validat
   assert.throws(() => assertSimpleLowerThirdPixels(layoutPixels([[layout.headline.x + 5, layout.headline.y], [text.x + text.width - 1, layout.headline.y + layout.headline.height - 1], [layout.source.x, layout.source.y], [text.x + text.width - 1, layout.source.y + layout.source.height - 1]]), layout), hasSimpleClip);
   const measurement = buildSimpleLowerThirdMeasurementArgs(layout, ['font.ttf', 'simple-headline.txt', 'simple-source.txt']).join(' ');
   const finishing = buildSimpleClipFinishArgs('raw.mp4', 'candidate.mp4', layout, ['font.ttf', 'simple-headline.txt', 'simple-source.txt']).join(' ');
-  for (const expression of ['fontsize=44:x=96:y=1672:boxw=888:boxh=104:text_align=C:line_spacing=16', 'fontsize=32:x=96:y=1832:boxw=888:boxh=40:text_align=C']) {
+  for (const expression of ['fontsize=44:x=96:y=1672:boxw=888:text_align=C:line_spacing=16', 'fontsize=32:x=96:y=1832:boxw=888:text_align=C']) {
     assert.match(measurement, new RegExp(expression)); assert.match(finishing, new RegExp(expression));
   }
   assert.doesNotMatch(measurement, /Example News/);
@@ -109,8 +130,9 @@ test('simple finisher stages hostile article text, retains sub-eight speech cove
     assert.match(graph, /drawbox=x=0:y=1624:w=1080:h=296:color=0x336699@0\.77:t=fill/);
     assert.doesNotMatch(graph, /color=0x336699:t=fill/);
     assert.doesNotMatch(graph, /drawbox=.*color=(?:black|0x000000)(?:@|:)/);
-    assert.match(graph, /fontsize=44:x=96:y=1672:boxw=888:boxh=104:text_align=C:line_spacing=16/);
-    assert.match(graph, /fontsize=32:x=96:y=1832:boxw=888:boxh=40:text_align=C/);
+    assert.match(graph, /fontsize=44:x=96:y=1672:boxw=888:text_align=C:line_spacing=16/);
+    assert.match(graph, /fontsize=32:x=96:y=1832:boxw=888:text_align=C/);
+    assert.doesNotMatch(graph, /boxh=/);
     assert.match(graph, /drawtext=fontfile=font\.ttf:textfile=simple-headline\.txt:expansion=none/);
     assert.match(graph, /textfile=simple-source\.txt:expansion=none/);
     assert.doesNotMatch(graph, /quote|second line|\[x\]|Source/);
