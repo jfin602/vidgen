@@ -8,17 +8,17 @@ import { type FfprobeDependencies, type LocalMediaProbe, probeLocalMedia } from 
 import { assertRegularLocalFile } from './local-file.ts';
 
 export const SIMPLE_CLIP_FINISHING_POLICY = Object.freeze({
-  version: 'simple-clip-finishing-policy-v2',
+  version: 'simple-clip-finishing-policy-v3',
   output: { width: 1080, height: 1920, fps: 30, container: 'mp4', videoCodec: 'h264', pixelFormat: 'yuv420p' },
   audio: { encoder: 'aac', sampleRate: 48_000, channels: 2, bitrate: '192k' },
   loudnorm: { integratedLufs: -16, loudnessRange: 11, truePeakDb: -1.5 },
   lowerThird: {
-    version: 'headline-source-v2',
-    outer: { x: 48, y: 1080, width: 984, height: 620 },
-    inner: { x: 96, y: 1128, width: 888, height: 524 },
+    version: 'headline-source-v3',
+    outer: { x: 48, y: 1300, width: 984, height: 620 },
+    inner: { x: 96, y: 1348, width: 888, height: 524 },
     padding: { left: 48, right: 48, top: 48, bottom: 48 },
-    headline: { x: 96, y: 1152, fontSize: 44, lineSpacing: 16, lines: 5, charactersPerLine: 32, height: 284 },
-    source: { x: 96, y: 1492, fontSize: 32, lines: 1, charactersPerLine: 32, height: 40, separation: 56 },
+    headline: { x: 96, y: 1372, fontSize: 44, lineSpacing: 16, lines: 5, charactersPerLine: 32, height: 284 },
+    source: { x: 96, y: 1712, fontSize: 32, lines: 1, charactersPerLine: 32, height: 40, separation: 56 },
   },
 } as const);
 
@@ -129,7 +129,7 @@ export function buildSimpleClipFinishArgs(rawPresenterVideoPath: string, outputP
   const [fontPath, headlinePath, sourcePath] = stagedPaths.map((path) => basename(path));
   if (fontPath !== 'font.ttf' || headlinePath !== 'simple-headline.txt' || sourcePath !== 'simple-source.txt') throw invalidSimpleClip('Simple clip display staging failed.');
   const graph = [
-    `[0:v:0]setpts=PTS-STARTPTS,scale=w=1080:h=1920:force_original_aspect_ratio=decrease,pad=w=1080:h=1920:x=(ow-iw)/2:y=(oh-ih)/2:color=black,setsar=1,fps=30,drawbox=x=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.outer.x}:y=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.outer.y}:w=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.outer.width}:h=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.outer.height}:color=0x336699:t=fill,drawtext=fontfile=font.ttf:textfile=simple-headline.txt:expansion=none:fontcolor=white:fontsize=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.headline.fontSize}:x=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.headline.x}:y=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.headline.y}:line_spacing=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.headline.lineSpacing},drawtext=fontfile=font.ttf:textfile=simple-source.txt:expansion=none:fontcolor=white:fontsize=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.source.fontSize}:x=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.source.x}:y=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.source.y}[vout]`,
+    `[0:v:0]setpts=PTS-STARTPTS,scale=w=1080:h=1920:force_original_aspect_ratio=decrease,pad=w=1080:h=1920:x=(ow-iw)/2:y=(oh-ih)/2:color=black,setsar=1,fps=30,drawbox=x=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.outer.x}:y=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.outer.y}:w=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.outer.width}:h=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.outer.height}:color=0x336699@0.77:t=fill,${lowerThirdDrawtext('simple-headline.txt', SIMPLE_CLIP_FINISHING_POLICY.lowerThird.headline)},${lowerThirdDrawtext('simple-source.txt', SIMPLE_CLIP_FINISHING_POLICY.lowerThird.source)}[vout]`,
     `[0:a:0]asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_rates=48000:channel_layouts=stereo,apad,asetpts=PTS-STARTPTS,loudnorm=I=-16:LRA=11:TP=-1.5,aresample=48000,aformat=sample_rates=48000:channel_layouts=stereo[aout]`,
   ].join(';');
   return ['-hide_banner', '-y', '-i', rawPresenterVideoPath, '-filter_complex', graph, '-map', '[vout]', '-map', '[aout]', '-shortest', '-c:v', 'libx264', '-crf', '20', '-preset', 'medium', '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', '-ar', '48000', '-ac', '2', '-b:a', '192k', '-movflags', '+faststart', '-f', 'mp4', outputPath];
@@ -140,7 +140,7 @@ export function buildSimpleLowerThirdMeasurementArgs(stagedPaths: readonly strin
   const [fontPath, headlinePath, sourcePath] = stagedPaths.map((path) => basename(path));
   if (fontPath !== 'font.ttf' || headlinePath !== 'simple-headline.txt' || sourcePath !== 'simple-source.txt') throw invalidSimpleClip('Simple clip display staging failed.');
   const { output, lowerThird } = SIMPLE_CLIP_FINISHING_POLICY;
-  const graph = `drawtext=fontfile=font.ttf:textfile=simple-headline.txt:expansion=none:fontcolor=white:fontsize=${lowerThird.headline.fontSize}:x=${lowerThird.headline.x}:y=${lowerThird.headline.y}:line_spacing=${lowerThird.headline.lineSpacing},drawtext=fontfile=font.ttf:textfile=simple-source.txt:expansion=none:fontcolor=white:fontsize=${lowerThird.source.fontSize}:x=${lowerThird.source.x}:y=${lowerThird.source.y}`;
+  const graph = `${lowerThirdDrawtext('simple-headline.txt', lowerThird.headline)},${lowerThirdDrawtext('simple-source.txt', lowerThird.source)}`;
   return ['-hide_banner', '-y', '-f', 'lavfi', '-i', `color=c=black:s=${output.width}x${output.height}:r=1`, '-vf', graph, '-frames:v', '1', '-pix_fmt', 'gray', '-f', 'rawvideo', 'simple-lower-third-layout.raw'];
 }
 
@@ -152,7 +152,12 @@ export function assertSimpleLowerThirdPixels(pixels: Uint8Array): void {
   const headline = pixelBounds(pixels, lowerThird.headline.y, lowerThird.headline.y + lowerThird.headline.height, output.width, background);
   const source = pixelBounds(pixels, lowerThird.source.y, lowerThird.source.y + lowerThird.source.height, output.width, background);
   const inside = (bounds: PixelBounds, top: number, height: number) => bounds.left >= lowerThird.inner.x && bounds.right < lowerThird.inner.x + lowerThird.inner.width && bounds.top >= top && bounds.bottom < top + height && bounds.bottom < lowerThird.inner.y + lowerThird.inner.height;
-  if (headline === undefined || source === undefined || !inside(headline, lowerThird.headline.y, lowerThird.headline.height) || !inside(source, lowerThird.source.y, lowerThird.source.height) || source.top < lowerThird.headline.y + lowerThird.headline.height + lowerThird.source.separation) throw invalidSimpleClip('Simple clip text cannot fit the deterministic lower-third safe area.');
+  const centered = (bounds: PixelBounds) => Math.abs((bounds.left + bounds.right) - ((lowerThird.inner.x * 2) + lowerThird.inner.width - 1)) <= 4;
+  if (headline === undefined || source === undefined || !inside(headline, lowerThird.headline.y, lowerThird.headline.height) || !inside(source, lowerThird.source.y, lowerThird.source.height) || !centered(headline) || !centered(source) || source.top < lowerThird.headline.y + lowerThird.headline.height + lowerThird.source.separation) throw invalidSimpleClip('Simple clip text cannot fit the deterministic lower-third safe area.');
+}
+
+function lowerThirdDrawtext(textFile: string, text: { readonly x: number; readonly y: number; readonly fontSize: number; readonly height: number; readonly lineSpacing?: number }): string {
+  return `drawtext=fontfile=font.ttf:textfile=${textFile}:expansion=none:fontcolor=white:fontsize=${text.fontSize}:x=${text.x}:y=${text.y}:boxw=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.inner.width}:boxh=${text.height}:text_align=TC${text.lineSpacing === undefined ? '' : `:line_spacing=${text.lineSpacing}`}`;
 }
 
 interface PixelBounds { readonly left: number; readonly right: number; readonly top: number; readonly bottom: number; }

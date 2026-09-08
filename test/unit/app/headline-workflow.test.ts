@@ -61,6 +61,7 @@ test('headline dry run completes governed pre-Veo preparation, writes safe non-f
     assert.equal(await readFile(result.presenterTextPath, 'utf8'), 'A short factual presenter sentence.');
     const metadata = JSON.parse(await readFile(result.metadataPath, 'utf8'));
     assert.deepEqual(metadata.videoGeneration, { requested: false, status: 'suppressed' }); assert.equal(metadata.kind, 'headline-dry-run'); assert.equal(metadata.status, 'prepared_non_final'); assert.equal(metadata.governedInput.articleId, 'example-article-1'); assert.equal(metadata.requestedMaxSeconds, 20); assert.equal(metadata.speechPlanningDurationSeconds, 4); assert.equal(metadata.presenterDurationPlan.rawCoverageSeconds, 8); assert.equal(metadata.references[0].basename, 'anchor.png'); assert.equal(metadata.font.basename, 'font.ttf'); assert.equal(metadata.presenterText.filename, 'clip-safe-1.dry-run.txt');
+    assert.equal(metadata.finishing.policy, 'simple-clip-finishing-policy-v3');
     const serialized = JSON.stringify(metadata); assert.doesNotMatch(serialized, new RegExp(directory.replace(/[\\]/g, '\\\\'))); assert.doesNotMatch(serialized, /secret-provider-response|private\\response|rawResponse|authorization|data:image|iVBOR|\.mp4/i);
     await assertNoHeadlinePackage(directory); assert.deepEqual((await readdir(directory)).filter((item) => item.includes('.tmp-')), []);
   });
@@ -129,14 +130,14 @@ test('sidecar publication failure leaves no partial package and strict validatio
     assert.throws(() => validateHeadlineSidecar({ ...sidecar, final: { ...sidecar.final, technical: { output: sidecar.final.technical.output } } }));
     validateHeadlineSidecar({ ...sidecar, requestedMaxSeconds: 4 });
     assert.throws(() => validateHeadlineSidecar({ ...sidecar, finalDurationSeconds: sidecar.finalDurationSeconds + 1 }));
-    assert.equal(sidecar.finishing.policy, 'simple-clip-finishing-policy-v2');
+    assert.equal(sidecar.finishing.policy, 'simple-clip-finishing-policy-v3');
     assert.throws(() => validateHeadlineSidecar({ ...sidecar, finishing: { ...sidecar.finishing, policy: 'simple-clip-finishing-policy-v1' } }));
     assert.throws(() => validateHeadlineSidecar({ ...sidecar, finishing: { ...sidecar.finishing, policy: 'file:///tmp/ffmpeg.log' } }));
     const schema = JSON.parse(await readFile(join(process.cwd(), 'schemas', 'headline-clip.schema.json'), 'utf8'));
     assert.equal(schema.properties.schemaVersion.const, '4');
     assert.equal(schema.properties.finalDurationSeconds.maximum, undefined);
     assert.equal(schema.$defs.rawVeo.required.includes('durationSeconds'), true);
-    assert.equal(schema.$defs.finishing.properties.policy.const, 'simple-clip-finishing-policy-v2');
+    assert.equal(schema.$defs.finishing.properties.policy.const, 'simple-clip-finishing-policy-v3');
   });
 });
 

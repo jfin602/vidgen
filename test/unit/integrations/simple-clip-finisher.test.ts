@@ -45,15 +45,17 @@ test('simple lower third consumes automatic wrap separators without changing gov
   assert.ok(exactWord.every((line) => line.length <= 32 && line.trim() === line));
 });
 
-test('simple lower-third policy has explicit padded geometry and rejects measured glyph overflow', () => {
+test('simple lower-third policy is bottom-anchored, padded, centered, and rejects measured glyph overflow', () => {
   const { outer, inner, padding, headline, source } = SIMPLE_CLIP_FINISHING_POLICY.lowerThird;
+  assert.equal(outer.y + outer.height, SIMPLE_CLIP_FINISHING_POLICY.output.height);
   assert.equal(inner.x - outer.x, padding.left); assert.equal(outer.x + outer.width - (inner.x + inner.width), padding.right);
   assert.equal(inner.y - outer.y, padding.top); assert.equal(outer.y + outer.height - (inner.y + inner.height), padding.bottom);
   assert.ok(Object.values(padding).every((value) => value > 0));
   assertSimpleLowerThirdPixels(layoutPixels([[headline.x, headline.y], [inner.x + inner.width - 1, headline.y + headline.height - 1], [source.x, source.y], [inner.x + inner.width - 1, source.y + source.height - 1]]));
   assert.throws(() => assertSimpleLowerThirdPixels(layoutPixels([[headline.x, headline.y], [inner.x + inner.width, headline.y], [source.x, source.y]])), hasSimpleClip);
+  assert.throws(() => assertSimpleLowerThirdPixels(layoutPixels([[headline.x + 5, headline.y], [inner.x + inner.width - 1, headline.y + headline.height - 1], [source.x, source.y], [inner.x + inner.width - 1, source.y + source.height - 1]])), hasSimpleClip);
   const args = buildSimpleLowerThirdMeasurementArgs(['font.ttf', 'simple-headline.txt', 'simple-source.txt']);
-  assert.match(args.join(' '), /textfile=simple-headline\.txt/); assert.doesNotMatch(args.join(' '), /Example News/);
+  assert.match(args.join(' '), /textfile=simple-headline\.txt/); assert.match(args.join(' '), /boxw=888:boxh=284:text_align=TC/); assert.match(args.join(' '), /boxw=888:boxh=40:text_align=TC/); assert.doesNotMatch(args.join(' '), /Example News/);
 });
 
 test('simple finisher stages hostile article text, retains sub-eight speech coverage, and keeps FFmpeg argv-only', async () => {
@@ -82,11 +84,11 @@ test('simple finisher stages hostile article text, retains sub-eight speech cove
     assert.doesNotMatch(graph, /\b(?:a)?trim=/);
     assert.ok(calls.some((call) => call.args.includes('-shortest')));
     assert.match(graph, /loudnorm=I=-16:LRA=11:TP=-1.5/);
-    assert.match(graph, /drawbox=x=48:y=1080:w=984:h=620/);
-    assert.match(graph, /color=0x336699:t=fill/);
+    assert.match(graph, /drawbox=x=48:y=1300:w=984:h=620:color=0x336699@0\.77:t=fill/);
+    assert.doesNotMatch(graph, /color=0x336699:t=fill/);
     assert.doesNotMatch(graph, /drawbox=.*color=(?:black|0x000000)(?:@|:)/);
-    assert.match(graph, /fontsize=44:x=96:y=1152:line_spacing=16/);
-    assert.match(graph, /fontsize=32:x=96:y=1492/);
+    assert.match(graph, /fontsize=44:x=96:y=1372:boxw=888:boxh=284:text_align=TC:line_spacing=16/);
+    assert.match(graph, /fontsize=32:x=96:y=1712:boxw=888:boxh=40:text_align=TC/);
     assert.match(graph, /drawtext=fontfile=font\.ttf:textfile=simple-headline\.txt:expansion=none/);
     assert.match(graph, /textfile=simple-source\.txt:expansion=none/);
     assert.doesNotMatch(graph, /quote|second line|\[x\]|Source/);
