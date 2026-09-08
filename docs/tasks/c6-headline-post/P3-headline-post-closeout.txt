@@ -8,50 +8,51 @@ VERSIONING
 
 GOAL
 
-Review P1-P2 as the bounded Phase 6 correction for dry-run inspection plus explicit headline-to-platform publishing through VidGen Poster. Inspect the actual diff and resulting source; do not approve solely because tests pass.
+Review P1-P2 as the bounded Phase 6 correction for dry-run inspection plus ordered one-to-many headline publishing through VidGen Poster. Inspect the actual diff and resulting source; do not approve solely because tests pass.
 
 ACCEPTANCE
 
 Confirm:
 - existing `headline --dry-run` exercises governed input, local presentation validation, FFmpeg/lower-third preflight, structured-text presenter-copy generation, and duration planning while suppressing only Veo and persisting safe inspection artifacts;
 - normal headline behavior and flat MP4/JSON success semantics are unchanged;
-- `headline-post` requires `--platform <bluesky|meta|x>` with no default, rejects anything else before work, and never silently substitutes a network;
-- the selected platform is passed unchanged to Poster `doctor <platform>` and, after final headline readiness, `post <platform>`;
-- VidGen Poster remains the external publication authority and `VIDGEN_POSTER_ROOT` is the only Poster-location runtime configuration; no deployment path is hardcoded;
-- Poster invocation is shell-free and platform/caption/path values remain discrete untrusted arguments;
-- local headline readiness and selected-platform Poster doctor complete before paid generation;
-- a Poster build that does not support the selected platform fails readiness safely before generation. In particular, do not claim live X support unless the tested Poster build actually contains and qualifies its X adapter;
-- Poster post cannot run before a successful finished headline MP4/sidecar exists;
+- `headline-post` requires repeatable `--platform <bluesky|meta|x>` one to three times, supports no CSV syntax, has no default platform, preserves supplied order, and rejects duplicates/invalid counts/unsupported values before provider or Poster work;
+- all selected platforms pass Poster `doctor <platform>` before the one headline generation starts; any doctor failure prevents all generation and posting;
+- a Poster build that does not support a selected platform fails readiness safely. Do not claim live X support unless the tested Poster build actually contains and qualifies its X adapter;
+- headline generation occurs once regardless of selected platform count;
+- after successful MP4/sidecar publication, Poster receives the same final video and exact caption sequentially for each requested platform in supplied order;
 - caption text on every selected platform is exactly `"<headline>" by <source display name>` from the governed story used for generation;
-- `headline-post --dry-run --platform <platform>` runs selected-platform readiness plus the P1 pre-Veo dry run, including structured-text generation and durable inspection artifacts, but cannot call Veo, create a production-ready final clip, upload, or post;
-- generation failure cannot publish; publishing failure preserves valid completed VidGen artifacts and returns a safe nonzero failure;
+- if one platform post fails, later selected platforms are still attempted once, no automatic retry occurs, already completed outcomes remain valid, the finished VidGen artifacts remain intact, and the overall command returns nonzero;
+- `headline-post --dry-run` doctors every selected platform and runs the P1 pre-Veo dry run once, including structured-text generation and durable inspection artifacts, but cannot call Veo, create a production-ready final clip, upload, or post;
+- VidGen Poster remains the external publication authority; `VIDGEN_POSTER_ROOT` locates it and no deployment path is hardcoded;
+- Poster invocation is shell-free and platform/caption/path values remain discrete untrusted arguments;
 - VidGen contains no Meta, Bluesky, or X auth/API/upload/receipt/duplicate implementation and does not bypass Poster duplicate protection;
 - no secrets, raw Poster/provider responses, local staging content, or raw child diagnostics enter artifacts or public errors;
 - cinematic commands/contracts and package/engine version 0.6.5 remain unchanged;
-- no unrelated Phase 7, fan-out, queue/database, or documentation scope entered the correction.
+- no unrelated Phase 7, generated per-platform variants, queue/database, or documentation scope entered the correction.
 
 VALIDATION
 
 Run:
 - `npm run codex:phase:validate -- c6-headline-post`;
-- focused CLI, headline dry-run/preflight, headline workflow, simple-finisher, and Poster-handoff tests, including all three platform values;
+- focused CLI, headline dry-run/preflight, headline workflow, simple-finisher, and Poster-handoff tests covering one, two, and three platform selections and partial-post failure;
 - `npm test`;
 - `npm run check`;
 - `node src/cli.ts --help`;
 - `git diff --check`.
 
-Runtime/live evidence is platform-specific. For each platform actually claimed as live-qualified, require owner-authorized credentials and a Poster build that supports that platform. At minimum for the owner's chosen end-to-end proof:
-1. run `headline-post --dry-run --platform <platform>` and verify inspection files are created, structured-text generation completes, no Veo/final production MP4/post occurs, and the selected platform doctor succeeds;
-2. run one fresh real `headline-post --platform <platform>`;
-3. verify FFmpeg-qualified VidGen output completed before the Poster handoff;
-4. verify Poster recorded a successful published result/receipt and the external post contains the finished video with the exact required caption.
+Runtime/live evidence is platform-specific. For every platform claimed in a live multi-platform proof, require owner-authorized credentials and a Poster build that supports that platform. For an owner-selected end-to-end proof:
+1. run `headline-post --dry-run` with the intended repeated `--platform` flags and verify every selected doctor succeeds, inspection files are created, structured-text generation completes once, and no Veo/final production MP4/post occurs;
+2. run one fresh real `headline-post` with the same ordered platform list;
+3. verify headline generation/FFmpeg output occurs once before any Poster post;
+4. verify Poster records a successful result/receipt for each successful platform and each external post contains the same finished video with the exact required caption;
+5. if deliberately exercising a partial failure, verify later platforms are still attempted and the command reports overall failure without deleting the completed VidGen media.
 
-Do not require unrelated platforms to be live-qualified merely to prove the selected one. Automated tests must still prove exact forwarding for `bluesky`, `meta`, and `x`. Leave any untested platform's live capability explicitly unclaimed. Never infer a live post or Veo qualification from mocks or dry-run evidence.
+Do not require unselected platforms to be live-qualified. Automated tests must still cover `bluesky`, `meta`, `x`, order preservation, duplicates, and one/two/three-platform behavior. Leave any untested platform's live capability explicitly unclaimed. Never infer live publication or Veo qualification from mocks or dry-run evidence.
 
 BOUNDED REPAIRS
 
-Repair only defects clearly inside this correction and tests needed to protect them. Do not redesign either repository boundary, modify VidGen Poster, implement missing platform adapters in VidGen, broaden to multi-platform fan-out, or reconcile roadmap/docs in this stack.
+Repair only defects clearly inside this correction and tests needed to protect them. Do not redesign either repository boundary, modify VidGen Poster, implement missing platform adapters in VidGen, add CSV syntax, generate separate media per network, add automatic posting retries, or reconcile roadmap/docs in this stack.
 
 FINAL RESPONSE
 
-Report review findings, any bounded repairs, exact automated and live evidence actually observed, three-value platform selection behavior, dry-run behavior, selected-platform Poster sequencing/caption behavior, failure preservation, secret/process safety, cinematic regression status, unchanged 0.6.5, and whether `c6-headline-post` is ready for human review and the owner's selected-network end-to-end proof.
+Report review findings, any bounded repairs, exact automated/live evidence actually observed, repeatable ordered platform selection, all-doctors-before-generation behavior, one-generation/many-post sequencing, partial-failure behavior, dry-run behavior, secret/process safety, cinematic regression status, unchanged 0.6.5, and whether `c6-headline-post` is ready for human review and the owner's end-to-end platform proof.
