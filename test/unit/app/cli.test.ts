@@ -297,18 +297,18 @@ test('headline-post rejects invalid platform lists before any work', async () =>
   }
 });
 
-test('headline-post doctors all platforms before one generation, then posts the same final pair and exact caption in order', async () => {
+test('headline-post doctors all platforms before one generation, then posts only the final FFmpeg MP4 and exact caption in order', async () => {
   const calls: string[][] = []; let generated = 0;
   const code = await runCli(headlinePostArgs(['x', 'meta', 'bluesky']), { writeStdout: () => undefined, writeStderr: () => undefined }, {
     runPoster: async (args) => { calls.push([...args]); },
-    generateHeadline: async () => { generated += 1; assert.deepEqual(calls, [['doctor', 'x'], ['doctor', 'meta'], ['doctor', 'bluesky']]); return completedHeadline('clip path; safe.mp4', 'A "quoted" headline; $HOME', 'Source & Co'); },
+    generateHeadline: async () => { generated += 1; assert.deepEqual(calls, [['doctor', 'x'], ['doctor', 'meta'], ['doctor', 'bluesky']]); return completedHeadline('finished path; safe.mp4', 'A "quoted" headline; $HOME', 'Source & Co'); },
   });
   assert.equal(code, 0); assert.equal(generated, 1);
   assert.deepEqual(calls, [
     ['doctor', 'x'], ['doctor', 'meta'], ['doctor', 'bluesky'],
-    ['post', 'x', '--video', 'clip path; safe.mp4', '--text', '"A "quoted" headline; $HOME" by Source & Co'],
-    ['post', 'meta', '--video', 'clip path; safe.mp4', '--text', '"A "quoted" headline; $HOME" by Source & Co'],
-    ['post', 'bluesky', '--video', 'clip path; safe.mp4', '--text', '"A "quoted" headline; $HOME" by Source & Co'],
+    ['post', 'x', '--video', 'finished path; safe.mp4', '--text', '"A "quoted" headline; $HOME" by Source & Co'],
+    ['post', 'meta', '--video', 'finished path; safe.mp4', '--text', '"A "quoted" headline; $HOME" by Source & Co'],
+    ['post', 'bluesky', '--video', 'finished path; safe.mp4', '--text', '"A "quoted" headline; $HOME" by Source & Co'],
   ]);
 });
 
@@ -370,4 +370,4 @@ test('headline verbose renders only sanitized Veo runtime diagnostics', async ()
 });
 
 function headlinePostArgs(platforms: readonly string[]) { return ['headline-post', '--input-file', 'fixture.json', '--article-id', 'article-2', '--anchor-reference', 'anchor.png', '--font-file', 'font.ttf', ...platforms.flatMap((platform) => ['--platform', platform])]; }
-function completedHeadline(finalPath = 'clip.mp4', headline = 'A governed headline', sourceDisplayName = 'Example News') { return { clipId: 'headline-1', finalPath, metadataPath: 'clip.json', sha256: 'a'.repeat(64), durationSeconds: 4, headline, sourceDisplayName }; }
+function completedHeadline(finalPath = 'clip.mp4', headline = 'A governed headline', sourceDisplayName = 'Example News') { return { clipId: 'headline-1', rawVeoPath: 'raw-veo-only.mp4', finalPath, metadataPath: 'clip.json', sha256: 'a'.repeat(64), durationSeconds: 4, headline, sourceDisplayName }; }

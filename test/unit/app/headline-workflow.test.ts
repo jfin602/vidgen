@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,12 +12,13 @@ import { loadNgestVidGenManifestFile } from '../../../src/integrations/ngest/loc
 const manifest = join(process.cwd(), 'test', 'fixtures', 'ngest-vidgen-manifest.json');
 const promptAssetIdentity = { basename: 'veo-prompts.json', sha256: 'c'.repeat(64), byteSize: 1 };
 
-test('headline workflow publishes a validated safe flat MP4/JSON pair with no local-path provenance', async () => {
+test('headline workflow publishes the raw Veo MP4, finished MP4, and validated sidecar with no local-path provenance', async () => {
   await withAssets(async (directory, anchor, font) => {
     const result = await generateHeadlineClip(fakeDependencies(directory, anchor, font));
     const sidecar = JSON.parse(await readFile(result.metadataPath, 'utf8'));
     validateHeadlineSidecar(sidecar);
-    assert.equal(result.clipId, 'clip-safe-1'); assert.equal(sidecar.requestedMaxSeconds, 20); assert.equal(sidecar.plannedDurationSeconds, 4); assert.equal(sidecar.finalDurationSeconds, 4); assert.equal(sidecar.final.filename, 'clip-safe-1.mp4'); assert.match(sidecar.final.sha256, /^[a-f0-9]{64}$/); assert.doesNotMatch(JSON.stringify(sidecar), new RegExp(directory.replace(/[\\]/g, '\\\\'))); assert.doesNotMatch(JSON.stringify(sidecar), /secret-token|CanonicalControl/i);
+    const raw = await readFile(result.rawVeoPath); const final = await readFile(result.finalPath);
+    assert.equal(result.clipId, 'clip-safe-1'); assert.deepEqual((await readdir(directory)).filter((name) => name.startsWith('clip-safe-1')).sort(), ['clip-safe-1.json', 'clip-safe-1.mp4', 'clip-safe-1.veo.mp4']); assert.deepEqual(raw, Buffer.from([1])); assert.deepEqual(final, Buffer.from('finished')); assert.equal(sidecar.requestedMaxSeconds, 20); assert.equal(sidecar.plannedDurationSeconds, 4); assert.equal(sidecar.finalDurationSeconds, 4); assert.equal(sidecar.rawVeo.filename, 'clip-safe-1.veo.mp4'); assert.equal(sidecar.rawVeo.sha256, sha256(raw)); assert.equal(sidecar.rawVeo.byteSize, raw.byteLength); assert.equal(sidecar.final.filename, 'clip-safe-1.mp4'); assert.equal(sidecar.final.sha256, sha256(final)); assert.equal(sidecar.final.byteSize, final.byteLength); assert.doesNotMatch(JSON.stringify(sidecar), new RegExp(directory.replace(/[\\]/g, '\\\\'))); assert.doesNotMatch(JSON.stringify(sidecar), /secret-token|CanonicalControl/i);
     assert.deepEqual((await readdir(directory)).filter((item) => item.startsWith('.tmp-')), []);
   });
 });
@@ -28,6 +30,15 @@ test('headline workflow emits only useful safe stage progress when requested', a
     const output = events.join('\n');
     for (const event of ['input and story validation complete', 'lower-third and font preflight complete', 'Presenter copy generation starting', 'Presenter copy generation completed', 'Planned final duration: 4 seconds', 'Configured Veo model: fake-model', 'Reference images: 1', 'Veo extension required: no', 'Veo generation starting', 'FFmpeg finishing starting', 'FFmpeg finishing completed', 'final publication completed']) assert.match(output, new RegExp(event));
     assert.doesNotMatch(output, /A short factual presenter sentence|\.tmp-|anchor\.png|font\.ttf/);
+  });
+});
+
+test('headline workflow refuses a clip ID when any member of its final package already exists', async () => {
+  await withAssets(async (directory, anchor, font) => {
+    await writeFile(join(directory, 'clip-safe-1.veo.mp4'), 'prior raw clip');
+    let videoClientCreated = false;
+    await assert.rejects(generateHeadlineClip({ ...fakeDependencies(directory, anchor, font), createVideoClient: () => { videoClientCreated = true; throw new Error('Veo must not start'); } }), /already has published artifacts/);
+    assert.equal(videoClientCreated, false);
   });
 });
 
@@ -50,14 +61,15 @@ test('headline dry run completes governed pre-Veo preparation, writes safe non-f
     const metadata = JSON.parse(await readFile(result.metadataPath, 'utf8'));
     assert.deepEqual(metadata.videoGeneration, { requested: false, status: 'suppressed' }); assert.equal(metadata.kind, 'headline-dry-run'); assert.equal(metadata.status, 'prepared_non_final'); assert.equal(metadata.governedInput.articleId, 'example-article-1'); assert.equal(metadata.requestedMaxSeconds, 20); assert.equal(metadata.plannedDurationSeconds, 4); assert.equal(metadata.presenterDurationPlan.rawCoverageSeconds, 8); assert.equal(metadata.references[0].basename, 'anchor.png'); assert.equal(metadata.font.basename, 'font.ttf'); assert.equal(metadata.presenterText.filename, 'clip-safe-1.dry-run.txt');
     const serialized = JSON.stringify(metadata); assert.doesNotMatch(serialized, new RegExp(directory.replace(/[\\]/g, '\\\\'))); assert.doesNotMatch(serialized, /secret-provider-response|private\\response|rawResponse|authorization|data:image|iVBOR|\.mp4/i);
-    await assert.rejects(readFile(join(directory, 'clip-safe-1.mp4'))); await assert.rejects(readFile(join(directory, 'clip-safe-1.json'))); assert.deepEqual((await readdir(directory)).filter((item) => item.includes('.tmp-')), []);
+    await assertNoHeadlinePackage(directory); assert.deepEqual((await readdir(directory)).filter((item) => item.includes('.tmp-')), []);
   });
 });
 
 test('headline dry run removes its inspection artifacts when metadata publication fails', async () => {
   await withAssets(async (directory, anchor, font) => {
     await assert.rejects(generateHeadlineClip({ ...fakeDependencies(directory, anchor, font), dryRun: true, writeJson: async () => { throw new Error('secret-token'); } }), /Unable to publish headline dry-run inspection artifacts/);
-    for (const name of ['clip-safe-1.dry-run.txt', 'clip-safe-1.dry-run.json', 'clip-safe-1.mp4', 'clip-safe-1.json']) await assert.rejects(readFile(join(directory, name)));
+    for (const name of ['clip-safe-1.dry-run.txt', 'clip-safe-1.dry-run.json']) await assert.rejects(readFile(join(directory, name)));
+    await assertNoHeadlinePackage(directory);
     assert.deepEqual((await readdir(directory)).filter((item) => item.includes('.tmp-')), []);
   });
 });
@@ -84,33 +96,30 @@ test('four-second plan trims the initial provider coverage and rejects provider-
     let finished: number | undefined;
     await generateHeadlineClip({ ...fakeDependencies(directory, anchor, font), finisher: fakeFinisher((request) => { finished = request.plannedDurationSeconds; return request.plannedDurationSeconds; }) });
     assert.equal(finished, 4);
-    await rm(join(directory, 'clip-safe-1.mp4')); await rm(join(directory, 'clip-safe-1.json'));
+    await rm(join(directory, 'clip-safe-1.veo.mp4')); await rm(join(directory, 'clip-safe-1.mp4')); await rm(join(directory, 'clip-safe-1.json'));
     await assert.rejects(generateHeadlineClip({ ...fakeDependencies(directory, anchor, font), createVideoClient: () => ({ provider: 'fake-video', model: 'fake-model', promptAssetIdentity, generatePresenterVideo: async () => ({ ...video(4), rawDurationSeconds: 15 }) }) }), /incompatible with the selected duration plan/);
-    await assert.rejects(readFile(join(directory, 'clip-safe-1.mp4')));
-    await assert.rejects(readFile(join(directory, 'clip-safe-1.json')));
+    await assertNoHeadlinePackage(directory);
     await assert.rejects(generateHeadlineClip({ ...fakeDependencies(directory, anchor, font), createVideoClient: () => ({ provider: 'fake-video', model: 'fake-model', promptAssetIdentity, generatePresenterVideo: async () => ({ ...video(4), operationId: '/tmp/provider-response' }) }) }), /provenance was unsafe/);
-    await assert.rejects(readFile(join(directory, 'clip-safe-1.mp4')));
-    await assert.rejects(readFile(join(directory, 'clip-safe-1.json')));
+    await assertNoHeadlinePackage(directory);
   });
 });
 
-test('sidecar construction or validation failure after finishing leaves no final pair', async () => {
+test('sidecar construction or validation failure after finishing leaves no final package', async () => {
   await withAssets(async (directory, anchor, font) => {
     await assert.rejects(generateHeadlineClip({ ...fakeDependencies(directory, anchor, font), engineVersion: '' }));
-    await assert.rejects(readFile(join(directory, 'clip-safe-1.mp4')));
-    await assert.rejects(readFile(join(directory, 'clip-safe-1.json')));
+    await assertNoHeadlinePackage(directory);
     await assert.rejects(generateHeadlineClip({ ...fakeDependencies(directory, anchor, font), finisher: fakeFinisher(() => 4.1) }));
-    await assert.rejects(readFile(join(directory, 'clip-safe-1.mp4')));
-    await assert.rejects(readFile(join(directory, 'clip-safe-1.json')));
+    await assertNoHeadlinePackage(directory);
   });
 });
 
-test('sidecar write failure removes a promoted MP4 and strict validation rejects unsupported fields', async () => {
+test('sidecar publication failure leaves no partial package and strict validation rejects unsupported fields', async () => {
   await withAssets(async (directory, anchor, font) => {
     await assert.rejects(generateHeadlineClip({ ...fakeDependencies(directory, anchor, font), writeJson: async () => { throw new Error('secret-token'); } }), /Unable to publish headline clip metadata/);
-    await assert.rejects(readFile(join(directory, 'clip-safe-1.mp4'))); await assert.rejects(readFile(join(directory, 'clip-safe-1.json')));
+    await assertNoHeadlinePackage(directory);
     const result = await generateHeadlineClip(fakeDependencies(directory, anchor, font)); const sidecar = JSON.parse(await readFile(result.metadataPath, 'utf8'));
     assert.throws(() => validateHeadlineSidecar({ ...sidecar, unsupported: true }));
+    assert.throws(() => validateHeadlineSidecar({ ...sidecar, rawVeo: { ...sidecar.rawVeo, filename: 'clip-safe-1.mp4' } }));
     assert.throws(() => validateHeadlineSidecar({ ...sidecar, final: { ...sidecar.final, technical: { output: sidecar.final.technical.output } } }));
     assert.equal(sidecar.finishing.policy, 'simple-clip-finishing-policy-v2');
     assert.throws(() => validateHeadlineSidecar({ ...sidecar, finishing: { ...sidecar.finishing, policy: 'simple-clip-finishing-policy-v1' } }));
@@ -182,5 +191,7 @@ function fakeDependencies(directory: string, anchor: string, font: string, text 
 }
 function video(plannedDurationSeconds: number) { const durationPlan = planPresenterVideoDuration(plannedDurationSeconds); const operationIds = Array.from({ length: durationPlan.extensionCount + 1 }, (_, index) => `operation-${index + 1}`); return { provider: 'fake-video', model: 'fake-model', requestId: operationIds[0], operationId: operationIds.at(-1), operationIds, generationOperationCount: durationPlan.extensionCount + 1, mimeType: 'video/mp4', bytes: new Uint8Array([1]), rawDurationSeconds: durationPlan.rawProviderDurationSeconds, durationPlan }; }
 function fakeFinisher(duration: (request: { readonly plannedDurationSeconds: number }) => number) { return { preflightLowerThird: async (request: { headline: string; sourceDisplayName: string }) => ({ headline: request.headline, sourceDisplayName: request.sourceDisplayName }), finish: async (request: { outputPath: string; plannedDurationSeconds: number }) => { await writeFile(request.outputPath, 'finished'); return { outputPath: request.outputPath, ffmpegVersion: 'ffmpeg version fake', durationMs: 1, probe: { durationSeconds: duration(request), containerNames: ['mp4'], streamTypes: ['video', 'audio'], video: { codecName: 'h264', width: 1080, height: 1920, pixelFormat: 'yuv420p', averageFrameRate: { numerator: 30, denominator: 1, value: 30 } }, audio: { codecName: 'aac', sampleRate: 48000, channels: 2 } } }; } }; }
+async function assertNoHeadlinePackage(directory: string): Promise<void> { for (const name of ['clip-safe-1.veo.mp4', 'clip-safe-1.mp4', 'clip-safe-1.json']) await assert.rejects(readFile(join(directory, name))); }
+function sha256(bytes: Uint8Array): string { return createHash('sha256').update(bytes).digest('hex'); }
 async function withAssets(run: (directory: string, anchor: string, font: string) => Promise<void>) { const directory = await mkdtemp(join(tmpdir(), 'vidgen-headline-')); const anchor = join(directory, 'anchor.png'); const font = join(directory, 'font.ttf'); try { await writeFile(anchor, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])); await writeFile(font, 'font'); await run(directory, anchor, font); } finally { await rm(directory, { recursive: true, force: true }); } }
 async function withVideoModel(value: string, run: () => Promise<void>) { const prior = { project: process.env.GOOGLE_CLOUD_PROJECT, location: process.env.GOOGLE_CLOUD_LOCATION, model: process.env.VIDGEN_VIDEO_MODEL }; try { process.env.GOOGLE_CLOUD_PROJECT = 'vidgen-test-project'; process.env.GOOGLE_CLOUD_LOCATION = 'us-central1'; process.env.VIDGEN_VIDEO_MODEL = value; await run(); } finally { for (const [name, priorValue] of Object.entries({ GOOGLE_CLOUD_PROJECT: prior.project, GOOGLE_CLOUD_LOCATION: prior.location, VIDGEN_VIDEO_MODEL: prior.model })) if (priorValue === undefined) delete process.env[name]; else process.env[name] = priorValue; } }

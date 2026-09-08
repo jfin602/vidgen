@@ -32,7 +32,7 @@ Available commands:
   plan             Create one selected story workspace and generate its ClipPlan.
   media            Generate raw story-local media from an existing ClipPlan.
   assemble         Assemble an existing media-ready story and write final/clip.mp4.
-  headline         Generate one finished presenter-headline MP4 and metadata sidecar.
+  headline         Generate one presenter-headline artifact package.
   headline-post    Generate one headline clip, then hand it to selected Poster platforms.
 
 Run options:
@@ -72,7 +72,7 @@ Headline options:
   --max-seconds <4-20>          Final duration ceiling (default: 20).
   --anchor-reference <path>     Required local presenter image; repeat one to three times.
   --font-file <font-path>       Required local lower-third font.
-  --artifacts-root <directory>  Write flat pairs here (default: ${DEFAULT_HEADLINE_ARTIFACTS_ROOT}).
+  --artifacts-root <directory>  Write headline packages here (default: ${DEFAULT_HEADLINE_ARTIFACTS_ROOT}).
   --dry-run                     Prepare and persist inspection artifacts without requesting Veo video.
   --verbose                      Print safe headline pipeline progress.
 
