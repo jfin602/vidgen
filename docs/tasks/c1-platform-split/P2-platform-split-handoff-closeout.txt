@@ -1,0 +1,40 @@
+TASK: Correction 1 / P2 — Platform split handoff closeout
+
+- Recommended configuration: `Terra High`.
+- Required unchanged project version: `0.6.5`.
+
+## Goal
+
+Review and close the VidGen side of the Poster platform split only if the consumer contract now uses `reels` instead of `meta` and preserves all generation/runtime boundaries.
+
+## Review requirements
+
+Inspect the actual P1 diff and affected CLI/poster-handoff producer/consumer paths.
+
+Confirm:
+
+- VidGen headline-post supports exactly `bluesky`, `reels`, and `x`;
+- `meta` is fully removed from the current VidGen Poster handoff surface;
+- Threads is intentionally absent from headline-post until Poster has a public-media staging contract for local VidGen video;
+- Poster doctor readiness still runs before generation;
+- failed Poster readiness identifies the platform and points operators to the detailed Poster doctor without trusting/echoing raw child diagnostics;
+- successful handoff still passes the exact generated local MP4 and deterministic caption to Poster;
+- platform ordering and multi-platform failure behavior remain coherent;
+- no generation, provider, narration, rendering, artifact, provenance, or ngest behavior changed;
+- package/engine version remains `0.6.5`.
+
+## Heavy validation
+
+Run at minimum:
+
+- `npm run codex:phase:validate -- c1-platform-split`;
+- focused CLI/poster-handoff tests;
+- `npm run test:app`;
+- `npm test`;
+- `npm run check`;
+- `npm run vidgen -- --help`;
+- `git diff --check`.
+
+Search current VidGen source/docs for stale public Poster `meta` naming. Do not claim Poster live provider qualification from VidGen tests.
+
+Make only bounded repairs required by this handoff correction. Stop and report if repair would require Threads staging, Poster implementation changes, generation changes, or broader architecture work.
