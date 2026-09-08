@@ -1,0 +1,42 @@
+TASK: Correction 1 / P1 — Replace Meta Poster handoff with Reels
+
+- Recommended configuration: `Terra Medium`.
+- Required unchanged project version: `0.6.5`.
+
+## Goal
+
+Update VidGen's downstream Poster integration to consume the new first-class `reels` platform instead of the removed generic `meta` platform, without changing generation behavior.
+
+## Required behavior
+
+Re-read BOOT.md and the current Poster handoff/CLI tests before editing. Preserve the VidGen/Poster process boundary.
+
+- Change the VidGen Poster platform contract from `bluesky|meta|x` to `bluesky|reels|x`.
+- Update `headline-post --platform` parsing, help, types, tests, and any current docs/examples that expose `meta`.
+- Do not accept `meta` as a compatibility alias.
+- Keep Threads out of VidGen `headline-post` in this correction. The current VidGen handoff supplies a local generated MP4, while Poster Threads media support is intentionally deferred until a provider-compliant public-media staging boundary exists.
+- Preserve the existing order: Poster doctor checks run before headline generation; only ready platforms proceed to generation/post handoff.
+- Keep the subprocess boundary secret-safe. Do not ingest or blindly echo arbitrary Poster stderr/provider responses into VidGen.
+- When a Poster readiness call fails, make the VidGen error actionable by naming the failed platform and directing the operator to run `vidgen-poster doctor <platform>` in the Poster installation for detailed sanitized diagnostics.
+- Preserve `VIDGEN_POSTER_ROOT`, local MP4 handoff, caption construction, platform ordering, per-platform post attempts, and all simple/cinematic generation behavior.
+- Keep package/engine version `0.6.5`.
+
+## Focused validation
+
+Add/update focused CLI and Poster-handoff tests proving:
+
+- `reels` is accepted;
+- `meta` and `threads` are rejected by VidGen headline-post;
+- doctor for each selected platform still occurs before generation;
+- Reels receives the generated local MP4/caption through the existing Poster subprocess contract;
+- readiness failure tells the operator which Poster doctor command to run without relaying raw child diagnostics.
+
+Run the focused CLI/poster-handoff tests and `git diff --check`. Defer the full VidGen suite to closeout.
+
+## Producer/consumer proof
+
+`VidGen headline-post reels -> Poster doctor reels -> headline generation -> Poster post reels --video <final MP4>`
+
+## Non-goals
+
+Do not add Threads video staging, change Poster code, alter generation/providers/rendering/artifacts, add automatic fan-out, or change package version.
