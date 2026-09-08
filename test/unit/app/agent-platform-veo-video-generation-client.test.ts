@@ -115,6 +115,13 @@ test('Agent Platform Veo accepts a name-only start as pending and polls its exac
   assert.deepEqual(result, { provider: 'google-agent-platform-veo', model, requestId: name, operationId: name, operationIds: [name], generationOperationCount: 1, mimeType: 'video/mp4', bytes: videoBytes([3]), durationSeconds: 8 });
 });
 
+test('Agent Platform Veo emits bounded operation progress without provider payloads', async () => {
+  const events: unknown[] = [];
+  await clientFor(sequenceFetch([], [operation('progress'), operation('progress', false), operation('progress', true, videoBytes([3]))]), { onProgress: (event) => events.push(event) }).generateVideo({ unit: contentUnit(8) });
+  assert.deepEqual(events, [{ stage: 'operation_started', operationNumber: 1 }, { stage: 'operation_pending', operationNumber: 1, pollNumber: 1 }, { stage: 'operation_completed', operationNumber: 1 }]);
+  assert.doesNotMatch(JSON.stringify(events), /bytesBase64Encoded|authorization|Bearer|DIALOGUE/);
+});
+
 test('Agent Platform Veo accepts name-only and explicit false poll responses as pending', async () => {
   for (const [name, pending] of [
     ['name-only', operation('pending')],
@@ -189,6 +196,17 @@ test('Agent Platform Veo preserves cinematic extension provenance and safely rej
   for (const [name, fetch, options] of cases) await context.test(name, async () => {
     await assert.rejects(clientFor(fetch, options).generateVideo({ unit: contentUnit(8) }), safeError);
   });
+});
+
+test('Agent Platform Veo retains only sanitized terminal operation diagnostics', async () => {
+  const terminal = json({ name: operationName('failure'), done: true, error: { code: 3, status: 'INVALID_ARGUMENT', message: 'Request rejected by provider.', details: [{ metadata: { supportCode: '15236754', authorization: `Bearer ${token}` } }] } });
+  await assert.rejects(clientFor(sequenceFetch([], [terminal])).generateVideo({ unit: contentUnit(8) }), (error: unknown) => error instanceof VidGenError && error.code === 'generated_media' && error.safeProviderDiagnostic?.providerCode === 3 && error.safeProviderDiagnostic.providerStatus === 'INVALID_ARGUMENT' && error.safeProviderDiagnostic.supportCode === '15236754' && error.safeProviderDiagnostic.providerMessage === 'Request rejected by provider.' && !String(error).includes(token));
+  for (const message of [`Bearer ${token}`, `bad\n${token}`, 'file:///tmp/provider-response', 'C:\\secrets\\provider-response', 'x'.repeat(500), `{"authorization":"Bearer ${token}"}`]) {
+    const response = json({ name: operationName('unsafe'), done: true, error: { code: 3, status: 'INVALID_ARGUMENT', message } });
+    await assert.rejects(clientFor(sequenceFetch([], [response])).generateVideo({ unit: contentUnit(8) }), (error: unknown) => error instanceof VidGenError && error.safeProviderDiagnostic?.providerCode === 3 && error.safeProviderDiagnostic.providerStatus === 'INVALID_ARGUMENT' && error.safeProviderDiagnostic.providerMessage === undefined && !String(error).includes(token) && !String(error).includes(message));
+  }
+  const tokenCode = json({ name: operationName('token-code'), done: true, error: { code: token, status: 'INVALID_ARGUMENT', message: 'Request rejected.' } });
+  await assert.rejects(clientFor(sequenceFetch([], [tokenCode])).generateVideo({ unit: contentUnit(8) }), (error: unknown) => error instanceof VidGenError && error.safeProviderDiagnostic?.providerCode === undefined && !String(error).includes(token));
 });
 
 test('unsafe Agent Platform configuration fails in construction before auth or network', () => {

@@ -12,6 +12,7 @@ test('CLI parses its help, run, manual story, planning, media, and assembly surf
   assert.deepEqual(parseCliArgs(['-h']), { kind: 'help' });
   assert.deepEqual(parseCliArgs(['run']), { kind: 'run' });
   assert.deepEqual(parseCliArgs(['headline', '--input-file', 'fixture.json', '--article-id', 'article-2', '--anchor-reference', 'anchor.png', '--font-file', 'font.ttf']), { kind: 'headline', inputFile: 'fixture.json', articleId: 'article-2', maxSeconds: 20, anchorReferencePaths: ['anchor.png'], fontPath: 'font.ttf' });
+  assert.deepEqual(parseCliArgs(['headline', '--verbose', '--input-file', 'fixture.json', '--article-id', 'article-2', '--anchor-reference', 'anchor.png', '--font-file', 'font.ttf']), { kind: 'headline', inputFile: 'fixture.json', articleId: 'article-2', maxSeconds: 20, anchorReferencePaths: ['anchor.png'], fontPath: 'font.ttf', verbose: true });
   assert.deepEqual(parseCliArgs(['headline', '--input-file', 'fixture.json', '--article-id', 'article-2', '--max-seconds', '4', '--anchor-reference', 'anchor.png', '--font-file', 'font.ttf', '--artifacts-root', 'clips']), { kind: 'headline', inputFile: 'fixture.json', articleId: 'article-2', maxSeconds: 4, anchorReferencePaths: ['anchor.png'], fontPath: 'font.ttf', artifactsRoot: 'clips' });
   assert.deepEqual(parseCliArgs(['run', '--artifacts-root', 'tmp/runs']), {
     kind: 'run', artifactsRoot: 'tmp/runs',
@@ -242,4 +243,27 @@ test('CLI delegates a run to the application service and prints observable ident
   assert.match(stdout.join(''), /a{64}/);
   assert.match(stdout.join(''), /temp-artifacts\\?\/run-123/);
   assert.deepEqual(stderr, []);
+});
+
+test('headline verbose forwards safe pipeline progress while normal headline output stays concise', async () => {
+  const run = async (verbose: boolean) => {
+    const stdout: string[] = [];
+    const code = await runCli(['headline', '--input-file', 'fixture.json', '--article-id', 'article-2', '--anchor-reference', 'anchor.png', '--font-file', 'font.ttf', ...(verbose ? ['--verbose'] : [])], { writeStdout: (text) => stdout.push(text), writeStderr: () => undefined }, {
+      generateHeadline: async (input) => {
+        input.onProgress?.('Veo generation starting.'); input.onProgress?.('Veo operation 1 pending (poll 1).');
+        return { clipId: 'headline-1', finalPath: 'clip.mp4', metadataPath: 'clip.json', sha256: 'a'.repeat(64), durationSeconds: 4 };
+      },
+    });
+    assert.equal(code, 0); return stdout.join('');
+  };
+  assert.match(await run(true), /Veo operation 1 pending \(poll 1\)/);
+  assert.doesNotMatch(await run(false), /Veo generation starting/);
+});
+
+test('headline failure renders only explicit safe provider diagnostics', async () => {
+  const stderr: string[] = []; const token = 'secret-access-token';
+  const code = await runCli(['headline', '--input-file', 'fixture.json', '--article-id', 'article-2', '--anchor-reference', 'anchor.png', '--font-file', 'font.ttf'], { writeStdout: () => undefined, writeStderr: (text) => stderr.push(text) }, {
+    generateHeadline: async () => { throw new VidGenError('generated_media', 'Agent Platform Veo video generation failed.', { cause: { authorization: `Bearer ${token}` }, safeProviderDiagnostic: { providerCode: 3, providerStatus: 'INVALID_ARGUMENT', supportCode: '15236754', providerMessage: 'Request rejected by provider.' } }); },
+  });
+  const output = stderr.join(''); assert.equal(code, 2); assert.match(output, /providerCode: 3/); assert.match(output, /providerStatus: INVALID_ARGUMENT/); assert.match(output, /supportCode: 15236754/); assert.match(output, /providerMessage: Request rejected by provider\./); assert.doesNotMatch(output, new RegExp(token)); assert.doesNotMatch(output, /\{"authorization"/);
 });

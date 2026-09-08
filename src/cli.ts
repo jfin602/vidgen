@@ -21,7 +21,7 @@ Usage:
   vidgen plan --input-file <manifest.json> --article-id <articleId> [--template <templateId>] [--artifacts-root <directory>]
   vidgen media --story-dir <directory> [--anchor-reference <image-path> ...]
   vidgen assemble --story-dir <directory> [--intro <intro-video-path>] [--outro <outro-video-path>] [--font-file <font-path>]
-  vidgen headline --input-file <manifest.json> --article-id <articleId> [--max-seconds <4-20>] --anchor-reference <image-path> [--anchor-reference <image-path> ...] --font-file <font-path> [--artifacts-root <directory>]
+  vidgen headline --input-file <manifest.json> --article-id <articleId> [--max-seconds <4-20>] --anchor-reference <image-path> [--anchor-reference <image-path> ...] --font-file <font-path> [--artifacts-root <directory>] [--verbose]
 
 Available commands:
   help, --help, -h  Show this help message.
@@ -70,6 +70,7 @@ Headline options:
   --anchor-reference <path>     Required local presenter image; repeat one to three times.
   --font-file <font-path>       Required local lower-third font.
   --artifacts-root <directory>  Write flat pairs here (default: ${DEFAULT_HEADLINE_ARTIFACTS_ROOT}).
+  --verbose                      Print safe headline pipeline progress.
 `;
 
 export interface HelpCommand {
@@ -110,7 +111,7 @@ export interface AssembleCommand {
   readonly outroPath?: string;
   readonly fontPath?: string;
 }
-export interface HeadlineCommand { readonly kind: 'headline'; readonly inputFile: string; readonly articleId: string; readonly maxSeconds: number; readonly anchorReferencePaths: readonly string[]; readonly fontPath: string; readonly artifactsRoot?: string; }
+export interface HeadlineCommand { readonly kind: 'headline'; readonly inputFile: string; readonly articleId: string; readonly maxSeconds: number; readonly anchorReferencePaths: readonly string[]; readonly fontPath: string; readonly artifactsRoot?: string; readonly verbose?: true; }
 
 export type CliCommand = HelpCommand | RunCommand | StoryCommand | PlanCommand | MediaCommand | AssembleCommand | HeadlineCommand;
 
@@ -228,7 +229,7 @@ export async function runCli(
       return 0;
     }
     if (command.kind === 'headline') {
-      const result = await (dependencies.generateHeadline ?? generateHeadlineClip)({ inputFile: command.inputFile, articleId: command.articleId, maxSeconds: command.maxSeconds, anchorReferencePaths: command.anchorReferencePaths, fontPath: command.fontPath, ...(command.artifactsRoot === undefined ? {} : { artifactsRoot: command.artifactsRoot }) });
+      const result = await (dependencies.generateHeadline ?? generateHeadlineClip)({ inputFile: command.inputFile, articleId: command.articleId, maxSeconds: command.maxSeconds, anchorReferencePaths: command.anchorReferencePaths, fontPath: command.fontPath, ...(command.artifactsRoot === undefined ? {} : { artifactsRoot: command.artifactsRoot }), ...(command.verbose === true ? { onProgress: (message: string) => output.writeStdout(`${message}\n`) } : {}) });
       output.writeStdout(`Headline ${result.clipId} is final_ready.\nfinal: ${result.finalPath}\nmetadata: ${result.metadataPath}\nsha256: ${result.sha256}\ndurationSeconds: ${result.durationSeconds}\n`);
       return 0;
     }
@@ -251,21 +252,25 @@ export async function runCli(
       ? error.publicMessage
       : 'VidGen failed unexpectedly.';
     const category = isVidGenError(error) ? error.code : 'unexpected';
-    output.writeStderr(`Run failed [${category}]: ${message} Run "vidgen --help" for usage.\n`);
+    const diagnostic = isVidGenError(error) ? error.safeProviderDiagnostic : undefined;
+    const details = diagnostic === undefined ? '' : `${diagnostic.providerCode === undefined ? '' : `providerCode: ${diagnostic.providerCode}\n`}${diagnostic.providerStatus === undefined ? '' : `providerStatus: ${diagnostic.providerStatus}\n`}${diagnostic.supportCode === undefined ? '' : `supportCode: ${diagnostic.supportCode}\n`}${diagnostic.providerMessage === undefined ? '' : `providerMessage: ${diagnostic.providerMessage}\n`}`;
+    output.writeStderr(`Run failed [${category}]: ${message} Run "vidgen --help" for usage.\n${details}`);
     return 2;
   }
 }
 
 function parseHeadlineCommand(args: readonly string[]): HeadlineCommand {
-  const values: Partial<Record<'inputFile' | 'articleId' | 'fontPath' | 'artifactsRoot' | 'maxSeconds', string>> = {};
+  const values: Partial<Record<'inputFile' | 'articleId' | 'fontPath' | 'artifactsRoot' | 'maxSeconds', string>> = {}; let verbose = false;
   const anchors: string[] = [];
   const names: Record<string, keyof typeof values | 'anchor'> = { '--input-file': 'inputFile', '--article-id': 'articleId', '--font-file': 'fontPath', '--artifacts-root': 'artifactsRoot', '--max-seconds': 'maxSeconds', '--anchor-reference': 'anchor' };
-  for (let i = 0; i < args.length; i += 2) {
+  for (let i = 0; i < args.length;) {
     const option = args[i]; const key = names[option ?? '']; const value = args[i + 1];
+    if (option === '--verbose') { if (verbose) throw invalidArgument('Headline option --verbose must not be repeated.'); verbose = true; i += 1; continue; }
     if (key === undefined) throw invalidArgument(`Unknown headline argument: ${JSON.stringify(option)}.`);
     if (value === undefined || value.trim().length === 0) throw invalidArgument(`${option} requires exactly one non-empty value.`);
     if (key === 'anchor') { if (anchors.length >= 3) throw invalidArgument('Headline accepts at most three --anchor-reference values.'); anchors.push(value); }
     else { if (values[key] !== undefined) throw invalidArgument(`Headline option ${option} must not be repeated.`); values[key] = value; }
+    i += 2;
   }
   if (values.inputFile === undefined) throw invalidArgument('Headline requires --input-file <manifest.json>.');
   if (values.articleId === undefined) throw invalidArgument('Headline requires --article-id <articleId>.');
@@ -273,7 +278,7 @@ function parseHeadlineCommand(args: readonly string[]): HeadlineCommand {
   if (anchors.length === 0) throw invalidArgument('Headline requires one to three --anchor-reference values.');
   const maxSeconds = values.maxSeconds === undefined ? 20 : Number(values.maxSeconds);
   if (!Number.isInteger(maxSeconds) || maxSeconds < 4 || maxSeconds > 20) throw invalidArgument('Headline --max-seconds must be a whole number from 4 through 20.');
-  return { kind: 'headline', inputFile: values.inputFile, articleId: values.articleId, fontPath: values.fontPath, maxSeconds, anchorReferencePaths: anchors, ...(values.artifactsRoot === undefined ? {} : { artifactsRoot: values.artifactsRoot }) };
+  return { kind: 'headline', inputFile: values.inputFile, articleId: values.articleId, fontPath: values.fontPath, maxSeconds, anchorReferencePaths: anchors, ...(values.artifactsRoot === undefined ? {} : { artifactsRoot: values.artifactsRoot }), ...(verbose ? { verbose: true } : {}) };
 }
 
 function parseMediaCommand(args: readonly string[]): MediaCommand {

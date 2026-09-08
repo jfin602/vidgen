@@ -21,6 +21,16 @@ test('headline workflow publishes a validated safe flat MP4/JSON pair with no lo
   });
 });
 
+test('headline workflow emits only useful safe stage progress when requested', async () => {
+  await withAssets(async (directory, anchor, font) => {
+    const events: string[] = [];
+    await generateHeadlineClip({ ...fakeDependencies(directory, anchor, font), onProgress: (event) => events.push(event) });
+    const output = events.join('\n');
+    for (const event of ['input and story validation complete', 'lower-third and font preflight complete', 'Presenter copy generation starting', 'Presenter copy generation completed', 'Planned final duration: 4 seconds', 'Configured Veo model: fake-model', 'Reference images: 1', 'Veo extension required: no', 'Veo generation starting', 'FFmpeg finishing starting', 'FFmpeg finishing completed', 'final publication completed']) assert.match(output, new RegExp(event));
+    assert.doesNotMatch(output, /A short factual presenter sentence|\.tmp-|anchor\.png|font\.ttf/);
+  });
+});
+
 test('short copy under the default ceiling makes only the initial eight-second provider request', async () => {
   await withAssets(async (directory, anchor, font) => {
     let requested: number | undefined;

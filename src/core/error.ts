@@ -24,8 +24,17 @@ export type VidGenErrorCode =
   | 'ngest_manifest'
   | 'ngest_unsupported_continuation';
 
+export interface SafeProviderDiagnostic {
+  readonly providerCode?: number | string;
+  readonly providerStatus?: string;
+  readonly supportCode?: string;
+  readonly providerMessage?: string;
+}
+
 export interface VidGenErrorOptions {
   readonly cause?: unknown;
+  /** Explicit, sanitized provider facts. Causes remain private. */
+  readonly safeProviderDiagnostic?: unknown;
 }
 
 /**
@@ -36,6 +45,7 @@ export interface VidGenErrorOptions {
 export class VidGenError extends Error {
   readonly code: VidGenErrorCode;
   readonly publicMessage: string;
+  readonly safeProviderDiagnostic?: SafeProviderDiagnostic;
 
   constructor(
     code: VidGenErrorCode,
@@ -46,9 +56,38 @@ export class VidGenError extends Error {
     this.name = 'VidGenError';
     this.code = code;
     this.publicMessage = publicMessage;
+    this.safeProviderDiagnostic = sanitizeProviderDiagnostic(options.safeProviderDiagnostic);
   }
 }
 
 export function isVidGenError(value: unknown): value is VidGenError {
   return value instanceof VidGenError;
 }
+
+/** Keeps a deliberately tiny provider diagnostic boundary safe for CLI output. */
+export function sanitizeProviderDiagnostic(value: unknown): SafeProviderDiagnostic | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const source = value as Record<string, unknown>;
+  const providerCode = safeProviderCode(source.providerCode);
+  const providerStatus = safeProviderStatus(source.providerStatus);
+  const supportCode = safeSupportCode(source.supportCode);
+  const providerMessage = safeProviderMessage(source.providerMessage);
+  const diagnostic: SafeProviderDiagnostic = {
+    ...(providerCode === undefined ? {} : { providerCode }),
+    ...(providerStatus === undefined ? {} : { providerStatus }),
+    ...(supportCode === undefined ? {} : { supportCode }),
+    ...(providerMessage === undefined ? {} : { providerMessage }),
+  };
+  return Object.keys(diagnostic).length === 0 ? undefined : diagnostic;
+}
+
+function safeProviderCode(value: unknown): number | string | undefined {
+  if (typeof value === 'number') return Number.isSafeInteger(value) && value >= 0 && value <= 999_999 ? value : undefined;
+  return typeof value === 'string' && /^(?:\d{1,6}|[A-Z][A-Z0-9_]{0,63})$/.test(value) && !sensitive(value) ? value : undefined;
+}
+function safeProviderStatus(value: unknown): string | undefined { return typeof value === 'string' && /^[A-Za-z][A-Za-z0-9_ -]{0,127}$/.test(value) && !sensitive(value) ? value : undefined; }
+function safeSupportCode(value: unknown): string | undefined { return (typeof value === 'string' || typeof value === 'number') && /^\d{1,16}$/.test(String(value)) ? String(value) : undefined; }
+function safeProviderMessage(value: unknown): string | undefined {
+  return typeof value === 'string' && /^[\x20-\x7e]{1,240}$/.test(value) && !/[{}\[\]"]/u.test(value) && !sensitive(value) && !/(?:file:|(?:^|[\s'(])(?:[A-Za-z]:[\\/]|[\\/]))/iu.test(value) ? value : undefined;
+}
+function sensitive(value: string): boolean { return /\b(?:authorization|bearer|token|api[-_ ]?key|x-goog-api-key|cookie)\b/iu.test(value); }

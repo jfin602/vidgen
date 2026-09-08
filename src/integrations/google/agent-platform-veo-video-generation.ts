@@ -1,4 +1,4 @@
-import { VidGenError } from '../../core/error.ts';
+import { sanitizeProviderDiagnostic, VidGenError } from '../../core/error.ts';
 import { defaultGoogleCloudAccessToken, type GoogleCloudAccessTokenProvider } from './google-cloud-auth.ts';
 import type { ApprovedReferenceImage, VideoGenerationClient, VideoGenerationRequest, VideoGenerationResult } from '../../core/generated-media.ts';
 import { loadVeoPromptSpec, renderVeoPrompt, type LoadedVeoPromptSpec } from './veo-prompt-spec.ts';
@@ -33,6 +33,7 @@ const SAFE_ACCESS_TOKEN = /^[A-Za-z0-9._~-]{1,16384}$/;
 export type GoogleAgentPlatformVeoEnvironment = Readonly<Record<string, string | undefined>>;
 export type FetchImplementation = typeof fetch;
 export type GoogleAgentPlatformAccessTokenProvider = GoogleCloudAccessTokenProvider;
+export interface GoogleAgentPlatformVeoProgressEvent { readonly stage: 'operation_started' | 'operation_pending' | 'operation_completed'; readonly operationNumber: number; readonly pollNumber?: number; }
 
 export interface GoogleAgentPlatformVeoRuntimeConfig {
   readonly project: string;
@@ -54,6 +55,7 @@ export interface GoogleAgentPlatformVeoVideoGenerationClientOptions {
   readonly maxResponseBytes?: number;
   readonly maxVideoBytes?: number;
   readonly maxExtensionCount?: number;
+  readonly onProgress?: (event: GoogleAgentPlatformVeoProgressEvent) => void;
 }
 
 /** Loads only Agent Platform runtime identity; Developer API credentials are never read here. */
@@ -86,6 +88,7 @@ export class GoogleAgentPlatformVeoVideoGenerationClient implements VideoGenerat
   private readonly maxVideoBytes: number;
   private readonly maxExtensionCount: number;
   private readonly prompts: LoadedVeoPromptSpec;
+  private readonly onProgress?: (event: GoogleAgentPlatformVeoProgressEvent) => void;
 
   constructor(options: GoogleAgentPlatformVeoVideoGenerationClientOptions = {}) {
     const config = loadGoogleAgentPlatformVeoRuntimeConfig(options.environment);
@@ -104,6 +107,7 @@ export class GoogleAgentPlatformVeoVideoGenerationClient implements VideoGenerat
     this.maxResponseBytes = positiveSafeInteger(options.maxResponseBytes ?? DEFAULT_GOOGLE_AGENT_PLATFORM_VEO_MAX_RESPONSE_BYTES, 'Agent Platform Veo maximum operation response size must be a positive whole number of bytes.');
     this.maxVideoBytes = positiveSafeInteger(options.maxVideoBytes ?? DEFAULT_GOOGLE_AGENT_PLATFORM_VEO_MAX_VIDEO_BYTES, 'Agent Platform Veo maximum video size must be a positive whole number of bytes.');
     this.maxExtensionCount = nonNegativeSafeInteger(options.maxExtensionCount ?? DEFAULT_GOOGLE_AGENT_PLATFORM_VEO_MAX_EXTENSION_COUNT, 'Agent Platform Veo maximum extension count must be a non-negative whole number.');
+    this.onProgress = options.onProgress;
   }
 
   async generateVideo(request: VideoGenerationRequest): Promise<VideoGenerationResult> {
@@ -144,11 +148,11 @@ export class GoogleAgentPlatformVeoVideoGenerationClient implements VideoGenerat
     const token = await this.accessToken();
     const deadline = this.now() + this.totalTimeoutMs;
     const operationIds: string[] = [];
-    let completed = await this.startAndWait(initialBody, token, deadline);
+    let completed = await this.startAndWait(initialBody, token, deadline, 1);
     operationIds.push(completed.operationName);
     let video = completed.video;
     for (let index = 0; index < extensionCount; index += 1) {
-      completed = await this.startAndWait(extensionBody(video, index), token, deadline);
+      completed = await this.startAndWait(extensionBody(video, index), token, deadline, index + 2);
       operationIds.push(completed.operationName);
       video = completed.video;
     }
@@ -169,10 +173,11 @@ export class GoogleAgentPlatformVeoVideoGenerationClient implements VideoGenerat
     } finally { if (timer !== undefined) clearTimeout(timer); }
   }
 
-  private async startAndWait(body: Record<string, unknown>, token: string, deadline: number): Promise<CompletedOperation> {
+  private async startAndWait(body: Record<string, unknown>, token: string, deadline: number, operationNumber: number): Promise<CompletedOperation> {
     this.assertBeforeDeadline(deadline);
     const started = await this.requestJson(this.modelUrl(':predictLongRunning'), body, token);
     const operationName = this.operationNameFrom(started);
+    this.progress({ stage: 'operation_started', operationNumber });
     let operation = started;
     let polls = 0;
     while (!operationDone(operation)) {
@@ -182,8 +187,11 @@ export class GoogleAgentPlatformVeoVideoGenerationClient implements VideoGenerat
       this.assertBeforeDeadline(deadline);
       operation = await this.requestJson(this.modelUrl(':fetchPredictOperation'), { operationName }, token);
       polls += 1;
+      if (!operationDone(operation)) this.progress({ stage: 'operation_pending', operationNumber, pollNumber: polls });
     }
-    return completedOperation(operation, operationName, this.maxVideoBytes);
+    const completed = completedOperation(operation, operationName, this.maxVideoBytes);
+    this.progress({ stage: 'operation_completed', operationNumber });
+    return completed;
   }
 
   private async requestJson(url: string, body: Record<string, unknown>, token: string): Promise<unknown> {
@@ -219,6 +227,7 @@ export class GoogleAgentPlatformVeoVideoGenerationClient implements VideoGenerat
   }
 
   private assertBeforeDeadline(deadline: number): void { if (this.now() >= deadline) throw providerFailure('Agent Platform Veo video generation timed out.'); }
+  private progress(event: GoogleAgentPlatformVeoProgressEvent): void { try { this.onProgress?.(event); } catch {} }
 }
 
 function resultFor(client: GoogleAgentPlatformVeoVideoGenerationClient, generated: GeneratedSequence, durationSeconds?: number): VideoGenerationResult {
@@ -279,11 +288,12 @@ function partitionCinematicSpeech(text: string, chunks: number): readonly string
 }
 
 function requiredExtensionCount(seconds: number): number { return Math.max(0, Math.ceil((seconds - INITIAL_DURATION_SECONDS) / EXTENSION_DURATION_SECONDS)); }
-function operationDone(payload: unknown): boolean { const operation = record(payload); if (operation === undefined || (operation.done !== undefined && typeof operation.done !== 'boolean')) throw providerFailure('Agent Platform Veo video service returned a malformed operation.'); if (operation.error !== undefined) throw providerFailure('Agent Platform Veo video generation failed.'); return operation.done === true; }
+function operationDone(payload: unknown): boolean { const operation = record(payload); if (operation === undefined || (operation.done !== undefined && typeof operation.done !== 'boolean')) throw providerFailure('Agent Platform Veo video service returned a malformed operation.'); if (operation.error !== undefined) throw providerFailure('Agent Platform Veo video generation failed.', undefined, operationDiagnostic(operation)); return operation.done === true; }
 
 function completedOperation(payload: unknown, operationName: string, maxVideoBytes: number): CompletedOperation {
   const operation = record(payload); const response = operation === undefined ? undefined : record(operation.response);
-  if (operation === undefined || operation.error !== undefined || response === undefined || filtered(response)) throw providerFailure('Agent Platform Veo video generation failed or completed without a video result.');
+  if (operation === undefined || response === undefined || filtered(response)) throw providerFailure('Agent Platform Veo video generation failed or completed without a video result.');
+  if (operation.error !== undefined) throw providerFailure('Agent Platform Veo video generation failed.', undefined, operationDiagnostic(operation));
   const videos = response.videos; const video = Array.isArray(videos) && videos.length === 1 ? record(videos[0]) : undefined;
   if (video === undefined || video.mimeType !== 'video/mp4' || typeof video.bytesBase64Encoded !== 'string') throw providerFailure('Agent Platform Veo video generation completed without a valid inline MP4 result.');
   return { operationName, video: decodeInlineMp4(video.bytesBase64Encoded, maxVideoBytes) };
@@ -313,7 +323,24 @@ function requiredEnvironmentValue(environment: GoogleAgentPlatformVeoEnvironment
 function positiveSafeInteger(value: number, message: string): number { if (!Number.isSafeInteger(value) || value < 1) throw new VidGenError('invalid_argument', message); return value; }
 function nonNegativeSafeInteger(value: number, message: string): number { if (!Number.isSafeInteger(value) || value < 0) throw new VidGenError('invalid_argument', message); return value; }
 function record(value: unknown): Record<string, unknown> | undefined { return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined; }
-function providerFailure(message: string, cause?: unknown): VidGenError { return new VidGenError('generated_media', message, cause === undefined ? {} : { cause }); }
+function operationDiagnostic(operation: Record<string, unknown>) {
+  const error = record(operation.error);
+  if (error === undefined) return undefined;
+  const message = typeof error.message === 'string' ? error.message : undefined;
+  return sanitizeProviderDiagnostic({ providerCode: error.code, providerStatus: error.status, supportCode: supportCode(error, message), providerMessage: message });
+}
+function supportCode(error: Record<string, unknown>, message: string | undefined): unknown {
+  const direct = error.supportCode ?? error.support_code;
+  if (direct !== undefined) return direct;
+  const details = Array.isArray(error.details) ? error.details : [];
+  for (const detail of details.slice(0, 4)) {
+    const recordDetail = record(detail); const metadata = record(recordDetail?.metadata);
+    const value = recordDetail?.supportCode ?? recordDetail?.support_code ?? metadata?.supportCode ?? metadata?.support_code;
+    if (value !== undefined) return value;
+  }
+  return /\bsupport(?:[ -]?code)?\s*[:#-]?\s*(\d{1,16})\b/iu.exec(message ?? '')?.[1];
+}
+function providerFailure(message: string, cause?: unknown, safeProviderDiagnostic?: unknown): VidGenError { return new VidGenError('generated_media', message, { ...(cause === undefined ? {} : { cause }), ...(safeProviderDiagnostic === undefined ? {} : { safeProviderDiagnostic }) }); }
 
 interface InlineVideo { readonly mimeType: 'video/mp4'; readonly bytes: Uint8Array; }
 interface CompletedOperation { readonly operationName: string; readonly video: InlineVideo; }
