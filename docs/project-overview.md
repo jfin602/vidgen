@@ -229,7 +229,7 @@ Provider model and voice selections remain runtime configuration rather than dur
 
 The Phase 6 simple path produces one continuous presenter clip from StoryInput, then deterministically adds a lower third containing the Article headline and source display name. It does not require B-roll, separate TTS voiceover, intro/outro wrappers, ClipPlan, AssemblyTemplate, cinematic GeneratedMediaUnit resolution, or cinematic AssemblyPlan.
 
-Its configurable `maxSeconds` value is a hard output ceiling from 4 through 20 seconds inclusive, not a requested target. The engine should prefer the shortest useful provider-supported duration that does not exceed that ceiling and must verify the final qualified output does not exceed it. Provider-specific duration granularity must remain behind the provider boundary rather than becoming the product contract.
+Its configurable `maxSeconds` value is a copy/planning ceiling from 4 through 20 seconds inclusive, not a requested target or a final-media trim. The engine uses the shortest useful speech estimate to select initial or extended provider coverage, then preserves the complete qualified Veo timeline. Provider-specific duration granularity remains behind the provider boundary rather than becoming the product contract.
 
 ## Output
 

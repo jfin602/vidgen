@@ -52,7 +52,7 @@ Possible future controls may include:
 
 A fixed cinematic template should own its normal timing. Avoid adding arbitrary duration controls that force the model to redesign the selected cinematic template.
 
-The Phase 6 simple presenter-headline CLI is intentionally different: it may accept a `maxSeconds` execution constraint from 4 through 20 seconds inclusive. That value is a hard output ceiling, not a target duration and not currently a persistent ngest `CanonicalControl` field. Provider-specific duration granularity remains a runtime/provider concern.
+The Phase 6 simple presenter-headline CLI is intentionally different: it may accept a `maxSeconds` copy/planning constraint from 4 through 20 seconds inclusive. That value selects provider coverage but does not trim qualified final media, and is not currently a persistent ngest `CanonicalControl` field. Provider-specific duration granularity remains a runtime/provider concern.
 
 The exact v1 field set is intentionally not locked yet.
 

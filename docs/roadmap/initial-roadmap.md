@@ -28,7 +28,7 @@ The roadmap assumes:
 - Veo as the initial presenter/video direction;
 - FFmpeg/FFprobe for deterministic finishing/qualification of the simple path and assembly/qualification of the preserved cinematic path;
 - 1080x1920 9:16 H.264 MP4 at 30 fps as the initial output target;
-- simple-path `maxSeconds` configurable from 4 through 20 seconds inclusive as a hard output ceiling, not a target duration;
+- simple-path `maxSeconds` configurable from 4 through 20 seconds inclusive as a copy/planning ceiling, not a target duration or final-media trim;
 - no Remotion, approval state machine, global cache, database, queue, or distributed runtime in the initial pipeline.
 
 No downstream stage may consume raw/unvalidated model output.
@@ -293,10 +293,9 @@ Required direction:
 - no B-roll, separate TTS voiceover, standardized intro/outro, ClipPlan, AssemblyTemplate, cinematic GeneratedMediaUnit resolution, or cinematic AssemblyPlan requirement;
 - headline and source display name rendered deterministically after generation rather than delegated to model-generated on-screen text;
 - configurable `maxSeconds` from 4 through 20 seconds inclusive;
-- `maxSeconds` is a hard final-output ceiling, not a target duration;
-- prefer the shortest useful provider-supported duration that does not exceed the ceiling;
+- `maxSeconds` is a copy/planning ceiling, not a target duration or final-media trim;
+- use the shortest useful speech estimate to select provider coverage, then preserve the complete qualified provider timeline;
 - keep provider-specific duration granularity behind the provider boundary;
-- fail rather than publish a qualified final clip whose duration exceeds the configured ceiling;
 - pair each final MP4 with article/provenance JSON containing the governed Article metadata and enough production identity to inspect or publish the clip safely;
 - reuse existing CanonicalInput/StoryInput, provider boundaries, local reference-image safety, FFmpeg/FFprobe, hashing, and atomic-publication patterns where appropriate;
 - preserve existing `vidgen story`, `vidgen plan`, `vidgen media`, and `vidgen assemble` behavior and cinematic durable artifact meanings;
