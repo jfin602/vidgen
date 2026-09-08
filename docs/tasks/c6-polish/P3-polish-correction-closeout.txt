@@ -30,7 +30,11 @@ Artifact/package regression:
 - dry-run creates neither MP4 and never calls Veo.
 
 Lower-third polish:
+- outer panel spans the full 1080-pixel frame width at x=0;
 - outer panel is flush with the bottom of the 1080x1920 frame;
+- fixed 620px height is removed;
+- panel height is derived deterministically from the actual wrapped headline line count plus one source line, intended separation, and positive vertical padding, with no unused maximum-line reservation;
+- different wrapped headline line counts produce correspondingly different panel heights while remaining bottom-anchored;
 - background is RGB `#336699` at exactly 77% opacity;
 - headline and source are center-aligned horizontally, including multiline headline presentation;
 - full governed headline/source text remains intact;
@@ -72,4 +76,4 @@ Repair only defects within P1 full-provider-duration finishing/metadata semantic
 
 FINAL RESPONSE
 
-Report findings/repairs, exact validation, final duration semantics, three-file artifact/Poster behavior, bottom/opacity/alignment treatment, finishing/headline schema versions, unchanged 0.6.5 version, any local runtime evidence actually observed, and whether `c6-polish` is ready for human review.
+Report findings/repairs, exact validation, final duration semantics, three-file artifact/Poster behavior, full-width dynamic-height/bottom/opacity/alignment treatment, example panel heights for multiple wrapped line counts, finishing/headline schema versions, unchanged 0.6.5 version, any local runtime evidence actually observed, and whether `c6-polish` is ready for human review.
