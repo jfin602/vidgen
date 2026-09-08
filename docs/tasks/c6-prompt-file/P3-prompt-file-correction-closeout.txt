@@ -1,0 +1,70 @@
+TASK: Correction 6 / P3 — Prompt-file correction closeout
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra Medium`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Review P1 and P2 against current pushed main as one correction. Inspect actual diffs and tests; do not approve merely because tests pass.
+
+ACCEPTANCE
+
+Lower third:
+- the already-landed selected-font safe-area implementation remains intact;
+- the visible panel is opaque RGB `#336699`;
+- full governed headline/source text remains preserved;
+- overflow still fails before paid provider work;
+- runtime and static headline-sidecar finishing policy agree on `simple-clip-finishing-policy-v2`.
+
+Veo prompt file:
+- exactly one runtime prompt-file setting, `VIDGEN_VEO_PROMPT_FILE`, owns one bounded local JSON prompt spec;
+- no deployment path is hardcoded;
+- every current Veo request shape gets all provider-sent prompt prose from that file;
+- there are no hardcoded presenter, disclaimer, exact-dialogue-instruction, continuation, grounding, B-roll, on-screen-text, unsupported-fact, or other Veo instruction sentences left in source;
+- code only selects templates and substitutes the bounded dynamic placeholder vocabulary;
+- the AI-generated-reference disclaimer is file content, not an engine-owned string;
+- there is no hardcoded fallback if the file is missing or malformed;
+- prompt loading is a stable byte snapshot and cannot produce TOCTOU mismatch between outgoing request, fingerprint, and provenance;
+- invalid prompt assets fail safely before paid/provider network work without leaking prompt contents or paths;
+- prompt identity is basename/SHA-256/byte-size only;
+- headline sidecar and generated-media/media-run schema versions truthfully reflect their new durable shapes;
+- every Veo video unit's reuse identity includes prompt-file identity; changing the file invalidates stale presenter/content video reuse;
+- TTS/voiceover reuse is unaffected;
+- old video records without prompt identity are not falsely reused;
+- prompt text and absolute paths never enter artifacts/public errors.
+
+Provider regression:
+- exact dialogue/context substitution preserves validated values;
+- simple duration/speech partitioning and extension behavior are unchanged;
+- reference-image payloads and count rules are unchanged;
+- Veo model/auth/endpoints/parameters/polling/operation provenance/inline MP4 validation remain unchanged;
+- no mocked test is represented as proof that new wording changes Google safety behavior.
+
+VALIDATION
+
+Run:
+- `npm run codex:phase:validate -- c6-prompt-file`;
+- focused simple-clip-finisher/headline-workflow tests;
+- focused Agent Platform Veo/video factory tests;
+- focused media-workflow/generated-media/reuse tests;
+- `npm test`;
+- `npm run check`;
+- `node src/cli.ts --help`;
+- `git diff --check`.
+
+Inspect source directly for leftover hardcoded Veo prompt prose; do not rely only on request-construction tests.
+
+LIVE EVIDENCE
+
+No live Veo call is required for Codex closeout. After human review, the owner will create the prompt-spec file under the deployment `vidgen-assets/prompts` directory and run a new live smoke. Do not claim safety-filter improvement until observed live.
+
+BOUNDED REPAIRS
+
+Repair only defects within the P1 lower-third residual, prompt-file loading/template substitution, prompt identity/provenance/reuse, schema consistency, narrow docs, and focused regression coverage.
+
+FINAL RESPONSE
+
+Report findings/repairs, exact validation, `#336699` treatment, whether any Veo prompt prose remains hardcoded, prompt-file/provenance/schema/reuse contract, preserved provider behavior, unchanged 0.6.5 version, and whether `c6-prompt-file` is ready for human review.
