@@ -69,7 +69,7 @@ Assemble options:
 Headline options:
   --input-file <manifest.json>  Required local ngest-shaped manifest file.
   --article-id <articleId>      Required explicit Article ID to select.
-  --max-seconds <4-20>          Final duration ceiling (default: 20).
+  --max-seconds <4-20>          Presenter copy/planning ceiling (default: 20); Veo coverage is retained.
   --anchor-reference <path>     Required local presenter image; repeat one to three times.
   --font-file <font-path>       Required local lower-third font.
   --artifacts-root <directory>  Write headline packages here (default: ${DEFAULT_HEADLINE_ARTIFACTS_ROOT}).
@@ -244,7 +244,7 @@ export async function runCli(
     if (command.kind === 'headline') {
       const result = await (dependencies.generateHeadline ?? generateHeadlineClip)({ inputFile: command.inputFile, articleId: command.articleId, maxSeconds: command.maxSeconds, anchorReferencePaths: command.anchorReferencePaths, fontPath: command.fontPath, ...(command.artifactsRoot === undefined ? {} : { artifactsRoot: command.artifactsRoot }), ...(command.dryRun === true ? { dryRun: true } : {}), ...(command.verbose === true ? { onProgress: (message: string) => output.writeStdout(`${message}\n`) } : {}) });
       if (result.dryRun === true) {
-        output.writeStdout(`Headline ${result.clipId} is dry_run_ready.\npresenterText: ${result.presenterTextPath}\nmetadata: ${result.metadataPath}\nplannedDurationSeconds: ${result.plannedDurationSeconds}\n`);
+        output.writeStdout(`Headline ${result.clipId} is dry_run_ready.\npresenterText: ${result.presenterTextPath}\nmetadata: ${result.metadataPath}\nspeechPlanningDurationSeconds: ${result.speechPlanningDurationSeconds}\n`);
         return 0;
       }
       output.writeStdout(`Headline ${result.clipId} is final_ready.\nfinal: ${result.finalPath}\nmetadata: ${result.metadataPath}\nsha256: ${result.sha256}\ndurationSeconds: ${result.durationSeconds}\n`);
@@ -258,7 +258,7 @@ export async function runCli(
       }
       const result = await (dependencies.generateHeadline ?? generateHeadlineClip)({ inputFile: command.inputFile, articleId: command.articleId, maxSeconds: command.maxSeconds, anchorReferencePaths: command.anchorReferencePaths, fontPath: command.fontPath, ...(command.artifactsRoot === undefined ? {} : { artifactsRoot: command.artifactsRoot }), ...(command.dryRun === true ? { dryRun: true } : {}), ...(command.verbose === true ? { onProgress: (message: string) => output.writeStdout(`${message}\n`) } : {}) });
       if (result.dryRun === true) {
-        output.writeStdout(`Headline ${result.clipId} is dry_run_ready.\npresenterText: ${result.presenterTextPath}\nmetadata: ${result.metadataPath}\nplannedDurationSeconds: ${result.plannedDurationSeconds}\n`);
+        output.writeStdout(`Headline ${result.clipId} is dry_run_ready.\npresenterText: ${result.presenterTextPath}\nmetadata: ${result.metadataPath}\nspeechPlanningDurationSeconds: ${result.speechPlanningDurationSeconds}\n`);
         return 0;
       }
       output.writeStdout(`Headline ${result.clipId} is final_ready.\nfinal: ${result.finalPath}\nmetadata: ${result.metadataPath}\nsha256: ${result.sha256}\ndurationSeconds: ${result.durationSeconds}\n`);

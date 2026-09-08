@@ -56,7 +56,7 @@ test('simple lower-third policy has explicit padded geometry and rejects measure
   assert.match(args.join(' '), /textfile=simple-headline\.txt/); assert.doesNotMatch(args.join(' '), /Example News/);
 });
 
-test('simple finisher stages hostile article text, trims sub-eight coverage, and keeps FFmpeg argv-only', async () => {
+test('simple finisher stages hostile article text, retains sub-eight speech coverage, and keeps FFmpeg argv-only', async () => {
   await withDirectory(async (directory) => {
     const raw = join(directory, 'raw.mp4'); const font = join(directory, 'approved.ttf'); const candidate = join(directory, 'candidate.mp4');
     await writeFile(raw, 'raw'); await writeFile(font, 'font');
@@ -72,15 +72,15 @@ test('simple finisher stages hostile article text, trims sub-eight coverage, and
         }
         return child(outputFor(args));
       },
-      probe: async (path) => path === raw ? rawProbe(8) : finalProbe(4),
+      probe: async (path) => path === raw ? rawProbe(8) : finalProbe(8),
     });
     const hostileHeadline = "quote' : ; [x] \\ % ,\nsecond line";
-    const result = await finisher.finish({ rawPresenterVideoPath: raw, fontPath: font, headline: hostileHeadline, sourceDisplayName: 'Source ; [safe]', maxSeconds: 4, plannedDurationSeconds: 4, workDirectory: directory, outputPath: candidate });
-    assert.equal(result.probe.durationSeconds, 4);
+    const result = await finisher.finish({ rawPresenterVideoPath: raw, fontPath: font, headline: hostileHeadline, sourceDisplayName: 'Source ; [safe]', workDirectory: directory, outputPath: candidate });
+    assert.equal(result.probe.durationSeconds, 8);
     assert.equal(stagedHeadline, hostileHeadline);
     assert.equal(stagedSource, 'Source ; [safe]');
-    assert.match(graph, /trim=duration=4/);
-    assert.match(graph, /atrim=duration=4/);
+    assert.doesNotMatch(graph, /\b(?:a)?trim=/);
+    assert.ok(calls.some((call) => call.args.includes('-shortest')));
     assert.match(graph, /loudnorm=I=-16:LRA=11:TP=-1.5/);
     assert.match(graph, /drawbox=x=48:y=1080:w=984:h=620/);
     assert.match(graph, /color=0x336699:t=fill/);
@@ -98,35 +98,32 @@ test('simple finisher stages hostile article text, trims sub-eight coverage, and
   });
 });
 
-test('simple finisher accepts eight and fifteen-second coverage but rejects missing streams and short raw duration before FFmpeg', async () => {
+test('simple finisher retains eight and fifteen-second provider coverage but rejects missing streams before FFmpeg', async () => {
   await withDirectory(async (directory) => {
     const raw = join(directory, 'raw.mp4'); const font = join(directory, 'approved.ttf'); await writeFile(raw, 'raw'); await writeFile(font, 'font');
-    for (const [plannedDurationSeconds, rawDuration] of [[8, 8], [15, 15]] as const) {
+    for (const rawDuration of [8, 15] as const) {
       let calls = 0;
-      const finisher = new LocalSimpleClipFinisher({ measureLowerThird: () => undefined, spawn: (_command, args) => { calls += 1; return child(outputFor(args)); }, probe: async (path) => path === raw ? rawProbe(rawDuration) : finalProbe(plannedDurationSeconds) });
-      await finisher.finish(request(directory, raw, font, plannedDurationSeconds, 20));
+      const finisher = new LocalSimpleClipFinisher({ measureLowerThird: () => undefined, spawn: (_command, args) => { calls += 1; return child(outputFor(args)); }, probe: async (path) => path === raw ? rawProbe(rawDuration) : finalProbe(rawDuration) });
+      await finisher.finish(request(directory, raw, font));
       assert.ok(calls > 0);
     }
     let calls = 0;
     const missingAudio = new LocalSimpleClipFinisher({ measureLowerThird: () => undefined, spawn: () => { calls += 1; return child(''); }, probe: async () => ({ ...rawProbe(8), streamTypes: ['video'] as const, audio: undefined }) });
-    await assert.rejects(missingAudio.finish(request(directory, raw, font, 8, 8)), hasSimpleClip);
-    const shortRaw = new LocalSimpleClipFinisher({ measureLowerThird: () => undefined, spawn: () => { calls += 1; return child(''); }, probe: async () => rawProbe(7) });
-    await assert.rejects(shortRaw.finish(request(directory, raw, font, 8, 8)), hasSimpleClip);
+    await assert.rejects(missingAudio.finish(request(directory, raw, font)), hasSimpleClip);
     assert.equal(calls, 0);
   });
 });
 
-test('post-probe validation enforces exact normalized output and frame-scale duration tolerance', () => {
-  const request = { maxSeconds: 8, plannedDurationSeconds: 8 };
-  validateSimpleFinishedCandidate(finalProbe(8 + (1 / 30)), request);
+test('post-probe validation enforces exact normalized output and raw-duration frame-scale tolerance', () => {
+  validateSimpleFinishedCandidate(finalProbe(8 + (1 / 30)), 8);
   for (const altered of [
     { ...finalProbe(8), durationSeconds: 8.04 },
     { ...finalProbe(8), video: { ...finalProbe(8).video!, width: 720 } },
     { ...finalProbe(8), video: { ...finalProbe(8).video!, averageFrameRate: { numerator: 30000, denominator: 1001, value: 29.97 } } },
     { ...finalProbe(8), audio: { ...finalProbe(8).audio!, channels: 1 } },
     { ...finalProbe(8), streamTypes: ['video'] as const },
-  ]) assert.throws(() => validateSimpleFinishedCandidate(altered, request), hasSimpleClip);
-  assert.throws(() => validateSimpleFinishedCandidate(finalProbe(8), { maxSeconds: 4, plannedDurationSeconds: 8 }), hasSimpleClip);
+  ]) assert.throws(() => validateSimpleFinishedCandidate(altered, 8), hasSimpleClip);
+  assert.throws(() => validateSimpleFinishedCandidate(finalProbe(8), 0), hasSimpleClip);
   assert.equal(SIMPLE_CLIP_FINISHING_POLICY.output.width, 1080);
 });
 
@@ -139,14 +136,15 @@ test('simple finishing process failures stay bounded and never expose diagnostic
 });
 
 test('simple finish graph has one input and no cinematic concat path', () => {
-  const args = buildSimpleClipFinishArgs('raw.mp4', 'candidate.mp4', 15, ['font.ttf', 'simple-headline.txt', 'simple-source.txt']);
+  const args = buildSimpleClipFinishArgs('raw.mp4', 'candidate.mp4', ['font.ttf', 'simple-headline.txt', 'simple-source.txt']);
   assert.deepEqual(args.filter((item) => item === '-i').length, 1);
   const graph = args[args.indexOf('-filter_complex') + 1]!;
   assert.doesNotMatch(graph, /concat|AssemblyPlan|voiceover/i);
-  assert.match(graph, /trim=duration=15/);
+  assert.doesNotMatch(graph, /\b(?:a)?trim=/);
+  assert.ok(args.includes('-shortest'));
 });
 
-function request(directory: string, raw: string, font: string, plannedDurationSeconds: number, maxSeconds: number) { return { rawPresenterVideoPath: raw, fontPath: font, headline: 'A safe headline', sourceDisplayName: 'Example News', maxSeconds, plannedDurationSeconds, workDirectory: directory, outputPath: join(directory, `candidate-${plannedDurationSeconds}.mp4`) }; }
+function request(directory: string, raw: string, font: string) { return { rawPresenterVideoPath: raw, fontPath: font, headline: 'A safe headline', sourceDisplayName: 'Example News', workDirectory: directory, outputPath: join(directory, 'candidate.mp4') }; }
 function rawProbe(durationSeconds: number): LocalMediaProbe { return { durationSeconds, containerNames: ['mp4'], streamTypes: ['video', 'audio'], video: video(), audio: audio() }; }
 function finalProbe(durationSeconds: number): LocalMediaProbe { return { durationSeconds, containerNames: ['mov', 'mp4'], streamTypes: ['video', 'audio'], video: video(), audio: audio() }; }
 function video() { return { codecName: 'h264', width: 1080, height: 1920, pixelFormat: 'yuv420p', averageFrameRate: { numerator: 30, denominator: 1, value: 30 } }; }

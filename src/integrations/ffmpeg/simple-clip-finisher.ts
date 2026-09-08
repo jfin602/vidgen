@@ -2,7 +2,6 @@ import { copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises
 import { basename, relative, resolve } from 'node:path';
 
 import { VidGenError } from '../../core/error.ts';
-import { assertSimpleClipMaxSeconds } from '../../core/simple-clip-copy.ts';
 import type { FfmpegDependencies, FfmpegRenderResult } from './ffmpeg-renderer.ts';
 import { LocalFfmpegRenderer } from './ffmpeg-renderer.ts';
 import { type FfprobeDependencies, type LocalMediaProbe, probeLocalMedia } from './ffprobe.ts';
@@ -33,9 +32,6 @@ export interface SimpleLowerThird {
 export interface SimpleClipFinishingRequest extends SimpleLowerThird {
   readonly rawPresenterVideoPath: string;
   readonly fontPath: string;
-  readonly maxSeconds: number;
-  /** Actual final duration selected by the provider plan, not merely its ceiling. */
-  readonly plannedDurationSeconds: number;
   readonly workDirectory: string;
   readonly outputPath: string;
 }
@@ -48,6 +44,7 @@ export interface SimpleClipFinisherDependencies extends FfmpegDependencies {
 }
 
 export interface SimpleClipFinishResult extends FfmpegRenderResult {
+  readonly rawProbe: LocalMediaProbe;
   readonly probe: LocalMediaProbe;
 }
 
@@ -60,12 +57,12 @@ export function validateSimpleLowerThird(headline: string, sourceDisplayName: st
 }
 
 /** Enforces the post-render MP4 contract without exposing FFprobe output. */
-export function validateSimpleFinishedCandidate(probe: LocalMediaProbe, request: Pick<SimpleClipFinishingRequest, 'maxSeconds' | 'plannedDurationSeconds'>): void {
-  const duration = validateDurationRequest(request);
+export function validateSimpleFinishedCandidate(probe: LocalMediaProbe, rawDurationSeconds: number): void {
+  const duration = positiveDuration(rawDurationSeconds, 'Raw presenter video duration');
   if (!probe.containerNames.includes('mp4') || probe.streamTypes.length !== 2 || probe.streamTypes.filter((type) => type === 'video').length !== 1 || probe.streamTypes.filter((type) => type === 'audio').length !== 1 || probe.video === undefined || probe.audio === undefined) throw invalidSimpleClip('Finished simple clip has an unsupported stream layout.');
   if (probe.video.codecName !== 'h264' || probe.video.width !== 1080 || probe.video.height !== 1920 || probe.video.pixelFormat !== 'yuv420p' || probe.video.averageFrameRate.numerator !== 30 || probe.video.averageFrameRate.denominator !== 1) throw invalidSimpleClip('Finished simple clip does not meet the required video format.');
   if (probe.audio.codecName !== 'aac' || probe.audio.sampleRate !== 48_000 || probe.audio.channels !== 2) throw invalidSimpleClip('Finished simple clip does not meet the required audio format.');
-  if (Math.abs(probe.durationSeconds - duration) > SIMPLE_CLIP_DURATION_TOLERANCE_SECONDS || probe.durationSeconds > request.maxSeconds + SIMPLE_CLIP_DURATION_TOLERANCE_SECONDS) throw invalidSimpleClip('Finished simple clip duration does not match the planned duration.');
+  if (Math.abs(probe.durationSeconds - duration) > SIMPLE_CLIP_DURATION_TOLERANCE_SECONDS) throw invalidSimpleClip('Finished simple clip duration does not preserve raw presenter coverage.');
 }
 
 /** One raw presenter video becomes one normalized lower-third candidate. */
@@ -97,22 +94,21 @@ export class LocalSimpleClipFinisher {
   async finish(request: SimpleClipFinishingRequest): Promise<SimpleClipFinishResult> {
     if (request === null || typeof request !== 'object') throw invalidSimpleClip('Simple clip finishing request is invalid.');
     const lowerThird = validateSimpleLowerThird(request.headline, request.sourceDisplayName);
-    const duration = validateDurationRequest(request);
     const { workDirectory, outputPath } = await validateBoundary(request);
     await assertRegularLocalFile(request.rawPresenterVideoPath);
     await assertRegularLocalFile(request.fontPath, { maxBytes: 100_000_000 });
     const probe = this.#dependencies.probe ?? probeLocalMedia;
     const rawProbe = await probe(request.rawPresenterVideoPath, this.#dependencies.ffprobe);
-    requireRawPresenterCoverage(rawProbe, duration);
+    const rawDurationSeconds = requireRawPresenterCoverage(rawProbe);
     const capabilities = await this.preflight();
     const staged = await stageAssets(request.fontPath, lowerThird, workDirectory);
     const started = Date.now();
     try {
       await this.#validateStagedLayout(lowerThird, staged, workDirectory);
-      await this.#renderer.run(buildSimpleClipFinishArgs(request.rawPresenterVideoPath, outputPath, duration, staged), 'FFmpeg could not finish the simple clip candidate.', workDirectory);
+      await this.#renderer.run(buildSimpleClipFinishArgs(request.rawPresenterVideoPath, outputPath, staged), 'FFmpeg could not finish the simple clip candidate.', workDirectory);
       const candidateProbe = await probe(outputPath, this.#dependencies.ffprobe);
-      validateSimpleFinishedCandidate(candidateProbe, request);
-      return { outputPath, ffmpegVersion: capabilities.version, durationMs: Date.now() - started, probe: candidateProbe };
+      validateSimpleFinishedCandidate(candidateProbe, rawDurationSeconds);
+      return { outputPath, ffmpegVersion: capabilities.version, durationMs: Date.now() - started, rawProbe, probe: candidateProbe };
     } finally {
       await Promise.all(staged.map((path) => rm(path, { force: true }).catch(() => undefined)));
     }
@@ -129,15 +125,14 @@ export class LocalSimpleClipFinisher {
 }
 
 /** Exported so the simple graph can be inspected without a cinematic plan. */
-export function buildSimpleClipFinishArgs(rawPresenterVideoPath: string, outputPath: string, plannedDurationSeconds: number, stagedPaths: readonly string[]): readonly string[] {
-  const duration = positiveDuration(plannedDurationSeconds);
+export function buildSimpleClipFinishArgs(rawPresenterVideoPath: string, outputPath: string, stagedPaths: readonly string[]): readonly string[] {
   const [fontPath, headlinePath, sourcePath] = stagedPaths.map((path) => basename(path));
   if (fontPath !== 'font.ttf' || headlinePath !== 'simple-headline.txt' || sourcePath !== 'simple-source.txt') throw invalidSimpleClip('Simple clip display staging failed.');
   const graph = [
-    `[0:v:0]setpts=PTS-STARTPTS,scale=w=1080:h=1920:force_original_aspect_ratio=decrease,pad=w=1080:h=1920:x=(ow-iw)/2:y=(oh-ih)/2:color=black,setsar=1,fps=30,trim=duration=${duration},setpts=PTS-STARTPTS,drawbox=x=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.outer.x}:y=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.outer.y}:w=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.outer.width}:h=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.outer.height}:color=0x336699:t=fill,drawtext=fontfile=font.ttf:textfile=simple-headline.txt:expansion=none:fontcolor=white:fontsize=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.headline.fontSize}:x=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.headline.x}:y=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.headline.y}:line_spacing=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.headline.lineSpacing},drawtext=fontfile=font.ttf:textfile=simple-source.txt:expansion=none:fontcolor=white:fontsize=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.source.fontSize}:x=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.source.x}:y=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.source.y}[vout]`,
-    `[0:a:0]asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_rates=48000:channel_layouts=stereo,apad,atrim=duration=${duration},asetpts=PTS-STARTPTS,loudnorm=I=-16:LRA=11:TP=-1.5,aresample=48000,aformat=sample_rates=48000:channel_layouts=stereo[aout]`,
+    `[0:v:0]setpts=PTS-STARTPTS,scale=w=1080:h=1920:force_original_aspect_ratio=decrease,pad=w=1080:h=1920:x=(ow-iw)/2:y=(oh-ih)/2:color=black,setsar=1,fps=30,drawbox=x=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.outer.x}:y=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.outer.y}:w=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.outer.width}:h=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.outer.height}:color=0x336699:t=fill,drawtext=fontfile=font.ttf:textfile=simple-headline.txt:expansion=none:fontcolor=white:fontsize=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.headline.fontSize}:x=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.headline.x}:y=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.headline.y}:line_spacing=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.headline.lineSpacing},drawtext=fontfile=font.ttf:textfile=simple-source.txt:expansion=none:fontcolor=white:fontsize=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.source.fontSize}:x=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.source.x}:y=${SIMPLE_CLIP_FINISHING_POLICY.lowerThird.source.y}[vout]`,
+    `[0:a:0]asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_rates=48000:channel_layouts=stereo,apad,asetpts=PTS-STARTPTS,loudnorm=I=-16:LRA=11:TP=-1.5,aresample=48000,aformat=sample_rates=48000:channel_layouts=stereo[aout]`,
   ].join(';');
-  return ['-hide_banner', '-y', '-i', rawPresenterVideoPath, '-filter_complex', graph, '-map', '[vout]', '-map', '[aout]', '-c:v', 'libx264', '-crf', '20', '-preset', 'medium', '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', '-ar', '48000', '-ac', '2', '-b:a', '192k', '-movflags', '+faststart', '-f', 'mp4', outputPath];
+  return ['-hide_banner', '-y', '-i', rawPresenterVideoPath, '-filter_complex', graph, '-map', '[vout]', '-map', '[aout]', '-shortest', '-c:v', 'libx264', '-crf', '20', '-preset', 'medium', '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', '-ar', '48000', '-ac', '2', '-b:a', '192k', '-movflags', '+faststart', '-f', 'mp4', outputPath];
 }
 
 /** Renders the actual staged font/text once into pixels; no article text enters this graph. */
@@ -167,20 +162,13 @@ function pixelBounds(pixels: Uint8Array, startY: number, endY: number, width: nu
   return right < 0 ? undefined : { left, right, top, bottom };
 }
 
-function requireRawPresenterCoverage(probe: LocalMediaProbe, duration: number): void {
+function requireRawPresenterCoverage(probe: LocalMediaProbe): number {
   if (probe.streamTypes.length !== 2 || probe.streamTypes.filter((type) => type === 'video').length !== 1 || probe.streamTypes.filter((type) => type === 'audio').length !== 1 || probe.video === undefined || probe.audio === undefined) throw invalidSimpleClip('Raw presenter video requires one usable video stream and one usable audio stream.');
-  if (probe.durationSeconds + SIMPLE_CLIP_DURATION_TOLERANCE_SECONDS < duration) throw invalidSimpleClip('Raw presenter video is shorter than the planned final duration.');
+  return positiveDuration(probe.durationSeconds, 'Raw presenter video duration');
 }
 
-function validateDurationRequest(request: Pick<SimpleClipFinishingRequest, 'maxSeconds' | 'plannedDurationSeconds'>): number {
-  assertSimpleClipMaxSeconds(request.maxSeconds);
-  const duration = positiveDuration(request.plannedDurationSeconds);
-  if (duration > request.maxSeconds) throw invalidSimpleClip('Planned final duration exceeds maxSeconds.');
-  return duration;
-}
-
-function positiveDuration(value: number): number {
-  if (!Number.isSafeInteger(value) || value < 1 || value > 20) throw invalidSimpleClip('Planned final duration must be a whole number from 1 through 20.');
+function positiveDuration(value: number, label: string): number {
+  if (!Number.isFinite(value) || value <= 0) throw invalidSimpleClip(`${label} must be positive.`);
   return value;
 }
 

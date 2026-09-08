@@ -266,9 +266,9 @@ test('headline verbose forwards safe pipeline progress while normal headline out
 test('headline dry run delegates the value-less flag and never reports final media', async () => {
   const stdout: string[] = []; let receivedDryRun = false;
   const code = await runCli(['headline', '--dry-run', '--input-file', 'fixture.json', '--article-id', 'article-2', '--anchor-reference', 'anchor.png', '--font-file', 'font.ttf'], { writeStdout: (text) => stdout.push(text), writeStderr: () => undefined }, {
-    generateHeadline: async (input) => { receivedDryRun = input.dryRun === true; return { dryRun: true, clipId: 'headline-1', presenterTextPath: 'headline-1.dry-run.txt', metadataPath: 'headline-1.dry-run.json', plannedDurationSeconds: 4 }; },
+    generateHeadline: async (input) => { receivedDryRun = input.dryRun === true; return { dryRun: true, clipId: 'headline-1', presenterTextPath: 'headline-1.dry-run.txt', metadataPath: 'headline-1.dry-run.json', speechPlanningDurationSeconds: 4 }; },
   });
-  const output = stdout.join(''); assert.equal(code, 0); assert.equal(receivedDryRun, true); assert.match(output, /dry_run_ready/); assert.match(output, /presenterText: headline-1\.dry-run\.txt/); assert.doesNotMatch(output, /final:|sha256:|\.mp4/);
+  const output = stdout.join(''); assert.equal(code, 0); assert.equal(receivedDryRun, true); assert.match(output, /dry_run_ready/); assert.match(output, /presenterText: headline-1\.dry-run\.txt/); assert.match(output, /speechPlanningDurationSeconds: 4/); assert.doesNotMatch(output, /plannedDurationSeconds|final:|sha256:|\.mp4/);
 });
 
 test('headline-post parses one, two, and three ordered platform values', () => {
@@ -325,7 +325,7 @@ test('headline-post dry run doctors platforms and generates P1 inspection state 
   const calls: string[][] = []; let generated = 0;
   const code = await runCli([...headlinePostArgs(['x', 'meta']), '--dry-run'], { writeStdout: () => undefined, writeStderr: () => undefined }, {
     runPoster: async (args) => { calls.push([...args]); },
-    generateHeadline: async (input) => { generated += 1; assert.equal(input.dryRun, true); return { dryRun: true, clipId: 'headline-1', presenterTextPath: 'headline-1.dry-run.txt', metadataPath: 'headline-1.dry-run.json', plannedDurationSeconds: 4 }; },
+    generateHeadline: async (input) => { generated += 1; assert.equal(input.dryRun, true); return { dryRun: true, clipId: 'headline-1', presenterTextPath: 'headline-1.dry-run.txt', metadataPath: 'headline-1.dry-run.json', speechPlanningDurationSeconds: 4 }; },
   });
   assert.equal(code, 0); assert.equal(generated, 1); assert.deepEqual(calls, [['doctor', 'x'], ['doctor', 'meta']]);
 });

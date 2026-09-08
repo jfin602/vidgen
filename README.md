@@ -37,8 +37,8 @@ Current simple-path direction:
 - one presenter and one continuous presenter clip;
 - headline and source display name rendered deterministically in the lower third;
 - configurable `maxSeconds` from 4 through 20 seconds inclusive;
-- `maxSeconds` is a hard ceiling, not a target duration;
-- the engine should prefer the shortest useful provider-supported duration that does not exceed the ceiling;
+- `maxSeconds` is a presenter-copy/planning ceiling, not a final-media ceiling;
+- the engine uses it to select the shortest useful provider coverage, then preserves the complete returned Veo timeline;
 - final output is a postable vertical MP4 paired with article/provenance metadata JSON;
 - 1080x1920 9:16 H.264 MP4 at 30 fps remains the initial output target;
 - no B-roll, separate voiceover, intro/outro, ClipPlan, AssemblyTemplate, cinematic GeneratedMediaUnit resolution, or cinematic AssemblyPlan is required by the simple path;

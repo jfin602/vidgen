@@ -253,10 +253,9 @@ The simple path:
 - has no B-roll or separate TTS voiceover requirement;
 - has no standardized intro/outro requirement;
 - does not require the cinematic template or ClipPlan contracts;
-- uses a configurable `maxSeconds` hard ceiling from 4 through 20 seconds inclusive;
-- treats `maxSeconds` as a ceiling, never a target;
-- prefers the shortest useful provider-supported duration that fits within the ceiling;
-- must fail before or after provider work rather than publish an output whose qualified duration exceeds the ceiling;
+- uses a configurable `maxSeconds` presenter-copy/planning ceiling from 4 through 20 seconds inclusive;
+- uses that planning ceiling to select the initial or extended provider coverage, never to trim final media;
+- preserves the complete qualified Veo timeline, which may be the supported 8- or 15-second coverage;
 - keeps provider-specific duration granularity behind the provider adapter;
 - finishes the clip deterministically with FFmpeg and qualifies it with FFprobe before publication;
 - publishes an MP4 plus coupled Article/provenance JSON sidecar.
