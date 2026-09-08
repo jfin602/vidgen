@@ -8,25 +8,27 @@ VERSIONING
 
 GOAL
 
-Add a fresh VidGen CLI command that hands a completed simple headline clip to the independently installed VidGen Poster for the explicitly selected publishing network while keeping all platform implementation owned by jfin602/vidgen-poster.
+Add a fresh VidGen CLI command that generates one simple headline clip and hands that same completed clip/caption to one or more explicitly selected publishing networks through the independently installed VidGen Poster. Keep every platform implementation owned by jfin602/vidgen-poster.
 
 Start from the P1 dry-run result. Inspect the current VidGen CLI/headline result contract and the current VidGen Poster CLI/platform contract before editing. Do not import Poster source code or reimplement platform behavior.
 
 MUST REMAIN TRUE
 
-- Add `vidgen headline-post` with the same headline generation inputs as `vidgen headline`, including `--dry-run`, plus required `--platform <bluesky|meta|x>`.
-- `--platform` must accept exactly `bluesky`, `meta`, or `x`; it has no implicit/default network. Missing, repeated, or unsupported values fail before any generation or Poster process call.
-- The selected platform is used unchanged for both Poster readiness and publication: `doctor <platform>` and `post <platform> --video <finished-mp4> --text <caption>`.
-- Platform-specific authentication, validation, upload, duplicate protection, receipts, API behavior, and capability support remain entirely owned by VidGen Poster. VidGen contains only the strict platform allowlist and orchestration.
-- Current Poster support must be treated as runtime truth. If the configured Poster build does not yet support the selected platform (including `x`), its doctor failure must stop safely before paid generation; VidGen must not fallback to another network or fake platform readiness.
+- Add `vidgen headline-post` with the same headline generation inputs as `vidgen headline`, including `--dry-run`, plus repeatable `--platform <bluesky|meta|x>`.
+- `--platform` is required and may be supplied one to three times, matching the existing repeatable-option style used by `--anchor-reference`. Each occurrence contains exactly one platform value; comma-separated values are not supported.
+- Accepted platform values are exactly `bluesky`, `meta`, and `x`. Preserve the user's platform order. Reject missing platforms, more than three occurrences, duplicate platform selections, empty values, comma-packed values, or unsupported names before provider generation or Poster process activity.
+- For every selected platform, invoke Poster readiness as `doctor <platform>`. All selected platforms must pass doctor before the one expensive headline generation begins. If any doctor fails or the configured Poster build does not support a selected platform, stop before generation; do not fallback, silently drop a platform, or fake readiness.
+- Current Poster support remains runtime truth. In particular, do not claim X operational support unless the configured Poster build actually supports and qualifies `x`.
+- After every selected platform passes doctor, run the existing normal headline generation exactly once. Poster posting may begin only after the finished MP4 and coupled sidecar reach the existing successful headline publication boundary.
+- Post the same finished MP4 and exact same caption sequentially in the supplied platform order using the equivalent of `post <platform> --video <finished-mp4> --text <caption>`.
+- Caption text for every platform is exactly `"<headline>" by <source display name>`, using the same governed Article/source identity that produced the clip. Do not summarize, rewrite, add hashtags, or generate platform-specific social copy.
+- A failure while posting one platform must not delete valid VidGen output or erase already completed platform outcomes. Continue down the remaining requested platform list without retrying the failed platform automatically. The overall command must return nonzero if any requested platform failed, while reporting bounded per-platform success/failure status without exposing raw child output.
+- Platform-specific authentication, validation, upload, duplicate protection, receipts, API behavior, retries, and capability support remain entirely owned by VidGen Poster. VidGen contains only strict platform-list parsing and orchestration.
 - The Poster installation root is runtime configuration via `VIDGEN_POSTER_ROOT`; do not hardcode a deployment path.
-- Invoke Poster only as an external process from the configured Poster repository/runtime using argument-vector execution with no shell interpolation. Platform, headline/source text, and paths are untrusted values and must remain discrete arguments.
-- Before paid structured-text/Veo generation, normal `headline-post` must complete the reusable local headline preflight and a successful Poster `doctor <selected-platform>` readiness check.
-- After readiness succeeds, run the existing normal headline generation path. Poster `post` may occur only after the finished MP4 and coupled sidecar reach the existing successful headline publication boundary.
-- Caption text for every selected platform is exactly `"<headline>" by <source display name>`, using the same governed Article/source identity that produced the clip. Do not summarize, rewrite, add hashtags, or generate social copy.
-- A real run must not pass Poster `--dry-run`; publication is delegated to the selected platform normally.
-- `headline-post --dry-run --platform <platform>` must run Poster `doctor <platform>` and the P1 headline dry-run contract. It still performs structured-text presenter-copy generation and persists P1 inspection artifacts, but suppresses Veo and must never invoke Poster `post`, upload media, or create an external post.
-- If headline generation fails, Poster post must never run. If Poster publishing fails after generation, preserve the completed VidGen MP4/sidecar, return nonzero, and report a safe publication-stage failure.
+- Invoke Poster only as an external process from the configured Poster repository/runtime using argument-vector execution with no shell interpolation. Platform values, headline/source text, and paths are untrusted values and must remain discrete arguments.
+- A real run must not pass Poster `--dry-run`.
+- `headline-post --dry-run` requires the same one-to-three platform list, runs `doctor` for every selected platform, then runs the P1 headline dry-run contract once. It still performs structured-text presenter-copy generation and persists P1 inspection artifacts, but suppresses Veo and must never invoke Poster `post`, upload media, or create an external post.
+- If headline generation fails, no Poster post may run for any platform.
 - Do not forward or persist raw child stdout/stderr as trusted diagnostics. No secrets, authorization data, tokens, raw provider responses, or shell command strings may enter VidGen artifacts or public errors.
 - Do not add a VidGen `--allow-duplicate` path; Poster remains the duplicate/publication authority.
 - Existing `headline`, its P1 dry-run behavior, and all cinematic commands remain unchanged.
@@ -35,15 +37,17 @@ MUST REMAIN TRUE
 PROOF
 
 Focused tests must cover:
-- `headline-post` parsing/help with required `--platform` and all three accepted values: `bluesky`, `meta`, and `x`;
-- missing, duplicate, malformed, and unsupported platform values fail before preflight/provider/Poster activity;
-- each accepted platform is forwarded exactly as one argument to matching Poster `doctor` and `post` commands;
-- missing/invalid Poster root or failed selected-platform doctor stops before paid generation;
-- dry run reaches selected-platform doctor and structured-text generation, produces P1 inspection artifacts, but never calls Veo or Poster post;
-- normal success invokes selected-platform Poster post only after headline final readiness;
-- exact caption construction, including whitespace, quotes, and shell-significant characters, reaches Poster as one `--text` argument with no shell interpretation;
-- generation failure never invokes Poster post;
-- Poster failure after generation leaves the completed headline MP4/sidecar intact and returns a safe failure;
+- parsing/help for one, two, and three repeatable `--platform` occurrences;
+- valid ordered examples including `--platform x`, `--platform x --platform meta`, `--platform bluesky --platform x`, and all three platforms;
+- missing, fourth, duplicate, comma-packed, empty, malformed, and unsupported platform values fail before provider/Poster activity;
+- platform order is preserved exactly;
+- all selected doctors run before generation and any doctor failure prevents generation and every post;
+- dry run doctors every selected platform, performs structured-text generation once, produces P1 inspection artifacts, and never calls Veo or Poster post;
+- normal generation occurs exactly once regardless of one, two, or three selected platforms;
+- after final headline readiness, the same video path and exact caption are passed to Poster once per selected platform in supplied order;
+- exact caption values containing whitespace, quotes, or shell-significant characters remain one `--text` argument with no shell interpretation;
+- one platform post failure does not stop attempts to later selected platforms, does not retry automatically, preserves the finished MP4/sidecar, and makes the overall command fail safely;
+- generation failure invokes no platform posts;
 - no publishing credentials or raw child output are persisted/exposed;
 - existing headline and cinematic CLI regression coverage remains green.
 
@@ -53,14 +57,14 @@ Downstream-required capability -> owning implementation/export -> focused proof:
 
 safe local headline readiness + inspectable pre-Veo state -> P1 shared dry-run/preflight -> ordering, artifact, and no-Veo tests.
 
-selected platform token -> VidGen strict allowlist + external Poster argument boundary -> three-platform forwarding tests.
+ordered platform list -> VidGen strict repeatable-option parser + external Poster argument boundary -> one/two/three-platform parsing, doctor, and forwarding tests.
 
-platform readiness/publish/duplicates/receipts -> VidGen Poster external CLI/adapters -> doctor/post contract tests with no platform implementation duplicated in VidGen.
+platform readiness/publish/duplicates/receipts -> VidGen Poster external CLI/adapters -> sequential doctor/post contract tests with no platform implementation duplicated in VidGen.
 
 NON-GOALS
 
-Do not modify jfin602/vidgen-poster, implement or repair any Meta/Bluesky/X adapter in VidGen, add fallback publishing, multi-platform fan-out in one command, scheduling, generated captions, duplicate overrides, queues/databases, live ngest fan-out, cinematic behavior, provider behavior, or roadmap/documentation files.
+Do not modify jfin602/vidgen-poster, implement or repair any Meta/Bluesky/X adapter in VidGen, support CSV platform syntax, add fallback networks, generate different media/captions per platform, add automatic publish retries, scheduling, duplicate overrides, queues/databases, live ngest fan-out, cinematic behavior, provider behavior, or roadmap/documentation files.
 
 FINAL RESPONSE
 
-Report the `--platform` CLI contract, selected-platform doctor/post delegation, current Poster capability dependency, exact caption rule, dry-run behavior, failure semantics, exact validation run, and confirmation that Poster still owns publishing and version 0.6.5 remains unchanged.
+Report the repeatable `--platform` contract, ordered multi-platform doctor/post behavior, partial-failure semantics, current Poster capability dependency, exact caption rule, dry-run behavior, exact validation run, and confirmation that Poster still owns publishing and version 0.6.5 remains unchanged.
