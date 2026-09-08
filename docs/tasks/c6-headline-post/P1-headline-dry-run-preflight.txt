@@ -1,0 +1,51 @@
+TASK: Correction 6 / P1 — Headline dry-run preflight
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Add a real `--dry-run` mode to the existing `vidgen headline` path by reusing the deterministic pre-provider validation already required by normal headline generation.
+
+Read BOOT.md and inspect the current headline CLI, headline workflow, simple lower-third/FFmpeg preflight, local anchor/font validation, and focused tests before editing. Keep this correction inside the existing Phase 6 simple path.
+
+MUST REMAIN TRUE
+
+- `vidgen headline` keeps its current required inputs, maxSeconds 4-20 contract, output naming, normal generation behavior, and flat MP4/JSON publication semantics.
+- `--dry-run` is a standalone boolean CLI flag. Existing value options and one-to-three repeatable `--anchor-reference` behavior remain deterministic and strict.
+- A headline dry run must load and validate the selected governed story, local anchor references, font, lower-third wrapping/layout, and local FFmpeg capabilities using the same pre-provider checks the normal path relies on.
+- Selected-font lower-third measurement may invoke bounded local FFmpeg preflight. Dry run must not make structured-text or Veo generation requests, create generated presenter media, perform the final render, or publish the final MP4/JSON pair.
+- Temporary staging created by preflight must be cleaned on success and failure. Dry run must not leave a false-success artifact.
+- Refactor only as needed so normal generation and dry run share authoritative preflight behavior rather than duplicating validation rules.
+- Dry-run success must not be represented as live Gemini/Veo authentication, quota, model-access, or generation proof.
+- CLI output and failures remain bounded and safe; do not expose local staged content, secrets, raw provider data, or raw process diagnostics.
+- Preserve every cinematic command and durable contract unchanged.
+- Package and engine version remain 0.6.5.
+
+PROOF
+
+Focused tests must cover:
+- parsing `headline --dry-run` as a value-less flag while preserving existing headline options and rejecting malformed/repeated use;
+- dry run exercises governed input, local asset, selected-font/lower-third, and FFmpeg preflight;
+- no text/video generation method is called during dry run;
+- no final MP4/JSON pair or leaked temporary staging remains after dry-run success or failure;
+- normal `headline` behavior still delegates through the same effective preflight and publishes the same result contract.
+
+Run focused headline/CLI/simple-finisher tests, `npm run check`, `node src/cli.ts --help`, and `git diff --check`.
+
+Downstream-required capability -> owning implementation/export -> focused proof:
+
+headline readiness -> shared deterministic pre-provider preflight -> dry-run workflow tests.
+
+shared preflight -> unchanged normal headline generation -> normal-path regression tests.
+
+NON-GOALS
+
+Do not add publishing, VidGen Poster integration, live provider smoke calls, cinematic changes, fan-out, queues/databases, new providers, new dependencies, roadmap/documentation edits, or unrelated cleanup in P1.
+
+FINAL RESPONSE
+
+Report the dry-run contract, validations actually exercised, provider/render actions deliberately skipped, cleanup behavior, exact validation run, and confirmation that normal headline behavior and version 0.6.5 remain unchanged.
