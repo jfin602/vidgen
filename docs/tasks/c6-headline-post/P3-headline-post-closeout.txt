@@ -13,7 +13,7 @@ Review P1-P2 as the bounded Phase 6 correction needed for an end-to-end headline
 ACCEPTANCE
 
 Confirm:
-- existing `headline` has a deterministic `--dry-run` that exercises governed input, local assets, selected-font lower-third, and FFmpeg preflight without text/Veo generation, final clip publication, or false-success artifacts;
+- existing `headline` has a deterministic `--dry-run` that exercises governed input, local assets, selected-font lower-third/FFmpeg preflight, structured-text presenter-copy generation, and duration planning while suppressing only the Veo generation request;
 - normal headline behavior and flat MP4/JSON semantics are unchanged;
 - `headline-post` owns orchestration only and VidGen Poster remains an external, independently configured publishing boundary;
 - `VIDGEN_POSTER_ROOT` is required only for the posting path and no deployment path is hardcoded;
@@ -21,7 +21,7 @@ Confirm:
 - local headline preflight and Poster `doctor bluesky` complete before any paid generation;
 - Poster post cannot run before a successful finished headline MP4/sidecar exists;
 - caption text is exactly `"<headline>" by <source display name>` from the governed story used for generation;
-- `headline-post --dry-run` cannot generate, render a final clip, upload, or post;
+- `headline-post --dry-run` runs Poster readiness plus the P1 pre-Veo dry run, including structured-text generation and durable inspection artifacts, but cannot call Veo, create a production-ready final clip, upload, or post;
 - generation failure cannot publish, and publishing failure preserves valid completed VidGen artifacts while returning a safe nonzero failure;
 - VidGen contains no Bluesky SDK/auth/upload/receipt/duplicate implementation and does not bypass Poster duplicate protection;
 - no secrets, raw Poster/provider responses, local staging content, or raw child diagnostics enter artifacts or public errors;
@@ -39,12 +39,12 @@ Run:
 - `git diff --check`.
 
 If the deployment environment has owner-authorized VidGen generation credentials, local presenter/font/input assets, a configured `VIDGEN_POSTER_ROOT`, and owner-authorized Bluesky credentials, perform:
-1. one `headline-post --dry-run` and verify no headline MP4/JSON or Poster post is created;
+1. one `headline-post --dry-run` and verify the expected dry-run inspection files are created, structured-text generation completes, no Veo operation/final production MP4+sidecar is created, and no Poster post is created;
 2. one fresh real `headline-post` run;
 3. verify FFmpeg-qualified VidGen output completed before the Poster handoff;
 4. verify Poster recorded a successful published result/receipt and the live Bluesky post contains the finished video with the exact required caption.
 
-If any live prerequisite is unavailable, leave that evidence explicitly unclaimed and report the remaining owner-run command shape. Never infer a live post from mocked tests or a zero-risk dry run.
+If any live prerequisite is unavailable, leave that evidence explicitly unclaimed and report the remaining owner-run command shape. Never infer a live post or Veo qualification from mocked tests or a dry run; a dry run may exercise the configured structured-text provider but explicitly does not qualify Veo.
 
 BOUNDED REPAIRS
 
