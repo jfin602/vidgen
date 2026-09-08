@@ -1,0 +1,83 @@
+TASK: Correction 6 / P2 — Bottom-anchored translucent centered lower third
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Apply the owner's final simple-headline lower-third treatment without changing governed text, provider behavior, or the full-Veo-duration behavior from P1.
+
+Read BOOT.md and inspect current P1 result, simple FFmpeg finisher, selected-font measurement/safe-area validation, headline schema/provenance, and focused tests before editing.
+
+VISIBLE TREATMENT
+
+Keep the current 1080x1920 output and existing lower-third width/height/padding/font sizing unless a minimal adjustment is required to satisfy the exact treatment below.
+
+1. Bottom placement
+- The visible lower-third background panel must be flush against the bottom edge of the 1920-pixel frame.
+- Preserve the current outer panel height of 620 pixels and side geometry unless a focused implementation constraint requires otherwise.
+- With the current geometry this means the outer panel bottom is exactly y=1920 (equivalently y=1300 for height 620).
+- Preserve the current internal vertical offsets/padding relative to the panel unless a measured overflow requires the smallest safe adjustment.
+
+2. Background
+- Keep RGB `#336699`.
+- Change panel opacity to exactly 77%.
+- The FFmpeg treatment must therefore represent `#336699` at 0.77 alpha, not opaque blue and not translucent black.
+
+3. Text alignment
+- Keep headline and source text white.
+- Center-align the headline and source horizontally within the lower-third inner safe area.
+- "Center" means centered text alignment; do not full-justify/stretch word spacing.
+- Multiline governed headline text must remain fully preserved and visually centered rather than reverting to left alignment.
+- Keep deterministic wrapping, current 44px headline / 32px source sizing, current line spacing, source separation, and line limits unless measured selected-font fit requires a narrowly justified adjustment.
+
+Use a deterministic FFmpeg technique supported by the repository/runtime baseline. Do not rely only on an argv string assertion if actual selected-font rendering/measurement can prove alignment.
+
+FINISHING POLICY / PROVENANCE
+
+This is a visible finishing-policy change. Advance the simple finishing/lower-third policy identifier from v2 to v3 and reconcile runtime validation, headline metadata, dry-run metadata where applicable, and `schemas/headline-clip.schema.json`.
+
+Do not change package/engine version 0.6.5.
+
+PRESERVED BEHAVIOR
+
+Preserve:
+- full governed headline and source with no truncation/rewrite;
+- staged text-file injection rather than interpolating untrusted article text into FFmpeg filter syntax;
+- selected-font preflight before paid provider generation;
+- positive inner padding and glyph overflow rejection;
+- P1 full-Veo-timeline retention;
+- current raw-Veo/final/JSON three-file publication contract;
+- final MP4 Poster handoff;
+- H.264/yuv420p 1080x1920 30fps output and AAC/loudnorm treatment;
+- Veo/text/auth/prompt/reference behavior;
+- dry-run provider suppression;
+- cinematic path;
+- version 0.6.5.
+
+PROOF
+
+Focused tests must prove:
+- outer panel bottom edge is exactly the 1920 frame bottom;
+- panel color is `#336699` at exactly 77% opacity;
+- no old opaque `#336699` or black/translucent-black panel treatment remains;
+- headline and source are horizontally center-aligned within the safe area;
+- a multiline Venice/Lee Chang-dong headline preserves every governed character and remains within measured selected-font bounds;
+- source text is centered and retains required separation from headline;
+- staged hostile text never enters the FFmpeg graph directly;
+- selected-font overflow still fails before text/Veo provider creation;
+- runtime and static schema/provenance require `simple-clip-finishing-policy-v3`;
+- P1 duration behavior and three-file artifact publication remain unchanged.
+
+Run focused simple-clip-finisher/headline-workflow/CLI tests, then `npm run check`, `node src/cli.ts --help`, and `git diff --check`.
+
+NON-GOALS
+
+Do not alter presenter copy, Veo prompt wording, model/auth/polling, provider duration generation, reference images, publishing adapters, cinematic layout, or Phase 7.
+
+FINAL RESPONSE
+
+Report exact bottom geometry, `#336699` at 77% opacity, center-alignment behavior, v3 finishing provenance, selected-font safety proof, P1 regression proof, broad validation, and unchanged 0.6.5 version.
