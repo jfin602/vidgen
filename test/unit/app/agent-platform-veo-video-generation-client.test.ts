@@ -145,18 +145,39 @@ test('Agent Platform Veo bounds indefinitely name-only pending operations', asyn
 
 test('Agent Platform Veo decodes only one bounded valid inline MP4 result', async (context) => {
   const cases: readonly [string, unknown, ClientOptions?][] = [
-    ['malformed', { response: { videos: [{ mimeType: 'video/mp4', bytesBase64Encoded: '%%%=' }] } }, undefined],
+    ['malformed character', { response: { videos: [{ mimeType: 'video/mp4', bytesBase64Encoded: 'AA!A' }] } }, undefined],
+    ['invalid padding', { response: { videos: [{ mimeType: 'video/mp4', bytesBase64Encoded: 'AA=A' }] } }, undefined],
+    ['non-multiple-of-four', { response: { videos: [{ mimeType: 'video/mp4', bytesBase64Encoded: 'AAA' }] } }, undefined],
     ['filtered', { response: { raiMediaFilteredCount: 1, videos: [{ mimeType: 'video/mp4', bytesBase64Encoded: Buffer.from(videoBytes([1])).toString('base64') }] } }, undefined],
     ['empty', { response: { videos: [{ mimeType: 'video/mp4', bytesBase64Encoded: '' }] } }, undefined],
     ['wrong MIME', { response: { videos: [{ mimeType: 'video/webm', bytesBase64Encoded: Buffer.from(videoBytes([1])).toString('base64') }] } }, undefined],
     ['bad signature', { response: { videos: [{ mimeType: 'video/mp4', bytesBase64Encoded: Buffer.from([1, 2, 3, 4, 5, 6, 7, 8]).toString('base64') }] } }, undefined],
     ['multiple', { response: { videos: [{ mimeType: 'video/mp4', bytesBase64Encoded: Buffer.from(videoBytes([1])).toString('base64') }, { mimeType: 'video/mp4', bytesBase64Encoded: Buffer.from(videoBytes([2])).toString('base64') }] } }, undefined],
-    ['oversized', { response: { videos: [{ mimeType: 'video/mp4', bytesBase64Encoded: Buffer.from(videoBytes([1, 2, 3])).toString('base64') }] } }, { maxVideoBytes: 8 }],
+    ['oversized encoded', { response: { videos: [{ mimeType: 'video/mp4', bytesBase64Encoded: Buffer.from(videoBytes([1, 2, 3])).toString('base64') }] } }, { maxVideoBytes: 8 }],
+    ['oversized decoded', { response: { videos: [{ mimeType: 'video/mp4', bytesBase64Encoded: Buffer.from(videoBytes([1])).toString('base64') }] } }, { maxVideoBytes: 8 }],
   ];
   for (const [name, response, options] of cases) await context.test(name, async () => {
     const client = clientFor(sequenceFetch([], [json({ name: operationName('invalid'), done: true, ...response })]), options);
     await assert.rejects(client.generateVideo({ unit: contentUnit(8) }), safeError);
   });
+});
+
+test('Agent Platform Veo decodes an 8 MiB inline MP4 without stack overflow', async () => {
+  const bytes = new Uint8Array(8 * 1024 * 1024); bytes.set(videoBytes([])); bytes.fill(0x61, 8);
+  const client = clientFor(sequenceFetch([], [operation('large-inline', true, bytes)]), { maxVideoBytes: bytes.byteLength });
+  const result = await client.generateVideo({ unit: contentUnit(8) });
+  assert.equal(result.bytes.byteLength, bytes.byteLength);
+  assert.deepEqual(result.bytes.subarray(0, 8), bytes.subarray(0, 8));
+});
+
+test('Agent Platform Veo rejects oversized encoded input before Base64 decoding', async () => {
+  const encoded = Buffer.from(videoBytes([1, 2, 3])).toString('base64');
+  const originalFrom = Buffer.from; let decoded = false;
+  Object.defineProperty(Buffer, 'from', { configurable: true, writable: true, value: (value: string, encoding?: BufferEncoding) => { if (encoding === 'base64') decoded = true; return originalFrom(value, encoding); } });
+  try {
+    await assert.rejects(clientFor(sequenceFetch([], [json({ name: operationName('encoded-limit'), done: true, response: { videos: [{ mimeType: 'video/mp4', bytesBase64Encoded: encoded }] } })]), { maxVideoBytes: 8 }).generateVideo({ unit: contentUnit(8) }), safeError);
+    assert.equal(decoded, false);
+  } finally { Object.defineProperty(Buffer, 'from', { configurable: true, writable: true, value: originalFrom }); }
 });
 
 test('Agent Platform Veo preserves simple retained-window speech timing and uses exactly one extension from 4 through 20 seconds', async (context) => {

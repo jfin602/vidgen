@@ -26,6 +26,7 @@ export const DEFAULT_GOOGLE_AGENT_PLATFORM_VEO_MAX_EXTENSION_COUNT = 3;
 
 const INITIAL_DURATION_SECONDS = 8;
 const EXTENSION_DURATION_SECONDS = 7;
+const BASE64_DECODE_CHUNK_LENGTH = 1024 * 1024;
 const SUPPORTED_MODELS = new Set(['veo-3.1-generate-001', 'veo-3.1-fast-generate-001']);
 const SAFE_PROJECT = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
 const SAFE_ACCESS_TOKEN = /^[A-Za-z0-9._~-]{1,16384}$/;
@@ -331,10 +332,29 @@ function completedOperation(payload: unknown, operationName: string, maxVideoByt
 function filtered(response: Record<string, unknown>): boolean { return typeof response.raiMediaFilteredCount === 'number' && response.raiMediaFilteredCount > 0; }
 function decodeInlineMp4(value: string, maxBytes: number): InlineVideo {
   const maxBase64Length = 4 * Math.ceil(maxBytes / 3);
-  if (value.length === 0 || value.length > maxBase64Length || value.length % 4 !== 0 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) throw providerFailure('Agent Platform Veo inline video result was invalid or exceeded the supported size.');
-  const bytes = new Uint8Array(Buffer.from(value, 'base64'));
-  if (bytes.byteLength < 8 || bytes.byteLength > maxBytes || bytes[4] !== 0x66 || bytes[5] !== 0x74 || bytes[6] !== 0x79 || bytes[7] !== 0x70) throw providerFailure('Agent Platform Veo inline video result was invalid or exceeded the supported size.');
+  if (value.length === 0 || value.length > maxBase64Length) throw providerFailure('Agent Platform Veo inline video result was invalid or exceeded the supported size.');
+  const decodedLength = base64DecodedLength(value);
+  if (decodedLength === undefined || decodedLength > maxBytes) throw providerFailure('Agent Platform Veo inline video result was invalid or exceeded the supported size.');
+  const bytes = new Uint8Array(decodedLength); let offset = 0;
+  for (let start = 0; start < value.length; start += BASE64_DECODE_CHUNK_LENGTH) {
+    const chunk = Buffer.from(value.slice(start, start + BASE64_DECODE_CHUNK_LENGTH), 'base64');
+    bytes.set(chunk, offset); offset += chunk.byteLength;
+  }
+  if (offset !== decodedLength || bytes.byteLength < 8 || bytes[4] !== 0x66 || bytes[5] !== 0x74 || bytes[6] !== 0x79 || bytes[7] !== 0x70) throw providerFailure('Agent Platform Veo inline video result was invalid or exceeded the supported size.');
   return { mimeType: 'video/mp4', bytes };
+}
+
+/** Validates Base64 in one bounded pass before Node's permissive decoder sees it. */
+function base64DecodedLength(value: string): number | undefined {
+  if (value.length % 4 !== 0) return undefined;
+  const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
+  const contentLength = value.length - padding;
+  if (contentLength === 0 || (padding === 2 && contentLength % 4 !== 2) || (padding === 1 && contentLength % 4 !== 3)) return undefined;
+  for (let index = 0; index < contentLength; index += 1) {
+    const code = value.charCodeAt(index);
+    if (!((code >= 0x41 && code <= 0x5a) || (code >= 0x61 && code <= 0x7a) || (code >= 0x30 && code <= 0x39) || code === 0x2b || code === 0x2f)) return undefined;
+  }
+  return ((value.length / 4) * 3) - padding;
 }
 
 async function parseBoundedJson(response: Response, maxBytes: number): Promise<unknown> { const bytes = await readBoundedBytes(response, maxBytes); return JSON.parse(new TextDecoder().decode(bytes)) as unknown; }
