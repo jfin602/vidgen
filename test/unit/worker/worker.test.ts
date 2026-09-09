@@ -2,12 +2,16 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { EventEmitter } from 'node:events';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 
-import { createWorkerRuntimeConfig, DEFAULT_WORKER_POLL_INTERVAL_MS } from '../../../src/worker/config.ts';
+import { createWorkerRuntimeConfig, DEFAULT_WORKER_MAX_SECONDS, DEFAULT_WORKER_POLL_INTERVAL_MS } from '../../../src/worker/config.ts';
 import { parseWorkerCliArgs, workerHelpText } from '../../../src/worker-cli.ts';
 import { runNgestWorker, runNgestWorkerCycle, runWorkerCycle } from '../../../src/worker/runtime.ts';
 import { createDiscoveredCandidate, emptyWorkerState, WORKER_STATE_FILE, WorkerStateStore } from '../../../src/worker/state.ts';
+import { WEB_MOMENTUM_POLICY_ID } from '../../../src/worker/web-momentum.ts';
+import { parseHeadlineSuccessOutput, runHeadlineHandoff } from '../../../src/worker/headline-handoff.ts';
 import { buildCanonicalInput } from '../../../src/core/canonical-input.ts';
 import { buildStoryInput } from '../../../src/core/story-input.ts';
 import { loadNgestVidGenManifestFile } from '../../../src/integrations/ngest/local-manifest-file.ts';
@@ -19,16 +23,20 @@ test('Worker CLI accepts its isolated modes and bounded controls', () => {
   assert.deepEqual(parseWorkerCliArgs(['observe', '--once', '--process-existing', '--max-candidates', '2', '--state-root', 'temp/worker', '--poll-interval-ms', '1000']), {
     mode: 'observe', once: true, processExisting: true, maxCandidates: 2, stateRoot: 'temp/worker', pollIntervalMs: 1000,
   });
-  for (const mode of ['observe', 'generate', 'live']) assert.equal((parseWorkerCliArgs([mode]) as { mode: string }).mode, mode);
+  assert.equal((parseWorkerCliArgs(['observe']) as { mode: string }).mode, 'observe');
+  const generated = parseWorkerCliArgs(['generate', '--anchor-reference', 'a; $HOME.png', '--anchor-reference', 'b.png', '--font-file', 'font & safe.ttf', '--max-seconds', '12', '--daily-generation-limit', '2', '--generation-attempt-limit', '3']) as { mode: string; maxSeconds: number; anchorReferencePaths: string[]; fontPath: string; dailyGenerationLimit: number; generationAttemptLimit: number };
+  assert.deepEqual(generated, { mode: 'generate', once: false, processExisting: false, maxCandidates: 1, anchorReferencePaths: ['a; $HOME.png', 'b.png'], fontPath: 'font & safe.ttf', maxSeconds: 12, dailyGenerationLimit: 2, generationAttemptLimit: 3 });
+  assert.throws(() => parseWorkerCliArgs(['generate']), /requires one to three/);
   assert.match(workerHelpText, /--once/); assert.match(workerHelpText, /--process-existing/); assert.match(workerHelpText, /--max-candidates/);
-  assert.equal((parseWorkerCliArgs(['generate', '--poll-interval-ms', '60000']) as { pollIntervalMs: number }).pollIntervalMs, 60_000);
+  assert.equal((parseWorkerCliArgs(['generate', '--anchor-reference', 'a', '--font-file', 'font', '--poll-interval-ms', '60000']) as { pollIntervalMs: number }).pollIntervalMs, 60_000);
   assert.throws(() => parseWorkerCliArgs(['generate', '--max-candidates', '0']), /positive whole number/);
-  assert.throws(() => parseWorkerCliArgs(['generate', '--poll-interval-ms', '1']), /1000 through/);
+  assert.throws(() => parseWorkerCliArgs(['generate', '--anchor-reference', 'a', '--font-file', 'font', '--poll-interval-ms', '1']), /1000 through/);
 });
 
 test('Worker runtime configuration defaults under artifacts and rejects unbounded intervals', () => {
   const config = createWorkerRuntimeConfig();
-  assert.match(config.stateRoot.replaceAll('\\', '/'), /artifacts\/worker$/); assert.equal(config.pollIntervalMs, DEFAULT_WORKER_POLL_INTERVAL_MS);
+  assert.match(config.stateRoot.replaceAll('\\', '/'), /artifacts\/worker$/); assert.equal(config.pollIntervalMs, DEFAULT_WORKER_POLL_INTERVAL_MS); assert.equal(config.maxSeconds, DEFAULT_WORKER_MAX_SECONDS);
+  assert.equal(createWorkerRuntimeConfig({ maxSeconds: 12 }).maxSeconds, 12);
   assert.throws(() => createWorkerRuntimeConfig({ pollIntervalMs: 999 }), /1000 through/);
   assert.throws(() => createWorkerRuntimeConfig({ stateRoot: '' }), /state root/);
 });
@@ -161,10 +169,10 @@ test('successful evaluation and generation survive later failures, and modes kee
   try {
     const store = new WorkerStateStore(root); let generated = 0; let published = 0;
     const state = await runWorkerCycle({
-      store, discoveredCandidateIds: ['article_1', 'article_2'], mode: 'live', processExisting: true, maxCandidates: 2, publicationPlatforms: ['x', 'bluesky'], now: at,
+      store, discoveredCandidateIds: ['article_1', 'article_2'], mode: 'live', processExisting: true, maxCandidates: 2, publicationPlatforms: ['x', 'bluesky'], now: at, dailyGenerationLimit: 2,
       runners: {
         evaluate: async () => evaluation('admitted'),
-        generate: async (id) => { generated += 1; if (id === 'article_2') throw new Error('Bearer secret-token'); },
+        generate: async (id) => { generated += 1; if (id === 'article_2') throw new Error('Bearer secret-token'); return artifact(id); },
         publish: async (_id, platform) => { published += 1; if (platform === 'bluesky') throw new Error('Bearer secret-token'); },
       },
     });
@@ -180,4 +188,71 @@ test('successful evaluation and generation survive later failures, and modes kee
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-function evaluation(decision: 'admitted' | 'skipped') { return { metric: 'web-momentum', version: 'v1', score: 3, threshold: 2, decision, evaluatedAt: at().toISOString(), queryId: 'query-1', evidenceId: 'evidence-1' } as const; }
+test('only a persisted qualified Web Momentum admission can start generation', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-qualified-'));
+  try {
+    const store = new WorkerStateStore(root); let generated = 0;
+    const candidate = createDiscoveredCandidate('article_1', at().toISOString());
+    await store.save({ ...emptyWorkerState(), initialized: true, candidates: {
+      article_1: { ...candidate, evaluation: { status: 'succeeded', completedAt: at().toISOString() }, admission: { status: 'succeeded', completedAt: at().toISOString() }, evaluationResult: { ...evaluation('admitted'), policyId: 'unqualified-policy' } },
+    } });
+    const state = await runWorkerCycle({ store, discoveredCandidateIds: ['article_1'], mode: 'generate', maxCandidates: 1, now: at, runners: { generate: async () => { generated += 1; return artifact(); } } });
+    assert.equal(state.candidates.article_1!.generation.status, 'pending'); assert.equal(generated, 0);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('headline handoff uses exact shell-free argv, accepts only bounded final_ready output, and rechecks files', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-headline-'));
+  try {
+    const finalPath = join(root, 'clip.mp4'); const metadataPath = join(root, 'clip.json'); const bytes = Buffer.from('final media'); const sha256 = createHash('sha256').update(bytes).digest('hex');
+    await writeFile(finalPath, bytes); await writeFile(metadataPath, '{}');
+    let command = ''; let args: readonly string[] = []; let options: unknown;
+    const result = await runHeadlineHandoff({ candidateId: 'article_1', fixturePath: 'fixture; $(unsafe).json', artifactsRoot: root, anchorReferencePaths: ['anchor; $HOME.png', 'quote & image.png'], fontPath: 'font; $(unsafe).ttf', maxSeconds: 8 }, {
+      spawn: (receivedCommand, receivedArgs, receivedOptions) => {
+        command = receivedCommand; args = receivedArgs; options = receivedOptions;
+        return child(`Headline clip is final_ready.\nfinal: ${finalPath}\nmetadata: ${metadataPath}\nsha256: ${sha256}\ndurationSeconds: 8\n`);
+      },
+    });
+    assert.equal(command, process.execPath); assert.deepEqual(args, ['--env-file-if-exists=.env', 'src/cli.ts', 'headline', '--input-file', 'fixture; $(unsafe).json', '--article-id', 'article_1', '--anchor-reference', 'anchor; $HOME.png', '--anchor-reference', 'quote & image.png', '--font-file', 'font; $(unsafe).ttf', '--max-seconds', '8', '--artifacts-root', root]);
+    assert.deepEqual(options, { cwd: process.cwd(), shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }); assert.deepEqual(result, { finalPath, metadataPath, sha256, durationSeconds: 8 });
+    await writeFile(finalPath, 'changed');
+    await assert.rejects(runHeadlineHandoff({ candidateId: 'article_1', fixturePath: 'fixture.json', artifactsRoot: root, anchorReferencePaths: ['anchor.png'], fontPath: 'font.ttf', maxSeconds: 8 }, { spawn: () => child(`Headline clip is final_ready.\nfinal: ${finalPath}\nmetadata: ${metadataPath}\nsha256: ${sha256}\ndurationSeconds: 8\n`) }), /hash could not be verified/);
+    assert.throws(() => parseHeadlineSuccessOutput(`Headline clip is final_ready.\nfinal: ${finalPath}\nfinal: ${finalPath}\nmetadata: ${metadataPath}\nsha256: ${sha256}\ndurationSeconds: 8\n`), /unrecognized result/);
+    assert.throws(() => parseHeadlineSuccessOutput(`Headline clip is final_ready.\nfinal: ${finalPath}\nmetadata: ${metadataPath}\nsha256: ${sha256}\ndurationSeconds: 8\nextra\n`), /unrecognized result/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('generation budgets bound spending while successful verified media is reused and interrupted work stays blocked', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-generation-'));
+  try {
+    const store = new WorkerStateStore(root); let calls = 0;
+    const artifacts = new Map<string, { finalPath: string; metadataPath: string; sha256: string; durationSeconds: number }>();
+    const runners = { evaluate: async () => evaluation('admitted'), generate: async (id: string) => {
+      calls += 1; const finalPath = join(root, `${id}.mp4`); const metadataPath = join(root, `${id}.json`); const bytes = Buffer.from(id); const sha256 = createHash('sha256').update(bytes).digest('hex'); await writeFile(finalPath, bytes); await writeFile(metadataPath, '{}');
+      const result = await runHeadlineHandoff({ candidateId: id, fixturePath: 'fixture.json', artifactsRoot: root, anchorReferencePaths: ['anchor.png'], fontPath: 'font.ttf', maxSeconds: 8 }, { spawn: () => child(`Headline clip is final_ready.\nfinal: ${finalPath}\nmetadata: ${metadataPath}\nsha256: ${sha256}\ndurationSeconds: 8\n`) }); artifacts.set(id, result); return result;
+    }, publish: async () => { throw new Error('Poster must not run.'); } };
+    const first = await runWorkerCycle({ store, discoveredCandidateIds: ['article_1', 'article_2'], mode: 'generate', processExisting: true, maxCandidates: 2, now: at, dailyGenerationLimit: 1, generationAttemptLimit: 2, runners });
+    assert.equal(calls, 1); assert.equal(first.candidates.article_1!.generation.status, 'succeeded'); assert.deepEqual(first.candidates.article_1!.generatedArtifact, artifacts.get('article_1')); assert.equal(first.candidates.article_2!.generation.status, 'blocked'); assert.equal(first.candidates.article_2!.generation.block, 'generation_daily_limit');
+    const reused = await runWorkerCycle({ store, discoveredCandidateIds: ['article_1', 'article_2'], mode: 'generate', maxCandidates: 2, now: at, dailyGenerationLimit: 1, generationAttemptLimit: 2, runners });
+    assert.equal(calls, 1); assert.equal(reused.candidates.article_1!.generationAttempts, 1);
+
+    const restartStore = new WorkerStateStore(join(root, 'restart'));
+    await restartStore.save({ ...emptyWorkerState(), initialized: true, candidates: { article_3: { ...createDiscoveredCandidate('article_3', at().toISOString()), evaluation: { status: 'succeeded', completedAt: at().toISOString() }, admission: { status: 'succeeded', completedAt: at().toISOString() }, evaluationResult: evaluation('admitted'), generation: { status: 'running', startedAt: at().toISOString() } } } });
+    const restarted = await runWorkerCycle({ store: restartStore, discoveredCandidateIds: ['article_3'], mode: 'generate', maxCandidates: 1, now: at, runners });
+    assert.equal(restarted.candidates.article_3!.generation.status, 'uncertain'); assert.equal(calls, 1);
+
+    const retryStore = new WorkerStateStore(join(root, 'retry')); let failures = 0;
+    const retry = { evaluate: async () => evaluation('admitted'), generate: async () => { failures += 1; throw new Error('definite failure'); } };
+    for (let index = 0; index < 3; index += 1) await runWorkerCycle({ store: retryStore, discoveredCandidateIds: ['article_4'], mode: 'generate', processExisting: true, maxCandidates: 1, now: at, dailyGenerationLimit: 10, generationAttemptLimit: 2, runners: retry });
+    const retried = await retryStore.load(); assert.equal(failures, 2); assert.equal(retried.candidates.article_4!.generation.status, 'blocked'); assert.equal(retried.candidates.article_4!.generation.block, 'generation_attempt_limit');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+function evaluation(decision: 'admitted' | 'skipped') { return { metric: 'web-momentum', version: 'v1', policyId: WEB_MOMENTUM_POLICY_ID, score: 3, threshold: 2, decision, evaluatedAt: at().toISOString(), searchId: 'search-1', sessionId: 'session-1', signature: ['article', 'headline'], results: [], components: { breadth: 0, saturation: 3, freshness: 0, reaction: 0 } } as const; }
+function artifact(id = 'article_1') { return { finalPath: `C:/worker/${id}.mp4`, metadataPath: `C:/worker/${id}.json`, sha256: 'a'.repeat(64), durationSeconds: 8 }; }
+function child(output: string) {
+  const result = new EventEmitter() as EventEmitter & { stdout: EventEmitter; kill(): boolean; };
+  result.stdout = new EventEmitter(); result.kill = () => true;
+  queueMicrotask(() => { result.stdout.emit('data', Buffer.from(output)); result.emit('close', 0); });
+  return result;
+}

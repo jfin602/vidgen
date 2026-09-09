@@ -1,20 +1,22 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 
 import { VidGenError } from '../core/error.ts';
 import { prettyJson, writeJsonAtomically, type AtomicJsonFilesystem } from '../shared/atomic-json.ts';
 
 export const WORKER_STATE_FILE = 'worker-state.json';
 export const WORKER_CANDIDATES_DIRECTORY = 'candidates';
+export const WORKER_GENERATED_DIRECTORY = 'generated';
 export const WORKER_STATE_VERSION = 1;
-export type WorkerStageStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'skipped' | 'uncertain';
+export type WorkerStageStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'skipped' | 'blocked' | 'uncertain';
 
 export interface WorkerStage {
   readonly status: WorkerStageStatus;
   readonly startedAt?: string;
   readonly completedAt?: string;
   readonly failure?: { readonly code: 'stage_failed'; readonly message: 'Worker stage failed.' };
+  readonly block?: 'generation_daily_limit' | 'generation_attempt_limit';
 }
 
 export interface WorkerEvaluation {
@@ -45,14 +47,24 @@ export interface WorkerCandidateState {
   readonly evaluation: WorkerStage;
   readonly admission: WorkerStage;
   readonly generation: WorkerStage;
+  readonly generationAttempts?: number;
+  readonly generatedArtifact?: WorkerGeneratedArtifact;
   readonly publication: Readonly<Record<string, WorkerStage>>;
   readonly evaluationResult?: WorkerEvaluation;
   readonly ownerLabel?: 'generate' | 'skip';
 }
 
+export interface WorkerGeneratedArtifact {
+  readonly finalPath: string;
+  readonly metadataPath: string;
+  readonly sha256: string;
+  readonly durationSeconds: number;
+}
+
 export interface WorkerState {
   readonly version: 1;
   readonly initialized: boolean;
+  readonly generationCounts: Readonly<Record<string, number>>;
   readonly candidates: Readonly<Record<string, WorkerCandidateState>>;
 }
 
@@ -89,7 +101,7 @@ export class WorkerStateStore {
     }
     let value: unknown;
     try { value = JSON.parse(text); } catch { throw new VidGenError('artifact', 'Worker state is malformed.'); }
-    const state = validateWorkerState(value);
+    const state = validateWorkerState(isPlainRecord(value) && value.generationCounts === undefined ? { ...value, generationCounts: {} } : value);
     const recovered = recoverInProgressStages(state);
     if (recovered !== state) await this.save(recovered);
     return recovered;
@@ -110,6 +122,11 @@ export class WorkerStateStore {
     return join(this.root, WORKER_CANDIDATES_DIRECTORY, `${createHash('sha256').update(id).digest('hex')}.json`);
   }
 
+  candidateGenerationArtifactsRoot(id: string): string {
+    validateCandidateId(id);
+    return join(this.root, WORKER_GENERATED_DIRECTORY, createHash('sha256').update(id).digest('hex'));
+  }
+
   /** Publishes a candidate's local manifest before its discovery state advances. */
   async saveCandidateFixture(id: string, fixture: unknown): Promise<void> {
     const path = this.candidateFixturePath(id);
@@ -122,7 +139,7 @@ export class WorkerStateStore {
   }
 }
 
-export function emptyWorkerState(): WorkerState { return { version: 1, initialized: false, candidates: {} }; }
+export function emptyWorkerState(): WorkerState { return { version: 1, initialized: false, generationCounts: {}, candidates: {} }; }
 
 export function createDiscoveredCandidate(id: string, at: string): WorkerCandidateState {
   validateCandidateId(id); validateTimestamp(at);
@@ -147,10 +164,16 @@ export function recoverInProgressStages(state: WorkerState): WorkerState {
 
 export function validateWorkerState(value: unknown): WorkerState {
   const state = record(value, 'Worker state is malformed.');
-  if (state.version !== WORKER_STATE_VERSION || typeof state.initialized !== 'boolean' || !isPlainRecord(state.candidates) || Object.keys(state).some((key) => !['version', 'initialized', 'candidates'].includes(key))) throw malformed();
+  if (state.version !== WORKER_STATE_VERSION || typeof state.initialized !== 'boolean' || !isPlainRecord(state.candidates) || !isPlainRecord(state.generationCounts) || Object.keys(state).some((key) => !['version', 'initialized', 'generationCounts', 'candidates'].includes(key))) throw malformed();
   if (Object.keys(state.candidates).length > 10_000) throw malformed();
+  if (Object.keys(state.generationCounts).length > 366 || Object.entries(state.generationCounts).some(([day, count]) => !safeDate(day) || !wholeRange(count, 1, 1_000_000))) throw malformed();
   for (const [id, candidate] of Object.entries(state.candidates)) validateCandidate(candidate, id);
   return state as unknown as WorkerState;
+}
+
+export function validateWorkerGeneratedArtifact(value: unknown): WorkerGeneratedArtifact {
+  if (!safeGeneratedArtifact(value)) throw malformed();
+  return value;
 }
 
 export function validateWorkerEvaluation(value: unknown): WorkerEvaluation {
@@ -170,23 +193,36 @@ export function validateWorkerEvaluation(value: unknown): WorkerEvaluation {
 
 function validateCandidate(value: unknown, id: string): void {
   if (!safeCandidateId(id)) throw malformed(); const candidate = record(value, 'Worker state is malformed.');
-  if (Object.keys(candidate).some((key) => !['id', 'baseline', 'discovery', 'evaluation', 'admission', 'generation', 'publication', 'evaluationResult', 'ownerLabel'].includes(key)) || candidate.id !== id || !isPlainRecord(candidate.publication) || (candidate.baseline !== undefined && candidate.baseline !== true) || (candidate.ownerLabel !== undefined && candidate.ownerLabel !== 'generate' && candidate.ownerLabel !== 'skip')) throw malformed();
+  if (Object.keys(candidate).some((key) => !['id', 'baseline', 'discovery', 'evaluation', 'admission', 'generation', 'generationAttempts', 'generatedArtifact', 'publication', 'evaluationResult', 'ownerLabel'].includes(key)) || candidate.id !== id || !isPlainRecord(candidate.publication) || (candidate.baseline !== undefined && candidate.baseline !== true) || (candidate.ownerLabel !== undefined && candidate.ownerLabel !== 'generate' && candidate.ownerLabel !== 'skip') || (candidate.generationAttempts !== undefined && !wholeRange(candidate.generationAttempts, 1, 10)) || (candidate.generatedArtifact !== undefined && !safeGeneratedArtifact(candidate.generatedArtifact))) throw malformed();
   validateStage(candidate.discovery); validateStage(candidate.evaluation); validateStage(candidate.admission); validateStage(candidate.generation);
   for (const [platform, stage] of Object.entries(candidate.publication)) { if (!safeLabel(platform)) throw malformed(); validateStage(stage); }
   if (candidate.evaluationResult !== undefined) validateWorkerEvaluation(candidate.evaluationResult);
   if (candidate.evaluation.status === 'succeeded' && candidate.evaluationResult === undefined) throw malformed();
   if (candidate.admission.status === 'succeeded' && candidate.evaluationResult?.decision !== 'admitted') throw malformed();
   if (candidate.admission.status === 'skipped' && candidate.evaluationResult?.decision !== 'skipped') throw malformed();
+  if (candidate.generation.status === 'succeeded' && candidate.generatedArtifact === undefined) throw malformed();
+  if (candidate.generatedArtifact !== undefined && candidate.generation.status !== 'succeeded') throw malformed();
 }
 
 function validateStage(value: unknown): void {
   const stage = record(value, 'Worker state is malformed.');
-  if (Object.keys(stage).some((key) => !['status', 'startedAt', 'completedAt', 'failure'].includes(key)) || !['pending', 'running', 'succeeded', 'failed', 'skipped', 'uncertain'].includes(stage.status as string)) throw malformed();
+  if (Object.keys(stage).some((key) => !['status', 'startedAt', 'completedAt', 'failure', 'block'].includes(key)) || !['pending', 'running', 'succeeded', 'failed', 'skipped', 'blocked', 'uncertain'].includes(stage.status as string)) throw malformed();
   if (stage.startedAt !== undefined && !safeTimestamp(stage.startedAt)) throw malformed();
   if (stage.completedAt !== undefined && !safeTimestamp(stage.completedAt)) throw malformed();
   if (stage.failure !== undefined && (!isPlainRecord(stage.failure) || stage.failure.code !== 'stage_failed' || stage.failure.message !== 'Worker stage failed.')) throw malformed();
   if (stage.status === 'failed' && stage.failure === undefined) throw malformed();
   if (stage.status !== 'failed' && stage.failure !== undefined) throw malformed();
+  if (stage.status === 'blocked' && stage.block === undefined) throw malformed();
+  if (stage.status !== 'blocked' && stage.block !== undefined) throw malformed();
+  if (stage.block !== undefined && stage.block !== 'generation_daily_limit' && stage.block !== 'generation_attempt_limit') throw malformed();
+}
+
+function safeGeneratedArtifact(value: unknown): value is WorkerGeneratedArtifact {
+  if (!isPlainRecord(value) || Object.keys(value).some((key) => !['finalPath', 'metadataPath', 'sha256', 'durationSeconds'].includes(key))) return false;
+  return typeof value.finalPath === 'string' && isAbsolute(value.finalPath) && value.finalPath.length <= 4_096 && !/[\0\r\n]/u.test(value.finalPath)
+    && typeof value.metadataPath === 'string' && isAbsolute(value.metadataPath) && value.metadataPath.length <= 4_096 && !/[\0\r\n]/u.test(value.metadataPath)
+    && typeof value.sha256 === 'string' && /^[a-f0-9]{64}$/u.test(value.sha256)
+    && typeof value.durationSeconds === 'number' && Number.isFinite(value.durationSeconds) && value.durationSeconds > 0 && value.durationSeconds <= 300;
 }
 
 function validateCandidateId(value: string): void { if (!safeCandidateId(value)) throw new VidGenError('invalid_argument', 'Worker candidate ID is unsafe.'); }
