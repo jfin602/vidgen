@@ -1,0 +1,43 @@
+TASK: Correction 6 / P2 — Expiration and daily slot policy
+
+- Recommended configuration: `Terra High`.
+- Required unchanged project version: `0.6.5`.
+
+Prerequisite
+
+Re-read the post-c6-runner-queue and P1 Worker state/config contracts before editing. Reuse any correct queue-expiration capability already delivered by the prerequisite correction instead of duplicating it.
+
+Objective
+
+Harden queue eligibility so the backlog can keep building and reordering while generation is capped at one start per UTC day, with configurable age expiration.
+
+Required behavior
+
+- `VIDGEN_WORKER_QUEUE_EXPIRATION_DAYS` is the Worker queue-expiration environment variable.
+- Omitted expiration configuration defaults to exactly `3` days.
+- Accept only a bounded positive whole-day value; malformed/out-of-range configuration fails closed with a safe configuration error. Document the chosen supported maximum consistently in config/tests/help/docs.
+- Queue age is a rolling duration from the persisted successful admission/queue timestamp established by the Worker. Do not derive queue age from publisher dates or mutate/recompute Web Momentum scores over time.
+- Expiration is binary generation eligibility, not score decay. Expired candidates stay durably recorded but cannot generate, cannot consume a generation attempt, cannot consume the daily generation allowance, and cannot block lower-scored still-eligible work.
+- Preserve `DEFAULT_DAILY_GENERATION_LIMIT = 1`. One generation start per UTC calendar day is the default policy; the existing explicit CLI override may remain supported.
+- Reaching the daily generation limit pauses generation only. Discovery, Parallel evaluation within its independent evaluation budget, admission, queue insertion, and score reordering must continue normally.
+- When the UTC day changes, no manual unblock/requeue step is required. Previously paused, still-unexpired candidates automatically become generation-eligible again.
+- The candidate selected for the new day's slot is the highest-scored currently eligible queue item under the c6-runner-queue ordering; expired or already-generated candidates are excluded first.
+- A failed generation start still counts according to the existing generation-start budget semantics; do not redefine provider-spend accounting unless current prerequisite code proves otherwise.
+- Preserve generated-story dedupe, cross-process single-generation exclusion, attempt limits, observe/generate/live mode boundaries, and package version 0.6.5. Do not create package-lock.json.
+
+Focused proof
+
+Add deterministic clock-driven tests proving:
+- default expiration is three days;
+- configured expiration changes eligibility;
+- an expired high score loses to a fresh lower score;
+- expired work spends no attempt/daily slot;
+- after today's one generation, later arrivals continue evaluating and reorder the paused queue;
+- before UTC rollover no second generation starts;
+- first eligible cycle after UTC rollover selects the highest-scored still-unexpired item without re-evaluation.
+
+Run focused Worker/config tests and npm run test:worker.
+
+Non-goals
+
+Do not implement rolling-24-hour generation quotas, score aging/decay, ngest feed-size changes, manual queue editing, or more than one concurrent generation.

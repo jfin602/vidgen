@@ -17,8 +17,12 @@ Required behavior
   2. queue/admission time ascending;
   3. articleId ascending as the deterministic final tie-breaker.
 - Every newly admitted candidate must therefore be able to reorder the remaining backlog before the next generation starts.
-- Durable admitted work must remain generation-eligible even if that Article later disappears from the current ngest snapshot.
-- Reaching the daily generation limit must pause the backlog without converting queued work into a terminal or spend-exhausted failure. Queued work must become eligible again after the UTC-day budget permits it.
+- Add Worker queue-expiration policy through `VIDGEN_WORKER_QUEUE_EXPIRATION_DAYS`. Omitted configuration must default to `3` days; configured values must be bounded positive whole days and malformed values must fail closed as configuration errors.
+- Queue age is a rolling duration from successful admission/evaluation time. A candidate remains generation-eligible only while it is within the configured expiration window.
+- Expiration is binary generation eligibility, not score decay: do not mutate or recompute the persisted Web Momentum score as a candidate ages.
+- When a queued candidate expires, persist an explicit non-failure terminal generation outcome (or equivalent durable state) so it is not later generated, does not consume daily generation allowance or an attempt, and does not block lower-ranked eligible work.
+- Durable admitted work must remain generation-eligible even if that Article later disappears from the current ngest snapshot, until it is generated, otherwise terminal, or expires under the configured queue window.
+- Reaching the daily generation limit must pause the backlog without converting queued work into a terminal or spend-exhausted failure. Queued work must become eligible again after the UTC-day budget permits it if it has not expired.
 - Preserve bounded per-Article generation attempt handling; an attempt-exhausted candidate must not block lower-ranked eligible work forever.
 - Preserve observe/generate/live mode separation. Observe must never generate or publish.
 - Preserve completed evaluation reuse, Parallel daily evaluation budgeting, baseline/backfill behavior, and current Web Momentum v1 semantics.
@@ -26,10 +30,10 @@ Required behavior
 
 Focused proof
 
-Add deterministic tests proving that a lower-scored earlier feed item cannot generate ahead of a higher-scored later item, newly admitted higher scores reorder remaining work, backlog survives ngest feed disappearance/restart, deterministic tie-breaking is stable, and daily generation rollover resumes queued work without re-evaluation.
+Add deterministic tests proving that a lower-scored earlier feed item cannot generate ahead of a higher-scored later item, newly admitted higher scores reorder remaining work, backlog survives ngest feed disappearance/restart, deterministic tie-breaking is stable, daily generation rollover resumes still-fresh queued work without re-evaluation, the default expiration is three days, configured expiration changes eligibility, and expired work never consumes generation budget.
 
 Run the focused Worker tests and the broader Worker regression suite.
 
 Non-goals
 
-Do not change Web Momentum scoring, threshold semantics, provider adapters, headline generation internals, Poster adapters, or publishing platform behavior. Do not implement the cross-process generation lock or prior-production artifact lookup in this prompt; later prompts own those capabilities.
+Do not change Web Momentum scoring, threshold semantics, provider adapters, headline generation internals, Poster adapters, or publishing platform behavior. Do not implement score decay/aging; expiration is only a queue-eligibility cutoff. Do not implement the cross-process generation lock or prior-production artifact lookup in this prompt; later prompts own those capabilities.

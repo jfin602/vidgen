@@ -1,0 +1,42 @@
+TASK: Correction 6 / P1 — Atomic discovery backlog
+
+- Recommended configuration: `Terra High`.
+- Required unchanged project version: `0.6.5`.
+
+Prerequisite
+
+This stack runs only after c6-runner-queue has completed. Re-read the resulting Worker implementation and tests before editing. If durable score-priority generation ordering or the single-generation guard from that correction is absent/incomplete, stop and report the prerequisite gap rather than rebuilding that correction here.
+
+Objective
+
+Make ngest polling a discovery-only boundary: consume one coherent governed snapshot, identify never-before-seen Articles by governed articleId, persist them safely, and let durable Worker state own all later evaluation/queue/generation/publication work even after Articles disappear from subsequent ngest snapshots.
+
+Required behavior
+
+- Preserve the existing coherent ngest snapshot contract, including bounded continuation traversal and stable snapshot identity. A failed, drifting, malformed, or duplicate-ID snapshot must not partially advance discovery state.
+- Treat governed articleId as discovery identity. Determine new work against durable ever-seen Worker history, not only the immediately previous feed array, headline text, URL text, or feed position.
+- Reappearing previously seen articleIds are never new and must not be re-evaluated solely because they left and later re-entered the feed.
+- Persist each new Article's one-Article governed fixture before its discovery state becomes durable.
+- After discovery, pending evaluation/admission work must be driven from durable Worker state and remain processable if the Article is no longer present in the current ngest snapshot.
+- First-run baseline semantics remain explicit: without --process-existing, the initial snapshot establishes seen history without automatic evaluation; with --process-existing it becomes eligible normally.
+- max-candidates remains a bounded evaluation/work control and must not erase discovery or permanently strand pending durable evaluation work.
+- Completed qualified Web Momentum evaluations remain reusable and are never repeated just because later snapshots change.
+- Do not add a client-side 20-item feed truncation. The active feed/result limit is ngest-owned; VidGen consumes the coherent snapshot ngest returns.
+- Preserve Parallel budgeting, Worker mode separation, generated-artifact reuse, queue priority, global generation exclusion, Poster boundaries, secret safety, and package version 0.6.5. Do not create package-lock.json.
+
+Focused proof
+
+Add deterministic tests for:
+- atomic snapshot failure causing zero discovery advancement;
+- first baseline versus --process-existing;
+- new IDs discovered from a changed snapshot while old IDs are ignored;
+- leave/reappear not becoming new;
+- pending evaluation surviving removal from later snapshots and restart;
+- multiple new IDs persisted before bounded evaluation begins;
+- completed evaluation never repeating across snapshot changes.
+
+Run focused Worker/ngest tests and npm run test:worker.
+
+Non-goals
+
+Do not change ngest's server-side feed size, Distribution API, Web Momentum algorithm/threshold, generation queue ordering, provider behavior, or publishing adapters.
