@@ -1,0 +1,46 @@
+TASK: Correction 6 / P2 — Ngest polling and candidate discovery
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Connect the P1 Worker to the existing authenticated ngest boundary, establish safe first-start baselining, and persist one-Article candidate fixtures without duplicating ngest transport or creative contracts.
+
+Read docs/worker.md, docs/integrations/ngest.md, the current Distribution adapter, sample-story fixture builder, StoryInput boundary, P1 Worker state, and focused tests before editing.
+
+MUST REMAIN TRUE
+
+- Reuse `fetchNgestVidGenManifestPage()` for each coherent poll. Do not duplicate HTTP/auth/cursor/Distribution parsing or query ngest persistence directly.
+- Normal first startup records the current governed Article IDs as the baseline and performs zero evaluations/generations. `--process-existing` is the explicit opt-in that may promote current baseline Articles into work.
+- On later polls, discover unseen Article IDs in governed feed order. Repeated Worker restarts must not make seen Articles new again.
+- Reject ambiguous duplicate Article IDs or malformed candidate data safely rather than choosing one.
+- Materialize each discovered candidate as a validated one-Article local manifest from the already-fetched snapshot, preserving Profile, Publication, Article, neutral control, API/snapshot provenance, and `nextCursor: null`.
+- Refactor/reuse the existing sample-story fixture construction where practical so the Worker does not perform a second ngest fetch; preserve `npm run sample:story` behavior.
+- Persist discovery state and the candidate fixture atomically before downstream work. A failed poll must not corrupt or partially advance the baseline/seen set.
+- `--once` performs one coherent poll; `--max-candidates` limits downstream candidates for that invocation without changing the truth of which Articles have been durably seen/discovered.
+- Keep Worker polling sequential and bounded. No Parallel, provider, or Poster activity in this prompt.
+- Package and engine version remain 0.6.5.
+
+PROOF
+
+Tests must prove first-start zero-work baselining, explicit existing-Article processing, unseen discovery in feed order, restart reuse, duplicate-ID rejection, poll failure isolation, candidate limits, and one-Article fixture compatibility with the existing local manifest/StoryInput path.
+
+Keep existing ngest and sample-story tests green. Run focused Worker/ngest/sample-story tests, `npm run check`, and `git diff --check`.
+
+Downstream-required capability -> owning implementation/export -> focused proof:
+
+stable new-candidate discovery -> existing ngest adapter + Worker seen state -> multi-poll/restart tests.
+
+generation-ready one-Article input -> reused fixture construction + local manifest validator -> StoryInput compatibility test.
+
+NON-GOALS
+
+Do not call Parallel, score stories, invoke Gemini/Veo/FFmpeg, publish, modify ngest, or change CanonicalInput/StoryInput semantics.
+
+FINAL RESPONSE
+
+Report polling/baseline behavior, fixture reuse, discovery identity/order, exact tests, preserved ngest boundary, and unchanged 0.6.5 state.
