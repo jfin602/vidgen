@@ -369,5 +369,17 @@ test('headline verbose renders only sanitized Veo runtime diagnostics', async ()
   assert.doesNotMatch(await run(false), /veoStage|internalError|internalMessage/);
 });
 
+test('headline verbose renders safe terminal Veo diagnostics only', async () => {
+  const run = async (verbose: boolean) => {
+    const stderr: string[] = []; const token = 'secret-access-token'; const prompt = 'Secret presenter dialogue.';
+    const code = await runCli(['headline', '--input-file', 'fixture.json', '--article-id', 'article-2', '--anchor-reference', 'anchor.png', '--font-file', 'font.ttf', ...(verbose ? ['--verbose'] : [])], { writeStdout: () => undefined, writeStderr: (text) => stderr.push(text) }, {
+      generateHeadline: async () => { throw new VidGenError('generated_media', 'Agent Platform Veo video generation failed or completed without a video result.', { cause: { authorization: `Bearer ${token}`, prompt }, safeProviderDiagnostic: { veoTerminalStatus: 'RAI_FILTERED', raiMediaFilteredCount: 1, raiMediaFilteredReason: 'DANGEROUS_CONTENT', providerMessage: `Bearer ${token} ${prompt}` } }); },
+    });
+    const output = stderr.join(''); assert.equal(code, 2); assert.doesNotMatch(output, new RegExp(token)); assert.doesNotMatch(output, new RegExp(prompt)); return output;
+  };
+  const verbose = await run(true); assert.match(verbose, /veoTerminalStatus: RAI_FILTERED/); assert.match(verbose, /raiMediaFilteredCount: 1/); assert.match(verbose, /raiMediaFilteredReason: DANGEROUS_CONTENT/);
+  assert.doesNotMatch(await run(false), /veoTerminalStatus|raiMediaFilteredCount|raiMediaFilteredReason/);
+});
+
 function headlinePostArgs(platforms: readonly string[]) { return ['headline-post', '--input-file', 'fixture.json', '--article-id', 'article-2', '--anchor-reference', 'anchor.png', '--font-file', 'font.ttf', ...platforms.flatMap((platform) => ['--platform', platform])]; }
 function completedHeadline(finalPath = 'clip.mp4', headline = 'A governed headline', sourceDisplayName = 'Example News') { return { clipId: 'headline-1', rawVeoPath: 'raw-veo-only.mp4', finalPath, metadataPath: 'clip.json', sha256: 'a'.repeat(64), durationSeconds: 4, headline, sourceDisplayName }; }

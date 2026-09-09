@@ -33,6 +33,10 @@ export interface SafeProviderDiagnostic {
   readonly veoStage?: 'auth' | 'start_request' | 'poll_request' | 'operation_parse' | 'result_decode';
   readonly internalError?: string;
   readonly internalMessage?: string;
+  /** Adapter-owned terminal Veo facts, shown only by explicitly verbose commands. */
+  readonly veoTerminalStatus?: 'RAI_FILTERED' | 'EMPTY_COMPLETED_OPERATION';
+  readonly raiMediaFilteredCount?: number;
+  readonly raiMediaFilteredReason?: string;
 }
 
 export interface VidGenErrorOptions {
@@ -80,6 +84,9 @@ export function sanitizeProviderDiagnostic(value: unknown): SafeProviderDiagnost
   const internalError = safeInternalError(source.internalError);
   const internalMessage = safeInternalMessage(source.internalMessage)
     ?? (veoStage === undefined ? undefined : 'Internal runtime error.');
+  const veoTerminalStatus = safeVeoTerminalStatus(source.veoTerminalStatus);
+  const raiMediaFilteredCount = safeRaiMediaFilteredCount(source.raiMediaFilteredCount);
+  const raiMediaFilteredReason = safeRaiMediaFilteredReason(source.raiMediaFilteredReason);
   const diagnostic: SafeProviderDiagnostic = {
     ...(providerCode === undefined ? {} : { providerCode }),
     ...(providerStatus === undefined ? {} : { providerStatus }),
@@ -88,6 +95,9 @@ export function sanitizeProviderDiagnostic(value: unknown): SafeProviderDiagnost
     ...(veoStage === undefined ? {} : { veoStage }),
     ...(internalError === undefined ? {} : { internalError }),
     ...(internalMessage === undefined ? {} : { internalMessage }),
+    ...(veoTerminalStatus === undefined ? {} : { veoTerminalStatus }),
+    ...(raiMediaFilteredCount === undefined ? {} : { raiMediaFilteredCount }),
+    ...(raiMediaFilteredReason === undefined ? {} : { raiMediaFilteredReason }),
   };
   return Object.keys(diagnostic).length === 0 ? undefined : diagnostic;
 }
@@ -104,9 +114,18 @@ function safeProviderMessage(value: unknown): string | undefined {
 function safeVeoStage(value: unknown): SafeProviderDiagnostic['veoStage'] | undefined {
   return value === 'auth' || value === 'start_request' || value === 'poll_request' || value === 'operation_parse' || value === 'result_decode' ? value : undefined;
 }
+function safeVeoTerminalStatus(value: unknown): SafeProviderDiagnostic['veoTerminalStatus'] | undefined { return value === 'RAI_FILTERED' || value === 'EMPTY_COMPLETED_OPERATION' ? value : undefined; }
+function safeRaiMediaFilteredCount(value: unknown): number | undefined { return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1 && value <= 4 ? value : undefined; }
+function safeRaiMediaFilteredReason(value: unknown): string | undefined {
+  return typeof value === 'string' && RAI_MEDIA_FILTERED_REASONS.has(value) ? value : undefined;
+}
 function safeInternalError(value: unknown): string | undefined { return typeof value === 'string' && /^[A-Za-z][A-Za-z0-9]{0,63}$/.test(value) ? value : undefined; }
 function safeInternalMessage(value: unknown): string | undefined {
   const message = safeProviderMessage(value);
   return message !== undefined && /^(?:Cannot |Invalid |The |Failed |Unexpected |Stream |Response |Body |Buffer |JSON |Reader |Operation |Abort|Timeout|Out of memory|Expected |Maximum call stack)/u.test(message) ? message : undefined;
 }
 function sensitive(value: string): boolean { return /\b(?:authorization|bearer|token|api[-_ ]?key|x-goog-api-key|cookie)\b/iu.test(value); }
+
+const RAI_MEDIA_FILTERED_REASONS = new Set([
+  'OBSCENE', 'SEXUALLY_EXPLICIT', 'IDENTITY_ATTACK', 'VIOLENCE_ABUSE', 'CSAI', 'SPII', 'CELEBRITY', 'FACE_IMG', 'WATERMARK_IMG', 'MEMORIZATION_IMG', 'CSAI_IMG', 'PORN_IMG', 'VIOLENCE_IMG', 'CHILD_IMG', 'TOXIC', 'SENSITIVE_WORD', 'PERSON_IMG', 'ICA_IMG', 'SEXUAL_IMG', 'IU_IMG', 'RACY_IMG', 'PEDO_IMG', 'DEATH_HARM_TRAGEDY', 'HEALTH', 'FIREARMS_WEAPONS', 'RELIGIOUS_BELIEF', 'ILLICIT_DRUGS', 'WAR_CONFLICT', 'POLITICS', 'HATE_SYMBOL_IMG', 'CHILD_TEXT', 'DANGEROUS_CONTENT', 'RECITATION_TEXT', 'CELEBRITY_IMG', 'WATERMARK_IMG_REMOVAL',
+]);

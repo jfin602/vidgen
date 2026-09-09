@@ -162,6 +162,19 @@ test('Agent Platform Veo decodes only one bounded valid inline MP4 result', asyn
   });
 });
 
+test('Agent Platform Veo distinguishes safe RAI-filtered and empty completed operations', async () => {
+  const filtered = json({ name: operationName('filtered'), done: true, response: { raiMediaFilteredCount: 1, raiMediaFilteredReasons: ['DANGEROUS_CONTENT'], videos: [{ mimeType: 'video/mp4', bytesBase64Encoded: Buffer.from(videoBytes([1])).toString('base64') }] } });
+  await assert.rejects(clientFor(sequenceFetch([], [filtered])).generateVideo({ unit: contentUnit(8) }), (error: unknown) => error instanceof VidGenError && error.code === 'generated_media' && error.safeProviderDiagnostic?.veoTerminalStatus === 'RAI_FILTERED' && error.safeProviderDiagnostic.raiMediaFilteredCount === 1 && error.safeProviderDiagnostic.raiMediaFilteredReason === 'DANGEROUS_CONTENT');
+  const empty = json({ name: operationName('empty-completed'), done: true });
+  await assert.rejects(clientFor(sequenceFetch([], [empty])).generateVideo({ unit: contentUnit(8) }), (error: unknown) => error instanceof VidGenError && error.code === 'generated_media' && error.safeProviderDiagnostic?.veoTerminalStatus === 'EMPTY_COMPLETED_OPERATION');
+});
+
+test('Agent Platform Veo discards unsafe RAI filter reasons', async () => {
+  const unsafe = `Bearer ${token} ${storyText} C:\\secrets\\response.json`;
+  const filtered = json({ name: operationName('unsafe-filtered'), done: true, response: { raiMediaFilteredCount: 1, raiMediaFilteredReasons: [unsafe], videos: [] } });
+  await assert.rejects(clientFor(sequenceFetch([], [filtered])).generateVideo({ unit: contentUnit(8) }), (error: unknown) => error instanceof VidGenError && error.safeProviderDiagnostic?.veoTerminalStatus === 'RAI_FILTERED' && error.safeProviderDiagnostic.raiMediaFilteredReason === undefined && !String(error).includes(token) && !String(error).includes(storyText));
+});
+
 test('Agent Platform Veo decodes an 8 MiB inline MP4 without stack overflow', async () => {
   const bytes = new Uint8Array(8 * 1024 * 1024); bytes.set(videoBytes([])); bytes.fill(0x61, 8);
   const client = clientFor(sequenceFetch([], [operation('large-inline', true, bytes)]), { maxVideoBytes: bytes.byteLength });

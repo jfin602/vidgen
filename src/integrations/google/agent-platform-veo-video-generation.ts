@@ -320,9 +320,12 @@ function requiredExtensionCount(seconds: number): number { return Math.max(0, Ma
 function operationDone(payload: unknown): boolean { const operation = record(payload); if (operation === undefined || (operation.done !== undefined && typeof operation.done !== 'boolean')) throw providerFailure('Agent Platform Veo video service returned a malformed operation.'); if (operation.error !== undefined) throw providerFailure('Agent Platform Veo video generation failed.', undefined, operationDiagnostic(operation)); return operation.done === true; }
 
 function completedOperation(payload: unknown, operationName: string, maxVideoBytes: number, beforeDecode: () => void): CompletedOperation {
-  const operation = record(payload); const response = operation === undefined ? undefined : record(operation.response);
-  if (operation === undefined || response === undefined || filtered(response)) throw providerFailure('Agent Platform Veo video generation failed or completed without a video result.');
+  const operation = record(payload);
+  if (operation === undefined) throw providerFailure('Agent Platform Veo video generation failed or completed without a video result.');
   if (operation.error !== undefined) throw providerFailure('Agent Platform Veo video generation failed.', undefined, operationDiagnostic(operation));
+  const response = record(operation.response);
+  if (response === undefined) throw providerFailure('Agent Platform Veo video generation failed or completed without a video result.', undefined, { veoTerminalStatus: 'EMPTY_COMPLETED_OPERATION' });
+  if (filtered(response)) throw providerFailure('Agent Platform Veo video generation failed or completed without a video result.', undefined, raiFilteredDiagnostic(response));
   const videos = response.videos; const video = Array.isArray(videos) && videos.length === 1 ? record(videos[0]) : undefined;
   if (video === undefined || video.mimeType !== 'video/mp4' || typeof video.bytesBase64Encoded !== 'string') throw providerFailure('Agent Platform Veo video generation completed without a valid inline MP4 result.');
   beforeDecode();
@@ -330,6 +333,10 @@ function completedOperation(payload: unknown, operationName: string, maxVideoByt
 }
 
 function filtered(response: Record<string, unknown>): boolean { return typeof response.raiMediaFilteredCount === 'number' && response.raiMediaFilteredCount > 0; }
+function raiFilteredDiagnostic(response: Record<string, unknown>) {
+  const reasons = Array.isArray(response.raiMediaFilteredReasons) ? response.raiMediaFilteredReasons : [];
+  return { veoTerminalStatus: 'RAI_FILTERED', raiMediaFilteredCount: response.raiMediaFilteredCount, raiMediaFilteredReason: reasons.find((reason) => typeof reason === 'string') };
+}
 function decodeInlineMp4(value: string, maxBytes: number): InlineVideo {
   const maxBase64Length = 4 * Math.ceil(maxBytes / 3);
   if (value.length === 0 || value.length > maxBase64Length) throw providerFailure('Agent Platform Veo inline video result was invalid or exceeded the supported size.');
