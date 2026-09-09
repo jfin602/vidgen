@@ -2,7 +2,7 @@
 
 This is the session router for repository-aware work in jfin602/vidgen.
 
-VidGen is early-stage. Phases 1 and 2 have been implemented, reviewed, and closed. Phase 3 was manually owner-closed after P4 at version 0.3.4. Phase 4 was manually owner-closed at version 0.4.4 after its P5 review/repair pass. Phase 5 was implemented through P3 and manually owner-closed at version 0.5.3 after its P4 closeout review/repair. The Phase 5 closeout host did not have ffmpeg/ffprobe or owner-supplied real media-ready inputs, so no real story render or human playback qualification was established there. Since then, the deployment VPS has directly qualified FFmpeg 6.1.1, FFprobe 6.1.1, libx264, AAC, and the required assembly filters, but a complete owner-media generated story render is still unclaimed. The behavior-preserving MVP refactor and the `c5-optional-assets` correction are complete; standardized intro/outro wrappers are now independently optional. Phase 6 simple presenter-headline implementation and `c6-agent-platform` are implemented at unchanged 0.6.5 while preserving the existing template/ClipPlan/generated-media/assembly cinematic path. Gemini Enterprise Agent Platform is the sole supported Google model platform; text, video, and speech retain separate capability-specific authentication and qualification. Live ngest fan-out and operational hardening remain Phase 7. `c5-config-fix` remains owner-approved but deferred.
+VidGen is early-stage. Phases 1 and 2 have been implemented, reviewed, and closed. Phase 3 was manually owner-closed after P4 at version 0.3.4. Phase 4 was manually owner-closed at version 0.4.4 after its P5 review/repair pass. Phase 5 was implemented through P3 and manually owner-closed at version 0.5.3 after its P4 closeout review/repair. The Phase 5 closeout host did not have ffmpeg/ffprobe or owner-supplied real media-ready inputs, so no real story render or human playback qualification was established there. Since then, the deployment VPS has directly qualified FFmpeg 6.1.1, FFprobe 6.1.1, libx264, AAC, and the required assembly filters, but a complete owner-media generated story render is still unclaimed. The behavior-preserving MVP refactor and the `c5-optional-assets` correction are complete; standardized intro/outro wrappers are now independently optional. Phase 6 simple presenter-headline implementation and `c6-agent-platform` are implemented at unchanged 0.6.5 while preserving the existing template/ClipPlan/generated-media/assembly cinematic path. Gemini Enterprise Agent Platform is the sole supported Google model platform; text, video, and speech retain separate capability-specific authentication and qualification. Phase 7 is now the planned VidGen Worker: live ngest polling, bounded Parallel Web Momentum evaluation, cost-aware automatic-production admission, CLI orchestration, durable retry/resume state, and downstream VidGen Poster fan-out. `c5-config-fix` remains owner-approved but deferred.
 
 The initial engineering worksheet is historical decision context. Several of its promoted edition/newscast decisions were superseded by the single-story rebase on 2026-09-05. Current architecture and roadmap docs govern active direction.
 
@@ -11,7 +11,7 @@ The initial engineering worksheet is historical decision context. Several of its
 - Repository: jfin602/vidgen
 - Default branch: main
 - Product direction: a standalone news video generation engine with a simple presenter-headline path as the current priority and the implemented template-driven cinematic path preserved.
-- Upstream contract: ngest supplies a governed, pre-curated feed in which every supplied story is already intended for content production.
+- Upstream contract: ngest supplies governed, pre-curated Articles that are valid production candidates. Phase 7 Worker policy may decline automatic generation based on bounded Web Momentum and cost admission; the VidGen engine itself does not rank or reject stories explicitly submitted to its production CLI.
 - Primary production unit: one story -> one independent clip package.
 - Primary application stack: Node.js + TypeScript.
 - MVP execution model: manually invoked CLI development flow, one selected story at a time.
@@ -27,17 +27,19 @@ The initial engineering worksheet is historical decision context. Several of its
 - Phase 3 owner-closeout version: 0.3.4.
 - Phase 4 owner-closeout version: 0.4.4.
 - Current package baseline: 0.6.5.
-- Next roadmap phase: Phase 7 — live ngest fan-out and operational hardening.
+- Next roadmap phase: Phase 7 — VidGen Worker and automated production orchestration.
 - Current repository state: Phases 1-5 provide authenticated ngest acquisition/canonicalization, local fixture ingress/StoryInput/story workspace, ClipPlan planning, deterministic generated-media units and Google adapters, FFprobe qualification, AssemblyPlan creation, FFmpeg rendering, cinematic final-artifact publication, and independently optional intro/outro wrappers. Phase 6 has added the separate StoryInput-based simple presenter-headline path with bounded presenter copy/video generation, deterministic lower-third finishing, and paired MP4/JSON publication at package/engine baseline 0.6.5. `c6-agent-platform` has made Agent Platform the sole supported Google implementation while retaining separate text, video, and speech boundaries. The deployment VPS has qualified required FFmpeg/FFprobe capabilities, while live provider, story-render, and human-playback qualification remain capability-specific and must not be inferred. `c6-vertex-adapter` is historical/superseded; `c5-config-fix` remains owner-approved and deferred. Publisher retrieval remains deferred.
 - Current roadmap: docs/roadmap/initial-roadmap.md.
 - Current architecture: docs/architecture.md.
 - Current template contract: docs/template-system.md.
 - Current ngest integration notes: docs/integrations/ngest.md.
+- Current Worker contract: docs/worker.md.
+- Current Parallel integration contract: docs/integrations/parallel.md.
 - Current Google video backend notes: docs/integrations/google-video.md.
 - Current control notes: docs/control-interface.md.
 - Historical engineering worksheet: docs/planning/initial-engineering-question-worksheet.md.
 
-Ngest owns governed feed truth and production eligibility. VidGen does not re-rank or re-select supplied stories. VidGen owns both the simple presenter-headline production path and the preserved cinematic template path, including generated media, deterministic FFmpeg finishing/assembly, story artifacts, and final clips. Publisher retrieval is a deferred fallback capability and is not part of the completed Phase 5 assembly implementation or the current refactor correction.
+Ngest owns governed feed truth and candidate eligibility. The planned Phase 7 Worker owns automatic-production admission and cost policy for newly discovered candidates, using bounded Parallel Web Momentum evidence. The VidGen engine does not rank or reject stories explicitly submitted to its CLI and remains responsible for the simple presenter-headline and preserved cinematic production paths. VidGen Poster remains a separate publishing application invoked by the Worker; publishing logic does not move into VidGen. Publisher retrieval remains a separate deferred creative-grounding capability.
 
 ## /boot
 
@@ -163,7 +165,7 @@ Run artifacts are written under .codex-runs/ and ignored by Git.
 - Prefer small independently reviewable prompts.
 - Codex model policy: Luna Medium is the minimum allowed configuration; prefer Terra for almost all implementation work; use Luna only for tightly bounded mechanical work; escalate to Sol rarely and only when substantial reasoning ambiguity remains after planning.
 - Preserve the ngest/VidGen boundary.
-- Treat every supplied ngest story as already production-worthy; do not add VidGen story-ranking or selection gates.
+- Treat every supplied ngest Article as a governed production candidate. Do not add ranking or selection gates inside the VidGen generation engine; Phase 7 Worker-level automatic-production admission is a separate orchestration/cost decision.
 - Keep ngest transport shapes at the input boundary.
 - Manual development fixtures must exercise the same post-adapter VidGen validation/normalization semantics as live ngest input; they need not duplicate the upstream Distribution v1 wire.
 - One story is one independent production and artifact boundary.
@@ -183,6 +185,6 @@ Run artifacts are written under .codex-runs/ and ignored by Git.
 
 ## Current next action
 
-Phase 7 is live ngest fan-out and operational hardening. Keep it separate from the implemented Phase 6 paths; `c5-config-fix` remains deferred.
+Phase 7 is the VidGen Worker and automated production orchestration phase. Keep Parallel Web Momentum, polling, admission, retry/resume, and publishing fan-out in the Worker layer; keep generation inside VidGen and per-platform publishing inside VidGen Poster. `c5-config-fix` remains deferred.
 
 The deployment VPS has qualified FFmpeg/FFprobe and required codec/filter availability. Agent Platform text, Veo, speech, render, and human playback each require their own directly observed evidence.
