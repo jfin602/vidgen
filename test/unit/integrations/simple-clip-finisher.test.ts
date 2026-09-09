@@ -27,7 +27,7 @@ test('simple lower third wraps all text without truncation and rejects text that
   const lowerThird = validateSimpleLowerThird(headline, 'Example News');
   assert.equal(lowerThird.headline.replace(/\n/gu, ' '), headline);
   assert.equal(lowerThird.sourceDisplayName, 'Example News');
-  for (const length of [33, 43]) {
+  for (const length of [41, 43]) {
     assert.throws(() => validateSimpleLowerThird('x'.repeat(length), 'Example News'), hasSimpleClip);
     assert.throws(() => validateSimpleLowerThird('Headline', 'x'.repeat(length)), hasSimpleClip);
   }
@@ -37,17 +37,17 @@ test('simple lower third consumes automatic wrap separators without changing gov
   const headline = '‘Possible Love’: What The Critics Are Saying About Lee Chang-dong’s Korean Drama — Venice';
   const lowerThird = validateSimpleLowerThird(headline, 'Example News');
   const lines = lowerThird.headline.split('\n');
-  assert.deepEqual(lines, ['‘Possible Love’: What The', 'Critics Are Saying About Lee', 'Chang-dong’s Korean Drama —', 'Venice']);
-  assert.deepEqual(lines.map((line) => line.length), [25, 28, 27, 6]);
+  assert.deepEqual(lines, ['‘Possible Love’: What The Critics Are', 'Saying About Lee Chang-dong’s Korean', 'Drama — Venice']);
+  assert.deepEqual(lines.map((line) => line.length), [37, 36, 14]);
   assert.ok(lines.every((line) => line.trim() === line));
   assert.equal(lines.join(' '), headline);
-  const exactWord = validateSimpleLowerThird(`Prefix ${'x'.repeat(32)}`, 'Example News').headline.split('\n');
-  assert.deepEqual(exactWord, ['Prefix', 'x'.repeat(32)]);
-  assert.ok(exactWord.every((line) => line.length <= 32 && line.trim() === line));
+  const exactWord = validateSimpleLowerThird(`Prefix ${'x'.repeat(40)}`, 'Example News').headline.split('\n');
+  assert.deepEqual(exactWord, ['Prefix', 'x'.repeat(40)]);
+  assert.ok(exactWord.every((line) => line.length <= 40 && line.trim() === line));
 });
 
 test('simple lower-third derives its full-width, bottom-anchored height from actual wrapped lines', () => {
-  for (const [lineCount, height] of [[1, 236], [2, 296], [5, 476]] as const) {
+  for (const [lineCount, height] of [[1, 204], [2, 244], [8, 484]] as const) {
     const lowerThird = validateSimpleLowerThird(wrappedLineHeadline(lineCount), 'Example News');
     const layout = buildSimpleLowerThirdLayout(lowerThird);
     assert.equal(lowerThird.headline.split('\n').length, lineCount);
@@ -56,9 +56,9 @@ test('simple lower-third derives its full-width, bottom-anchored height from act
   }
   const veniceLowerThird = validateSimpleLowerThird('‘Possible Love’: What The Critics Are Saying About Lee Chang-dong’s Korean Drama — Venice', 'Example News');
   const venice = buildSimpleLowerThirdLayout(veniceLowerThird);
-  assert.equal(veniceLowerThird.headline.split('\n').length, 4);
-  assert.equal(venice.headline.height, 224);
-  assert.deepEqual(venice.outer, { x: 0, y: 1504, width: 1080, height: 416 });
+  assert.equal(veniceLowerThird.headline.split('\n').length, 3);
+  assert.equal(venice.headline.height, 112);
+  assert.deepEqual(venice.outer, { x: 0, y: 1636, width: 1080, height: 284 });
   assert.equal(SIMPLE_CLIP_FINISHING_POLICY.lowerThird.panel.color, '0x336699');
   assert.equal(SIMPLE_CLIP_FINISHING_POLICY.lowerThird.panel.opacity, 0.77);
   assert.equal(JSON.stringify(SIMPLE_CLIP_FINISHING_POLICY.lowerThird).includes('620'), false);
@@ -67,7 +67,7 @@ test('simple lower-third derives its full-width, bottom-anchored height from act
 test('Venice headline uses uncropped selected-font bounds to keep its final line and source separate', () => {
   const headline = "'Possible Love': What The Critics Are Saying About Lee Chang-dong's Korean Drama - Venice";
   const lowerThird = validateSimpleLowerThird(headline, 'Deadline');
-  assert.equal(lowerThird.headline.split('\n').at(-1), 'Venice');
+  assert.equal(lowerThird.headline.split('\n').at(-1), 'Drama - Venice');
   assert.equal(lowerThird.headline.replace(/\n/gu, ' '), headline);
   const glyphBounds = {
     headline: { left: 180, right: 899, top: 6, bottom: 270 },
@@ -95,7 +95,7 @@ test('simple lower-third finishing, selected-font measurement, and pixel validat
   assert.throws(() => assertSimpleLowerThirdPixels(layoutPixels([[layout.headline.x + 5, layout.headline.y], [text.x + text.width - 1, layout.headline.y + layout.headline.height - 1], [layout.source.x, layout.source.y], [text.x + text.width - 1, layout.source.y + layout.source.height - 1]]), layout), hasSimpleClip);
   const measurement = buildSimpleLowerThirdMeasurementArgs(layout, ['font.ttf', 'simple-headline.txt', 'simple-source.txt']).join(' ');
   const finishing = buildSimpleClipFinishArgs('raw.mp4', 'candidate.mp4', layout, ['font.ttf', 'simple-headline.txt', 'simple-source.txt']).join(' ');
-  for (const expression of ['fontsize=44:x=96:y=1672:boxw=888:text_align=C:line_spacing=16', 'fontsize=32:x=96:y=1832:boxw=888:text_align=C']) {
+  for (const expression of ['fontsize=32:x=96:y=1724:boxw=888:text_align=C:line_spacing=8', 'fontsize=28:x=96:y=1836:boxw=888:text_align=C']) {
     assert.match(measurement, new RegExp(expression)); assert.match(finishing, new RegExp(expression));
   }
   assert.doesNotMatch(measurement, /Example News/);
@@ -127,11 +127,11 @@ test('simple finisher stages hostile article text, retains sub-eight speech cove
     assert.doesNotMatch(graph, /\b(?:a)?trim=/);
     assert.ok(calls.some((call) => call.args.includes('-shortest')));
     assert.match(graph, /loudnorm=I=-16:LRA=11:TP=-1.5/);
-    assert.match(graph, /drawbox=x=0:y=1624:w=1080:h=296:color=0x336699@0\.77:t=fill/);
+    assert.match(graph, /drawbox=x=0:y=1676:w=1080:h=244:color=0x336699@0\.77:t=fill/);
     assert.doesNotMatch(graph, /color=0x336699:t=fill/);
     assert.doesNotMatch(graph, /drawbox=.*color=(?:black|0x000000)(?:@|:)/);
-    assert.match(graph, /fontsize=44:x=96:y=1672:boxw=888:text_align=C:line_spacing=16/);
-    assert.match(graph, /fontsize=32:x=96:y=1832:boxw=888:text_align=C/);
+    assert.match(graph, /fontsize=32:x=96:y=1724:boxw=888:text_align=C:line_spacing=8/);
+    assert.match(graph, /fontsize=28:x=96:y=1836:boxw=888:text_align=C/);
     assert.doesNotMatch(graph, /boxh=/);
     assert.match(graph, /drawtext=fontfile=font\.ttf:textfile=simple-headline\.txt:expansion=none/);
     assert.match(graph, /textfile=simple-source\.txt:expansion=none/);

@@ -8,17 +8,17 @@ import { type FfprobeDependencies, type LocalMediaProbe, probeLocalMedia } from 
 import { assertRegularLocalFile } from './local-file.ts';
 
 export const SIMPLE_CLIP_FINISHING_POLICY = Object.freeze({
-  version: 'simple-clip-finishing-policy-v3',
+  version: 'simple-clip-finishing-policy-v4',
   output: { width: 1080, height: 1920, fps: 30, container: 'mp4', videoCodec: 'h264', pixelFormat: 'yuv420p' },
   audio: { encoder: 'aac', sampleRate: 48_000, channels: 2, bitrate: '192k' },
   loudnorm: { integratedLufs: -16, loudnessRange: 11, truePeakDb: -1.5 },
   lowerThird: {
-    version: 'headline-source-v3',
+    version: 'headline-source-v4',
     panel: { x: 0, width: 1080, color: '0x336699', opacity: 0.77 },
     text: { x: 96, width: 888 },
     padding: { top: 48, bottom: 48 },
-    headline: { fontSize: 44, lineSpacing: 16, lines: 5, charactersPerLine: 32 },
-    source: { fontSize: 32, lines: 1, charactersPerLine: 32, height: 40, separation: 56 },
+    headline: { fontSize: 32, lineSpacing: 8, lines: 8, charactersPerLine: 40 },
+    source: { fontSize: 28, lines: 1, charactersPerLine: 32, height: 36, separation: 40 },
   },
 } as const);
 
