@@ -12,6 +12,7 @@ import { acquireWorkerGenerationExclusion, type WorkerGenerationExclusion } from
 import { findVerifiedPriorProduction } from './prior-production.ts';
 import { runPosterCommand, type PosterCommandRunner } from '../app/poster-handoff.ts';
 import { DEFAULT_DAILY_GENERATION_LIMIT, DEFAULT_WORKER_QUEUE_EXPIRATION_DAYS, MAX_WORKER_QUEUE_EXPIRATION_DAYS } from './config.ts';
+import { loadPresenterSource, loadPresenterSourcesFile, samePresenterSource, selectPresenterSource, type WorkerPresenterSource } from './presenter-sources.ts';
 
 export type WorkerMode = 'observe' | 'generate' | 'live';
 export const WORKER_POSTER_VIDEO_PLATFORMS = ['x', 'bluesky', 'reels'] as const;
@@ -19,7 +20,8 @@ const MAX_WORKER_DISCOVERED_CANDIDATES = 10_000;
 
 export interface WorkerStageRunners {
   readonly evaluate?: (candidateId: string) => Promise<WorkerEvaluation>;
-  readonly generate?: (candidateId: string) => Promise<WorkerGeneratedArtifact>;
+  readonly prepareGeneration?: (candidate: WorkerCandidateState) => Promise<WorkerPresenterSource>;
+  readonly generate?: (candidateId: string, presenterSource?: WorkerPresenterSource) => Promise<WorkerGeneratedArtifact>;
   readonly doctor?: (platform: typeof WORKER_POSTER_VIDEO_PLATFORMS[number]) => Promise<void>;
   readonly caption?: (candidateId: string) => Promise<string>;
   readonly publish?: (candidateId: string, platform: typeof WORKER_POSTER_VIDEO_PLATFORMS[number], artifact: WorkerGeneratedArtifact, caption: string) => Promise<void>;
@@ -55,9 +57,11 @@ export interface NgestWorkerCycleOptions extends Omit<WorkerCycleOptions, 'disco
   readonly fetchManifest?: (environment: NgestVidGenEnvironment) => Promise<NgestVidGenManifestPage>;
   /** Test-only transport seam; production uses built-in fetch. */
   readonly parallelFetch?: typeof fetch;
-  readonly anchorReferencePaths?: readonly string[];
+  readonly presenterSourcesFile?: string;
   readonly fontPath?: string;
   readonly maxSeconds?: number;
+  /** Test-only seam; production uses the shell-free headline handoff. */
+  readonly headlineHandoff?: typeof runHeadlineHandoff;
 }
 
 export interface NgestWorkerRunOptions extends Omit<NgestWorkerCycleOptions, 'now'> {
@@ -145,9 +149,9 @@ export async function runNgestWorkerCycle(options: NgestWorkerCycleOptions): Pro
   const manifest = await (options.fetchManifest ?? fetchNgestVidGenManifestPage)(options.environment ?? process.env);
   const fixtures = fixturesFromSnapshot(manifest);
   const momentumRunners = options.runners?.evaluate === undefined ? { ...options.runners, evaluate: defaultMomentumEvaluator(options.store, options.environment ?? process.env, options.parallelFetch) } : options.runners;
-  if (momentumRunners?.generate === undefined && options.mode !== 'observe' && (options.anchorReferencePaths === undefined || options.fontPath === undefined)) throw new VidGenError('configuration', 'Worker generation requires anchor references and a font file.');
+  if (momentumRunners?.generate === undefined && options.mode !== 'observe' && (options.presenterSourcesFile === undefined || options.fontPath === undefined)) throw new VidGenError('configuration', 'Worker generation requires a presenter-source manifest and a font file.');
   const generationRunners = momentumRunners?.generate === undefined && options.mode !== 'observe'
-    ? { ...momentumRunners, generate: (candidateId: string) => runHeadlineHandoff({ candidateId, fixturePath: options.store.candidateFixturePath(candidateId), artifactsRoot: DEFAULT_HEADLINE_ARTIFACTS_ROOT, anchorReferencePaths: options.anchorReferencePaths!, fontPath: options.fontPath!, maxSeconds: options.maxSeconds ?? 8 }) }
+    ? { ...momentumRunners, prepareGeneration: async (candidate: WorkerCandidateState) => resolvePresenterSource(candidate, options.presenterSourcesFile!), generate: (candidateId: string, source?: WorkerPresenterSource) => (options.headlineHandoff ?? runHeadlineHandoff)({ candidateId, fixturePath: options.store.candidateFixturePath(candidateId), artifactsRoot: DEFAULT_HEADLINE_ARTIFACTS_ROOT, anchorReferencePaths: [source!.path], fontPath: options.fontPath!, maxSeconds: options.maxSeconds ?? 8 }) }
     : momentumRunners;
   const runners = options.mode !== 'live' ? generationRunners : {
     ...createPosterRunners(),
@@ -175,6 +179,16 @@ export async function runNgestWorker(options: NgestWorkerRunOptions): Promise<Wo
     }
     await sleep(options.pollIntervalMs);
   }
+}
+
+/** A durable selection wins over current-pool changes; only unassigned work reads the pool. */
+export async function resolvePresenterSource(candidate: WorkerCandidateState, manifestPath: string): Promise<WorkerPresenterSource> {
+  if (candidate.presenterSource !== undefined) {
+    const source = await loadPresenterSource(candidate.presenterSource.path);
+    if (!samePresenterSource(source, candidate.presenterSource)) throw new VidGenError('configuration', 'Worker selected presenter source has changed.');
+    return source;
+  }
+  return selectPresenterSource(candidate.id, await loadPresenterSourcesFile(manifestPath));
 }
 
 /** Authentication, configuration, malformed snapshots, and durable state failures stay fatal. */
@@ -289,8 +303,15 @@ async function processGeneration(state: WorkerState, candidate: WorkerCandidateS
     if (generationCount(next, generationDay) >= dailyGenerationLimit) {
       next = replaceStage(next, current.id, 'generation', { status: 'blocked', completedAt: timestamp(now()), block: 'generation_daily_limit' }); await store.save(next); return { state: next, didWork: true };
     }
+    let source: WorkerPresenterSource | undefined;
+    if (runners.prepareGeneration !== undefined) {
+      source = await runners.prepareGeneration(current);
+      if (current.presenterSource === undefined) {
+        next = mergeCandidate(next, current.id, { presenterSource: source }, 'generation', current.generation); current = next.candidates[current.id]!; await store.save(next);
+      }
+    }
     next = spendGeneration(next, current.id, generationDay); current = next.candidates[current.id]!; await store.save(next);
-    didWork = true; ({ state: next, candidate: current } = await runExternalStage(next, current.id, 'generation', store, now, async () => ({ generatedArtifact: validateWorkerGeneratedArtifact(await runners.generate!(current.id)) }), undefined, () => { externalWorkStarted = true; }));
+    didWork = true; ({ state: next, candidate: current } = await runExternalStage(next, current.id, 'generation', store, now, async () => ({ generatedArtifact: validateWorkerGeneratedArtifact(await runners.generate!(current.id, source)) }), undefined, () => { externalWorkStarted = true; }));
     resultHandled = true;
     return { state: next, didWork };
   } finally {

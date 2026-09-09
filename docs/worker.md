@@ -154,6 +154,10 @@ The default daily generation limit is one start per UTC calendar day (the CLI ma
 
 The Worker invokes VidGen through a CLI process boundary using argument arrays and no shell interpolation.
 
+Automatic `generate` and `live` use `VIDGEN_WORKER_PRESENTER_SOURCES_FILE`, an absolute path to a regular UTF-8 text file containing one absolute presenter source-image path per nonblank line. Production sets it once to `/home/deploy/vidgen-assets/presenter-sources.txt`. The Worker rejects malformed pools and invalid media rather than silently dropping entries. It re-reads the manifest when an unassigned candidate reaches a real generation opportunity, so ordinary pool additions or removals do not need a PM2 restart.
+
+Exactly one source is selected deterministically from the current valid pool by Article ID and persisted with its bounded file identity before a generation attempt or daily slot is consumed. A retry/restart keeps that choice even if the manifest is reordered or changed; the selected media is revalidated and a missing or changed file fails closed. Existing valid completed production is reused before any presenter selection. Manual `vidgen headline` remains unchanged and still accepts one through three `--anchor-reference` flags.
+
 For the initial automatic path, generate the final media first. The Worker must not use headline-post as its autonomous orchestration primitive because publication retries must remain independent from expensive generation.
 
 The Worker verifies the successful VidGen result/artifact boundary before publishing.

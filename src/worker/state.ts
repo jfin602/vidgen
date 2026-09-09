@@ -49,6 +49,8 @@ export interface WorkerCandidateState {
   readonly admission: WorkerStage;
   readonly generation: WorkerStage;
   readonly generationAttempts?: number;
+  /** One durable source identity selected before the first actual generation spend. */
+  readonly presenterSource?: WorkerPresenterSourceSelection;
   readonly generatedArtifact?: WorkerGeneratedArtifact;
   /** Ready video destinations captured before generation; an empty set is held, not complete. */
   readonly publicationTargets?: readonly WorkerPosterPlatform[];
@@ -56,6 +58,14 @@ export interface WorkerCandidateState {
   readonly publicationAttempts?: Readonly<Record<string, number>>;
   readonly evaluationResult?: WorkerEvaluation;
   readonly ownerLabel?: 'generate' | 'skip';
+}
+
+export interface WorkerPresenterSourceSelection {
+  readonly path: string;
+  readonly basename: string;
+  readonly mimeType: string;
+  readonly sha256: string;
+  readonly byteSize: number;
 }
 
 export interface WorkerGeneratedArtifact {
@@ -213,7 +223,7 @@ export function validateWorkerEvaluation(value: unknown): WorkerEvaluation {
 
 function validateCandidate(value: unknown, id: string): void {
   if (!safeCandidateId(id)) throw malformed(); const candidate = record(value, 'Worker state is malformed.');
-  if (Object.keys(candidate).some((key) => !['id', 'baseline', 'discovery', 'evaluation', 'admission', 'generation', 'generationAttempts', 'generatedArtifact', 'publicationTargets', 'publication', 'publicationAttempts', 'evaluationResult', 'ownerLabel'].includes(key)) || candidate.id !== id || !isPlainRecord(candidate.publication) || !safePublicationTargets(candidate.publicationTargets) || !safePublicationAttempts(candidate.publicationAttempts) || (candidate.baseline !== undefined && candidate.baseline !== true) || (candidate.ownerLabel !== undefined && candidate.ownerLabel !== 'generate' && candidate.ownerLabel !== 'skip') || (candidate.generationAttempts !== undefined && !wholeRange(candidate.generationAttempts, 1, 10)) || (candidate.generatedArtifact !== undefined && !safeGeneratedArtifact(candidate.generatedArtifact))) throw malformed();
+  if (Object.keys(candidate).some((key) => !['id', 'baseline', 'discovery', 'evaluation', 'admission', 'generation', 'generationAttempts', 'presenterSource', 'generatedArtifact', 'publicationTargets', 'publication', 'publicationAttempts', 'evaluationResult', 'ownerLabel'].includes(key)) || candidate.id !== id || !isPlainRecord(candidate.publication) || !safePublicationTargets(candidate.publicationTargets) || !safePublicationAttempts(candidate.publicationAttempts) || (candidate.baseline !== undefined && candidate.baseline !== true) || (candidate.ownerLabel !== undefined && candidate.ownerLabel !== 'generate' && candidate.ownerLabel !== 'skip') || (candidate.generationAttempts !== undefined && !wholeRange(candidate.generationAttempts, 1, 10)) || (candidate.presenterSource !== undefined && !safePresenterSource(candidate.presenterSource)) || (candidate.generatedArtifact !== undefined && !safeGeneratedArtifact(candidate.generatedArtifact))) throw malformed();
   validateStage(candidate.discovery); validateStage(candidate.evaluation); validateStage(candidate.admission); validateStage(candidate.generation);
   for (const [platform, stage] of Object.entries(candidate.publication)) { if (candidate.publicationTargets === undefined ? !safeLabel(platform) : !isWorkerPosterPlatform(platform)) throw malformed(); validateStage(stage); }
   if (candidate.publicationTargets !== undefined && (Object.keys(candidate.publication).some((platform) => !candidate.publicationTargets!.includes(platform as WorkerPosterPlatform)) || Object.keys(candidate.publicationAttempts ?? {}).some((platform) => !candidate.publicationTargets!.includes(platform as WorkerPosterPlatform)))) throw malformed();
@@ -236,6 +246,15 @@ function validateStage(value: unknown): void {
   if (stage.status === 'blocked' && stage.block === undefined) throw malformed();
   if (stage.status !== 'blocked' && stage.block !== undefined) throw malformed();
   if (stage.block !== undefined && stage.block !== 'generation_daily_limit' && stage.block !== 'generation_attempt_limit' && stage.block !== 'queue_expired' && stage.block !== 'publication_attempt_limit') throw malformed();
+}
+
+function safePresenterSource(value: unknown): boolean {
+  if (!isPlainRecord(value) || Object.keys(value).some((key) => !['path', 'basename', 'mimeType', 'sha256', 'byteSize'].includes(key))) return false;
+  return typeof value.path === 'string' && isAbsolute(value.path) && value.path.length <= 4_096 && !/[\0-\x1f\x7f]/u.test(value.path)
+    && typeof value.basename === 'string' && /^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$/u.test(value.basename)
+    && ['image/png', 'image/jpeg', 'image/webp'].includes(value.mimeType as string)
+    && typeof value.sha256 === 'string' && /^[a-f0-9]{64}$/u.test(value.sha256)
+    && wholeRange(value.byteSize, 1, 10_000_000);
 }
 
 function isWorkerPosterPlatform(value: unknown): value is WorkerPosterPlatform { return value === 'x' || value === 'bluesky' || value === 'reels'; }

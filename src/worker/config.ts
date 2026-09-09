@@ -21,6 +21,7 @@ export interface WorkerRuntimeConfig {
   readonly generationAttemptLimit: number;
   readonly publicationAttemptLimit: number;
   readonly queueExpirationDays: number;
+  readonly presenterSourcesFile?: string;
 }
 
 /** Validates the intentionally small set of Worker runtime controls. */
@@ -32,7 +33,8 @@ export function createWorkerRuntimeConfig(options: {
   readonly generationAttemptLimit?: number;
   readonly publicationAttemptLimit?: number;
   readonly queueExpirationDays?: number;
-  readonly environment?: Pick<NodeJS.ProcessEnv, 'VIDGEN_WORKER_QUEUE_EXPIRATION_DAYS'>;
+  readonly requirePresenterSourcesFile?: boolean;
+  readonly environment?: Pick<NodeJS.ProcessEnv, 'VIDGEN_WORKER_QUEUE_EXPIRATION_DAYS' | 'VIDGEN_WORKER_PRESENTER_SOURCES_FILE'>;
 } = {}): WorkerRuntimeConfig {
   const stateRoot = options.stateRoot ?? DEFAULT_WORKER_STATE_ROOT;
   if (typeof stateRoot !== 'string' || stateRoot.trim().length === 0 || stateRoot.includes('\0')) {
@@ -47,12 +49,15 @@ export function createWorkerRuntimeConfig(options: {
   const generationAttemptLimit = options.generationAttemptLimit ?? DEFAULT_GENERATION_ATTEMPT_LIMIT;
   const publicationAttemptLimit = options.publicationAttemptLimit ?? DEFAULT_PUBLICATION_ATTEMPT_LIMIT;
   const queueExpirationDays = options.queueExpirationDays ?? queueExpirationFromEnvironment(options.environment ?? process.env);
+  const presenterSourcesFile = (options.environment ?? process.env).VIDGEN_WORKER_PRESENTER_SOURCES_FILE;
   if (!Number.isSafeInteger(maxSeconds) || maxSeconds < 4 || maxSeconds > 20) throw new VidGenError('configuration', 'Worker max seconds must be a whole number from 4 through 20.');
   if (!Number.isSafeInteger(dailyGenerationLimit) || dailyGenerationLimit < 1 || dailyGenerationLimit > 100) throw new VidGenError('configuration', 'Worker daily generation limit must be a whole number from 1 through 100.');
   if (!Number.isSafeInteger(generationAttemptLimit) || generationAttemptLimit < 1 || generationAttemptLimit > 10) throw new VidGenError('configuration', 'Worker generation attempt limit must be a whole number from 1 through 10.');
   if (!Number.isSafeInteger(publicationAttemptLimit) || publicationAttemptLimit < 1 || publicationAttemptLimit > 10) throw new VidGenError('configuration', 'Worker publication attempt limit must be a whole number from 1 through 10.');
   if (!Number.isSafeInteger(queueExpirationDays) || queueExpirationDays < 1 || queueExpirationDays > MAX_WORKER_QUEUE_EXPIRATION_DAYS) throw new VidGenError('configuration', `Worker queue expiration must be a whole number from 1 through ${MAX_WORKER_QUEUE_EXPIRATION_DAYS} days.`);
-  return { stateRoot: resolve(stateRoot), pollIntervalMs, maxSeconds, dailyGenerationLimit, generationAttemptLimit, publicationAttemptLimit, queueExpirationDays };
+  if (options.requirePresenterSourcesFile === true && (presenterSourcesFile === undefined || presenterSourcesFile.trim().length === 0)) throw new VidGenError('configuration', 'Worker generate/live requires VIDGEN_WORKER_PRESENTER_SOURCES_FILE.');
+  if (presenterSourcesFile !== undefined && (presenterSourcesFile.trim().length === 0 || /[\0-\x1f\x7f]/u.test(presenterSourcesFile))) throw new VidGenError('configuration', 'Worker presenter-source manifest path is invalid.');
+  return { stateRoot: resolve(stateRoot), pollIntervalMs, maxSeconds, dailyGenerationLimit, generationAttemptLimit, publicationAttemptLimit, queueExpirationDays, ...(presenterSourcesFile === undefined ? {} : { presenterSourcesFile: presenterSourcesFile.trim() }) };
 }
 
 function queueExpirationFromEnvironment(environment: Pick<NodeJS.ProcessEnv, 'VIDGEN_WORKER_QUEUE_EXPIRATION_DAYS'>): number {

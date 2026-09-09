@@ -10,7 +10,7 @@ import test from 'node:test';
 
 import { createWorkerRuntimeConfig, DEFAULT_WORKER_MAX_SECONDS, DEFAULT_WORKER_POLL_INTERVAL_MS, MAX_WORKER_QUEUE_EXPIRATION_DAYS } from '../../../src/worker/config.ts';
 import { parseWorkerCliArgs, workerHelpText } from '../../../src/worker-cli.ts';
-import { createPosterRunners, runNgestWorker, runNgestWorkerCycle, runWorkerCycle } from '../../../src/worker/runtime.ts';
+import { createPosterRunners, resolvePresenterSource, runNgestWorker, runNgestWorkerCycle, runWorkerCycle } from '../../../src/worker/runtime.ts';
 import { createDiscoveredCandidate, emptyWorkerState, isWorkerCandidateComplete, type WorkerState, WORKER_STATE_FILE, WorkerStateStore } from '../../../src/worker/state.ts';
 import { WEB_MOMENTUM_POLICY_ID } from '../../../src/worker/web-momentum.ts';
 import { parseHeadlineSuccessOutput, runHeadlineHandoff } from '../../../src/worker/headline-handoff.ts';
@@ -21,6 +21,7 @@ import { buildStoryInput } from '../../../src/core/story-input.ts';
 import { VidGenError } from '../../../src/core/error.ts';
 import { SIMPLE_CLIP_FINISHING_POLICY } from '../../../src/integrations/ffmpeg/simple-clip-finisher.ts';
 import { loadNgestVidGenManifestFile } from '../../../src/integrations/ngest/local-manifest-file.ts';
+import { loadPresenterSourcesFile, selectPresenterSource } from '../../../src/worker/presenter-sources.ts';
 import { validManifest } from '../../fixtures/canonical-input.ts';
 
 const at = () => new Date('2026-09-08T12:00:00.000Z');
@@ -30,13 +31,21 @@ test('Worker CLI accepts its isolated modes and bounded controls', () => {
     mode: 'observe', once: true, processExisting: true, maxCandidates: 2, stateRoot: 'temp/worker', pollIntervalMs: 1000,
   });
   assert.equal((parseWorkerCliArgs(['observe']) as { mode: string }).mode, 'observe');
-  const generated = parseWorkerCliArgs(['generate', '--anchor-reference', 'a; $HOME.png', '--anchor-reference', 'b.png', '--font-file', 'font & safe.ttf', '--max-seconds', '12', '--daily-generation-limit', '2', '--generation-attempt-limit', '3']) as { mode: string; maxSeconds: number; anchorReferencePaths: string[]; fontPath: string; dailyGenerationLimit: number; generationAttemptLimit: number };
-  assert.deepEqual(generated, { mode: 'generate', once: false, processExisting: false, maxCandidates: 1, anchorReferencePaths: ['a; $HOME.png', 'b.png'], fontPath: 'font & safe.ttf', maxSeconds: 12, dailyGenerationLimit: 2, generationAttemptLimit: 3 });
-  assert.throws(() => parseWorkerCliArgs(['generate']), /requires one to three/);
+  const previous = process.env.VIDGEN_WORKER_PRESENTER_SOURCES_FILE; process.env.VIDGEN_WORKER_PRESENTER_SOURCES_FILE = 'C:\\assets\\presenters.txt';
+  const generated = parseWorkerCliArgs(['generate', '--font-file', 'font & safe.ttf', '--max-seconds', '12', '--daily-generation-limit', '2', '--generation-attempt-limit', '3']) as { mode: string; maxSeconds: number; fontPath: string; dailyGenerationLimit: number; generationAttemptLimit: number };
+  assert.deepEqual(generated, { mode: 'generate', once: false, processExisting: false, maxCandidates: 1, fontPath: 'font & safe.ttf', maxSeconds: 12, dailyGenerationLimit: 2, generationAttemptLimit: 3 });
+  if (previous === undefined) delete process.env.VIDGEN_WORKER_PRESENTER_SOURCES_FILE; else process.env.VIDGEN_WORKER_PRESENTER_SOURCES_FILE = previous;
+  assert.throws(() => parseWorkerCliArgs(['generate']), /requires --font-file/);
+  assert.throws(() => parseWorkerCliArgs(['generate', '--font-file', 'font']), /PRESENTER_SOURCES_FILE/);
+  assert.throws(() => parseWorkerCliArgs(['generate', '--anchor-reference', 'a']), /Unknown Worker argument/);
   assert.match(workerHelpText, /--once/); assert.match(workerHelpText, /--process-existing/); assert.match(workerHelpText, /--max-candidates/);
-  assert.equal((parseWorkerCliArgs(['generate', '--anchor-reference', 'a', '--font-file', 'font', '--poll-interval-ms', '60000']) as { pollIntervalMs: number }).pollIntervalMs, 60_000);
+  process.env.VIDGEN_WORKER_PRESENTER_SOURCES_FILE = 'C:\\assets\\presenters.txt';
+  assert.equal((parseWorkerCliArgs(['generate', '--font-file', 'font', '--poll-interval-ms', '60000']) as { pollIntervalMs: number }).pollIntervalMs, 60_000);
+  if (previous === undefined) delete process.env.VIDGEN_WORKER_PRESENTER_SOURCES_FILE; else process.env.VIDGEN_WORKER_PRESENTER_SOURCES_FILE = previous;
   assert.throws(() => parseWorkerCliArgs(['generate', '--max-candidates', '0']), /positive whole number/);
-  assert.throws(() => parseWorkerCliArgs(['generate', '--anchor-reference', 'a', '--font-file', 'font', '--poll-interval-ms', '1']), /1000 through/);
+  process.env.VIDGEN_WORKER_PRESENTER_SOURCES_FILE = 'C:\\assets\\presenters.txt';
+  assert.throws(() => parseWorkerCliArgs(['generate', '--font-file', 'font', '--poll-interval-ms', '1']), /1000 through/);
+  if (previous === undefined) delete process.env.VIDGEN_WORKER_PRESENTER_SOURCES_FILE; else process.env.VIDGEN_WORKER_PRESENTER_SOURCES_FILE = previous;
 });
 
 test('Worker runtime configuration defaults under artifacts and rejects unbounded intervals', () => {
@@ -144,6 +153,71 @@ test('ngest --process-existing makes the first snapshot eligible while candidate
     assert.equal(state.candidates['article-2']!.baseline, undefined);
     assert.equal(state.candidates['article-2']!.evaluation.status, 'pending');
     assert.ok(await readFile(store.candidateFixturePath('article-2'), 'utf8'));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('presenter-source manifests are bounded, deterministic, and preserve a persisted choice', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-presenters-'));
+  try {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const paths = await Promise.all(Array.from({ length: 5 }, async (_, index) => { const path = join(root, `presenter-${index}.png`); await writeFile(path, png); return path; }));
+    const manifest = join(root, 'presenters.txt'); await writeFile(manifest, `\n${paths.join('\n')}\n\n`);
+    const sources = await loadPresenterSourcesFile(manifest);
+    assert.equal(sources.length, 5); assert.equal(selectPresenterSource('article-one', sources).path, selectPresenterSource('article-one', sources).path);
+    assert.notEqual(selectPresenterSource('article-one', sources).path, selectPresenterSource('article-two', sources).path);
+    const candidate = admittedCandidate('article-one', 90, at().toISOString());
+    const selected = await resolvePresenterSource(candidate, manifest);
+    const persisted = { ...candidate, presenterSource: selected };
+    await writeFile(manifest, `${paths.slice().reverse().join('\n')}\n`);
+    assert.equal((await resolvePresenterSource(persisted, manifest)).path, selected.path);
+    await rm(selected.path);
+    await assert.rejects(resolvePresenterSource(persisted, manifest), /selected presenter source has changed|source image is missing/);
+    await writeFile(manifest, `relative.png\n`); await assert.rejects(loadPresenterSourcesFile(manifest), /invalid source path/);
+    await writeFile(manifest, `${paths[0]}\u0001\n`); await assert.rejects(loadPresenterSourcesFile(manifest), /invalid source path/);
+    await writeFile(manifest, `${paths[0]}\n${paths[0]}\n`); await assert.rejects(loadPresenterSourcesFile(manifest), /duplicate/);
+    await writeFile(manifest, '\n\n'); await assert.rejects(loadPresenterSourcesFile(manifest), /one through/);
+    await writeFile(manifest, Buffer.alloc(64 * 1024 + 1)); await assert.rejects(loadPresenterSourcesFile(manifest), /regular file within/);
+    await mkdir(join(root, 'not-a-file')); await assert.rejects(loadPresenterSourcesFile(join(root, 'not-a-file')), /regular file within/);
+    await writeFile(manifest, `${join(root, 'not-a-file')}\n`); await assert.rejects(loadPresenterSourcesFile(manifest), /source image/);
+    await writeFile(manifest, `${join(root, 'missing.png')}\n`); await assert.rejects(loadPresenterSourcesFile(manifest), /source image/);
+    const unsupported = join(root, 'unsupported.bin'); await writeFile(unsupported, 'not an image'); await writeFile(manifest, `${unsupported}\n`); await assert.rejects(loadPresenterSourcesFile(manifest), /source image/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('a Worker persists exactly one presenter source before generation spend and reuses it on retry', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-presenter-worker-'));
+  try {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]); const sourcePath = join(root, 'presenter.png'); await writeFile(sourcePath, png);
+    const manifest = join(root, 'presenters.txt'); await writeFile(manifest, `${sourcePath}\n`); const store = new WorkerStateStore(join(root, 'worker')); await store.save({ ...emptyWorkerState(), initialized: true, candidates: { article_1: admittedCandidate('article_1', 90, at().toISOString()) } }); const seen: string[][] = [];
+    const runners = {
+      prepareGeneration: (candidate: ReturnType<typeof admittedCandidate>) => resolvePresenterSource(candidate, manifest),
+      generate: async (_id: string, source?: { path: string }) => { seen.push([source!.path, (await store.load({ recoverInProgress: false })).candidates.article_1!.presenterSource!.path]); if (seen.length === 1) throw new Error('retry'); return artifact(); },
+    };
+    const first = await runWorkerCycle({ store, discoveredCandidateIds: ['article_1'], mode: 'generate', maxCandidates: 1, dailyGenerationLimit: 2, now: at, runners });
+    assert.equal(first.candidates.article_1!.generationAttempts, 1); assert.equal(first.candidates.article_1!.presenterSource!.path, sourcePath);
+    const second = await runWorkerCycle({ store: new WorkerStateStore(join(root, 'worker')), discoveredCandidateIds: ['article_1'], mode: 'generate', maxCandidates: 1, dailyGenerationLimit: 2, now: at, runners });
+    assert.equal(second.candidates.article_1!.generation.status, 'succeeded'); assert.deepEqual(seen, [[sourcePath, sourcePath], [sourcePath, sourcePath]]);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('automatic Worker handoff receives one persisted presenter source', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-presenter-handoff-'));
+  try {
+    const sourcePath = join(root, 'presenter.png'); await writeFile(sourcePath, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    const manifestPath = join(root, 'presenters.txt'); await writeFile(manifestPath, `${sourcePath}\n`); const references: string[][] = [];
+    const state = await runNgestWorkerCycle({ store: new WorkerStateStore(join(root, 'worker')), mode: 'generate', processExisting: true, maxCandidates: 1, dailyGenerationLimit: 2, now: at, presenterSourcesFile: manifestPath, fontPath: 'font.ttf', fetchManifest: async () => validManifest(), runners: { evaluate: async () => evaluation('admitted') }, headlineHandoff: async (input) => { references.push([...input.anchorReferencePaths]); return artifact(input.candidateId); } });
+    assert.deepEqual(references, [[sourcePath]]); assert.equal(state.candidates['article-1']!.presenterSource!.path, sourcePath); assert.equal(state.candidates['article-1']!.generationAttempts, 1);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('a changed persisted presenter source fails before a Worker spends a retry', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-presenter-drift-'));
+  try {
+    const sourcePath = join(root, 'presenter.png'); await writeFile(sourcePath, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])); const manifestPath = join(root, 'presenters.txt'); await writeFile(manifestPath, `${sourcePath}\n`);
+    const selected = await resolvePresenterSource(admittedCandidate('article_1', 90, at().toISOString()), manifestPath); await rm(sourcePath);
+    const store = new WorkerStateStore(join(root, 'worker')); await store.save({ ...emptyWorkerState(), initialized: true, candidates: { article_1: { ...admittedCandidate('article_1', 90, at().toISOString()), presenterSource: selected } } }); let generated = 0;
+    await assert.rejects(runWorkerCycle({ store, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at, runners: { prepareGeneration: (candidate) => resolvePresenterSource(candidate, manifestPath), generate: async () => { generated += 1; return artifact(); } } }), /presenter source/);
+    const state = await store.load({ recoverInProgress: false }); assert.equal(generated, 0); assert.equal(state.candidates.article_1!.generationAttempts, undefined); assert.deepEqual(state.generationCounts, {});
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
