@@ -1,0 +1,67 @@
+TASK: Correction 6 / P3 — Parallel Web Momentum and calibration
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Add the one-call Parallel Search gate and deterministic `web-momentum` v1 evidence/scoring used by Worker `observe` mode. Parallel remains Worker-only and must not become creative grounding.
+
+Read docs/integrations/parallel.md, docs/worker.md, current Parallel Search v1 documentation, P1-P2 Worker state/discovery code, and secret/network-safety patterns before editing.
+
+PARALLEL REQUEST CONTRACT
+
+- Use a thin built-in-fetch adapter for fixed `POST https://api.parallel.ai/v1/search`; do not add a provider SDK or package dependency.
+- Authenticate only with runtime `PARALLEL_API_KEY`. Support bounded `PARALLEL_TIMEOUT_MS`; reject redirects, oversized/malformed responses, unsafe URLs, and unsuccessful responses without leaking key/raw body.
+- One Article evaluation makes at most one Search request and has no hidden provider retry loop. Completed matching evaluations are always reused.
+- Use `mode: "fast"`, `advanced_settings.max_results: 10`, `max_chars_total: 12000`, and `advanced_settings.source_policy.after_date` equal to the UTC date three calendar days before evaluation. Do not hard-filter domains or set a location.
+- Build one self-contained objective from governed headline/summary/source asking specifically for recent independent coverage, reactions, analysis, and follow-up about this event while rejecting generic background popularity.
+- Send 2-3 deterministic concise queries derived from significant headline terms, including reaction and analysis angles when they remain distinct.
+
+WEB MOMENTUM V1
+
+Normalize at most ten results to bounded HTTP(S) URL, title, domain, optional publish date, and excerpt hash/features; do not persist unrestricted excerpts or raw Parallel responses.
+
+Derive a deterministic headline event signature from unique significant normalized terms with a fixed stopword policy. A result is event-matched only when its title/excerpts contain at least two signature terms and at least 35% of the signature; for a two-term signature require both. Fail safely when no meaningful signature can be formed.
+
+Score 0-100 as:
+- coverage breadth, max 40: `round(40 * min(unique independent event-matched domains, 8) / 8)`;
+- event saturation, max 25: `round(25 * min(event-matched results, 8) / 8)`;
+- freshness, max 20: average event-matched publish-date weight times 20, using UTC calendar-day ages 0/1/2/3 -> 1/0.75/0.5/0.25 and missing/older -> 0;
+- reaction/follow-up, max 15: `round(15 * min(unique independent event-matched domains carrying a fixed reaction/analysis/follow-up signal, 3) / 3)`.
+
+The original publisher domain may contribute to event saturation/freshness but not independent breadth or reaction-domain counts. Clamp the component sum to 0-100.
+
+- Require explicit bounded `VIDGEN_WORKER_MOMENTUM_THRESHOLD` (0-100) for decisions and support a bounded daily evaluation-count ceiling. Budget exhaustion never falls through to generation.
+- Persist metric/version, policy identity, evaluatedAt, safe Parallel search/session identity, normalized result evidence, component points, score, threshold, and qualified/skipped decision.
+- A failed/uncertain Parallel attempt remains non-qualified and is not automatically retried under the same evaluation policy.
+- `observe` evaluates/persists only; it must never invoke VidGen generation or Poster.
+
+CALIBRATION
+
+Add a minimal local way to attach owner `generate|skip` labels to evaluated Articles and report current-version labeled count, confusion matrix, precision, and recall. Human labels never change the stored automatic decision. Keep this tooling filesystem-local and side-effect free.
+
+PROOF
+
+Tests must prove exact request endpoint/headers/body/freshness policy, one-call reuse, no hidden retries, timeout/redirect/response bounds, secret safety, result normalization, event matching, each scoring component and score bounds, source-domain exclusion, threshold decisions, daily budget blocking, observe-only behavior, and calibration metrics.
+
+Run focused Parallel/Worker tests, `npm run check`, and `git diff --check`.
+
+Downstream-required capability -> owning implementation/export -> focused proof:
+
+one bounded web evidence request -> Parallel Search adapter -> request/network/error tests.
+
+reproducible admission signal -> web-momentum v1 scorer/evidence artifact -> deterministic scoring fixtures.
+
+calibration proof -> Worker label/report tooling -> confusion/precision/recall tests.
+
+NON-GOALS
+
+Do not use Gemini/Agent Platform to score hype, call Parallel Extract/Task/Responses/Monitor, perform creative research, alter StoryInput/ClipPlan, generate video, publish, or modify VidGen Poster.
+
+FINAL RESPONSE
+
+Report the exact Parallel request policy, Web Momentum v1 formula, durable evidence, cost guards, calibration surface, tests, and unchanged 0.6.5 state.
