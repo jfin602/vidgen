@@ -8,7 +8,7 @@ VidGen turns explicitly submitted governed news stories into self-contained, pos
 
 Ngest supplies a governed, pre-curated feed of valid production candidates. The VidGen generation engine does not perform another newsworthiness, ranking, clustering, or story-selection pass. Phase 7 introduces a separate Worker that may decline automatic generation for a newly discovered candidate based on bounded Web Momentum and cost policy; that decision is orchestration admission, not a change to ngest source trust or Article validity.
 
-Phase 6 implemented the short presenter-led headline path with deterministic headline/source lower third and paired metadata JSON while preserving the previously implemented template-driven cinematic pipeline. Phase 7 now focuses on live Worker orchestration around those proven CLI production boundaries.
+Phase 6 implemented the short presenter-led headline path with deterministic headline/source lower third and paired metadata JSON while preserving the previously implemented template-driven cinematic pipeline. Phase 7 implements Worker orchestration around those CLI production boundaries; live capability qualification remains separate.
 
 ## Implementation status
 
@@ -35,7 +35,7 @@ Implemented foundation:
 - `assembly-run.json`, strict `final-clip.json`, post-render technical validation, and atomic `final/clip.mp4` publication;
 - fail-closed handling for unsupported ngest continuation in the original Phase 1 client.
 
-Phase 3 implemented the cinematic creative-planning stage. Phase 4 implemented cinematic generated-media realization and story-local raw media/provenance. Phase 5 implemented standardized asset qualification plus deterministic FFmpeg assembly and final-clip provenance. `c5-optional-assets` subsequently made intro and outro independently optional without placeholders. The deployment VPS has qualified the required FFmpeg/FFprobe capabilities, while one complete owner-media generated cinematic story render and playback review remain unclaimed. Phase 6 implementation has reached the 0.6.5 baseline: the simpler StoryInput-based presenter-headline path uses a configurable 4-20 second maximum-duration ceiling and paired MP4/JSON output while preserving the cinematic path. `c6-agent-platform` makes Gemini Enterprise Agent Platform the sole supported Google model platform with capability-specific authentication. `c5-config-fix` remains owner-approved but deferred; Phase 7 now owns the planned Worker for live polling, Web Momentum admission, durable orchestration, generation invocation, and publishing fan-out.
+Phase 3 implemented the cinematic creative-planning stage. Phase 4 implemented cinematic generated-media realization and story-local raw media/provenance. Phase 5 implemented standardized asset qualification plus deterministic FFmpeg assembly and final-clip provenance. `c5-optional-assets` subsequently made intro and outro independently optional without placeholders. The deployment VPS has qualified the required FFmpeg/FFprobe capabilities, while one complete owner-media generated cinematic story render and playback review remain unclaimed. Phase 6 implementation has reached the 0.6.5 baseline: the simpler StoryInput-based presenter-headline path uses a configurable 4-20 second maximum-duration ceiling and paired MP4/JSON output while preserving the cinematic path. `c6-agent-platform` makes Gemini Enterprise Agent Platform the sole supported Google model platform with capability-specific authentication. `c5-config-fix` remains owner-approved but deferred; Phase 7 implements the Worker for live polling, Web Momentum admission, durable orchestration, generation invocation, and publishing fan-out. Its live ngest, Parallel, generation, publication, render, and playback evidence remains unqualified.
 
 ## Core architectural standards
 
@@ -56,7 +56,7 @@ Conceptually:
 
 Ngest decides which Articles are trusted, governed production candidates. A supplied Article does not need a second source-trust, moderation, or editorial-validity pass inside VidGen.
 
-The planned Phase 7 Worker may separately decide whether a newly discovered governed candidate is admitted to automatic generation. That decision is based on bounded Web Momentum evidence and operator cost policy. It must not be implemented inside StoryInput, ClipPlan, presenter-copy generation, or any VidGen provider adapter.
+The Phase 7 Worker may separately decide whether a newly discovered governed candidate is admitted to automatic generation. That decision is based on bounded Web Momentum evidence and operator cost policy. It must not be implemented inside StoryInput, ClipPlan, presenter-copy generation, or any VidGen provider adapter.
 
 VidGen itself generates stories explicitly submitted to its production CLI and does not know about Parallel or Worker admission thresholds.
 

@@ -1,6 +1,6 @@
 # VidGen Worker
 
-Status: PLANNED / PHASE 7 CONTRACT
+Status: IMPLEMENTED / PHASE 7 WORKER; live capabilities remain unqualified
 
 ## Purpose
 
@@ -205,7 +205,7 @@ Treat ngest payloads, Parallel responses, URLs, subprocess output, and persisted
 
 ## Evidence boundaries
 
-Mocked tests do not prove live ngest polling, Parallel search, provider generation, or social publication.
+The deterministic Worker/state-machine implementation is covered by tests. Those tests do not prove live ngest polling, Parallel search, provider generation, or social publication.
 
 Phase 7 closeout must distinguish:
 - deterministic Worker/state-machine proof;

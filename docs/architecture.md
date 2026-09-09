@@ -67,7 +67,7 @@ FFmpeg runs locally. Managed media providers supply their own generation infrast
 
 ## Worker orchestration boundary
 
-The planned Phase 7 Worker is an orchestration layer, not a third creative pipeline.
+The implemented Phase 7 Worker is an orchestration layer, not a third creative pipeline; its live integrations remain separately unqualified.
 
 It owns:
 - polling live ngest through the existing authenticated boundary;
@@ -117,7 +117,7 @@ The VidGen generation engine must not:
 - recreate ngest moderation, duplicate, eligibility, Profile filtering, or ordering logic;
 - connect directly to ngest persistence.
 
-The planned Worker may make a separate automatic-production admission decision using bounded Web Momentum and cost policy. That decision must remain outside the generation engine and must not reinterpret ngest trust or moderation semantics.
+The Worker may make a separate automatic-production admission decision using bounded Web Momentum and cost policy. That decision must remain outside the generation engine and must not reinterpret ngest trust or moderation semantics.
 
 See docs/integrations/ngest.md.
 

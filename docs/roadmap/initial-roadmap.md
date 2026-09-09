@@ -333,7 +333,7 @@ See docs/integrations/google-video.md.
 
 ## Phase 7 — VidGen Worker and automated production orchestration
 
-Status: PLANNED / NEXT PHASE
+Status: IMPLEMENTED / DETERMINISTIC CLOSEOUT; live capability qualification pending
 
 Goal:
 Run a long-lived, cost-aware orchestration process that discovers new governed ngest Articles, evaluates current web momentum with one bounded Parallel Search operation, admits only qualifying candidates to automatic generation, invokes the existing VidGen CLI, then independently publishes completed media through VidGen Poster.
@@ -407,4 +407,4 @@ See docs/worker.md and docs/integrations/parallel.md.
 
 ## Immediate next action
 
-Phase 7 is the VidGen Worker and automated production orchestration phase. Plan and implement it without moving Parallel admission into VidGen creative contracts or moving platform publishing out of VidGen Poster.
+Qualify Phase 7 capabilities independently: live ngest polling, one bounded Parallel Search, owner-calibrated admission, generation/render, each Poster platform, and human playback. Do not infer a live capability from deterministic Worker tests or another provider/platform result.

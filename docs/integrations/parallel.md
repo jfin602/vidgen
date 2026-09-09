@@ -1,6 +1,6 @@
 # Parallel Integration
 
-Status: PLANNED / PHASE 7 WORKER INTEGRATION
+Status: IMPLEMENTED / PHASE 7 WORKER INTEGRATION; live Search remains unqualified
 
 ## Purpose
 
