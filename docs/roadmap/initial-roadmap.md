@@ -8,7 +8,7 @@ Phase 4 owner closeout: 0.4.4
 Phase 5 owner closeout: 0.5.3
 Current baseline: 0.6.5
 
-This roadmap was rebased on 2026-09-05 after Phase 1. The original edition/newscast phases were intentionally removed in favor of a single-story clip engine. On 2026-09-06 the owner prioritized a still simpler presenter-headline production path before live fan-out while explicitly preserving the implemented cinematic template pipeline.
+This roadmap was rebased on 2026-09-05 after Phase 1. The original edition/newscast phases were intentionally removed in favor of a single-story clip engine. On 2026-09-06 the owner prioritized a simpler presenter-headline production path while preserving the implemented cinematic template pipeline. On 2026-09-08 the owner promoted Phase 7 into the VidGen Worker: live ngest polling, Parallel Web Momentum admission, cost-aware generation orchestration, durable recovery, and VidGen Poster fan-out.
 
 ## Cross-phase MVP constraints
 
@@ -17,8 +17,9 @@ The roadmap assumes:
 - manually invoked CLI development first;
 - one selected story at a time until the video path is proven;
 - manual sample input using VidGen's validated post-adapter input shape;
-- each supplied ngest story is already production-worthy;
-- no VidGen ranking, clustering, or story-selection stage;
+- each supplied ngest Article is a governed production candidate;
+- no ranking, clustering, or story-selection stage inside the VidGen generation engine;
+- Phase 7 Worker automatic-production admission is a separate orchestration/cost decision and does not change ngest candidate validity;
 - one story remains one independent production boundary;
 - StoryInput is the shared boundary for downstream production;
 - the Phase 6 simple path branches directly from StoryInput and does not require AssemblyTemplate, ClipPlan, cinematic GeneratedMediaUnit resolution, or cinematic AssemblyPlan;
@@ -330,54 +331,75 @@ Required direction:
 
 See docs/integrations/google-video.md.
 
-## Phase 7 — Live ngest fan-out and operational hardening
+## Phase 7 — VidGen Worker and automated production orchestration
 
-Status: DEFERRED UNTIL AFTER PHASE 6
+Status: PLANNED / NEXT PHASE
 
 Goal:
-Connect the proven production paths back to live curated ngest input and process supplied stories independently through the shared CanonicalInput/StoryInput boundary.
+Run a long-lived, cost-aware orchestration process that discovers new governed ngest Articles, evaluates current web momentum with one bounded Parallel Search operation, admits only qualifying candidates to automatic generation, invokes the existing VidGen CLI, then independently publishes completed media through VidGen Poster.
 
 Conceptual contract:
 
-    live curated ngest feed
-              |
-              v
-      CanonicalInput
-          /   |   \
-         /    |    \
-        v     v     v
-     story A story B story C
-        |     |     |
-        + independent selected production paths
+    live governed ngest
+            |
+            v
+      VidGen Worker
+      poll + discover
+            |
+            v
+     Parallel Search
+     Web Momentum vN
+            |
+      score >= threshold?
+        /          \
+      no            yes
+      |              |
+    skip         VidGen CLI
+                     |
+                     v
+                 final media
+                     |
+                     v
+              VidGen Poster CLI
+                /    |    \
+               X  Bluesky Reels
 
-Likely concerns:
-- resume or complete `c5-config-fix` if the transitional Distribution-v1 development adapter is still needed;
-- complete live authentication/integration qualification of the applicable ngest adapter;
-- story fan-out without editorial selection;
-- sequential processing first unless workload evidence justifies concurrency;
-- failure isolation between stories;
-- retries/resume;
-- provider-job/asset recovery;
-- idempotency and duplicate-production policy;
-- artifact retention;
-- CLI observability;
-- provider spend limits;
-- secret-leak review;
-- end-to-end provenance;
-- add bounded publisher-page retrieval fallback only if real governed stories demonstrate insufficient normalized context;
-- retain separate runtime qualification evidence for both the simple and cinematic paths rather than treating one as proof of the other.
+Required direction:
+- preserve ngest as authority for governed candidate validity, source trust, moderation, duplicate handling, Profile filtering, and ordering;
+- keep automatic-production admission in the Worker rather than in CanonicalInput, StoryInput, ClipPlan, presenter-copy generation, or provider adapters;
+- use Parallel only for bounded Worker-level Web Momentum evidence; do not use that evidence as creative generation grounding in this phase;
+- perform at most one Parallel Search request per Article evaluation identity and persist versioned normalized evidence/decision state;
+- calibrate Web Momentum in observe mode against human generate/skip labels before autonomous live mode is considered qualified;
+- favor precision over recall because the gate exists primarily to prevent unnecessary generation spend;
+- support observe, generate, and live operating modes;
+- on normal first startup, establish the current feed as baseline rather than treating every existing Article as newly discovered work; any backfill must be explicit;
+- start with sequential/single-flight expensive generation;
+- preserve durable per-Article state across restarts so successful evaluation, generation, or per-platform publication stages are not repeated because a later stage failed;
+- keep evaluation, generation, and publication idempotency as separate boundaries rather than one generic processed flag;
+- invoke VidGen through its CLI boundary rather than importing internal engine modules;
+- invoke VidGen Poster separately per video-capable platform that passes doctor; the Worker owns fan-out while Poster remains authoritative for platform authentication, validation, upload, duplicate protection, and receipts;
+- do not use VidGen headline-post as the autonomous orchestration primitive; generate first, then publish independently so platform retries cannot force regeneration;
+- if Parallel evaluation is unavailable or its configured budget is exhausted, fail closed on new generation spend and retain retry/block state;
+- if VidGen generation fails, retain the successful admission decision and retry only generation under bounded policy;
+- if one platform fails, do not regenerate media or repost platforms already known successful; retry only the unresolved platform subject to Poster duplicate/uncertain-publication semantics;
+- keep Worker secrets, including PARALLEL_API_KEY, out of CanonicalInput, StoryInput, prompts, generated artifacts, publication receipts, logs, and public errors;
+- require separate real evidence for ngest polling, Parallel evaluation, VidGen generation, and each live publication path rather than inferring one from mocked tests or another capability.
+
+Initial implementation may use filesystem-backed Worker state. Databases, distributed queues, and multi-worker coordination remain deferred until workload evidence demonstrates a need.
+
+See docs/worker.md and docs/integrations/parallel.md.
 
 ## Deferred until evidence requires them
 
 - Remotion or another programmable compositor;
 - 16:9 and 1:1 output;
-- general web research beyond a future bounded publisher fallback;
+- creative-generation web research beyond a future bounded publisher fallback; Worker-level Parallel Web Momentum is Phase 7 scope;
 - approval workflows;
 - global asset cache;
 - sophisticated template inheritance/editor tooling;
 - database persistence;
-- queues/workers/distributed orchestration;
-- automated publishing destinations;
+- distributed queues, multi-worker coordination, and horizontal Worker scaling;
+- additional publishing destinations beyond currently supported VidGen Poster video platforms;
 - public VidGen API/UI;
 - multi-tenant behavior;
 - future non-Google provider implementations;
@@ -385,4 +407,4 @@ Likely concerns:
 
 ## Immediate next action
 
-Phase 7 is live ngest fan-out and operational hardening. Keep its orchestration, retrieval, queue, database, and publishing scope separate from the completed Agent Platform correction.
+Phase 7 is the VidGen Worker and automated production orchestration phase. Plan and implement it without moving Parallel admission into VidGen creative contracts or moving platform publishing out of VidGen Poster.
