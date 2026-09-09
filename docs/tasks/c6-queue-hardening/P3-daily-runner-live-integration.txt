@@ -1,0 +1,41 @@
+TASK: Correction 6 / P3 — Daily runner and live integration
+
+- Recommended configuration: `Terra High`.
+- Required unchanged project version: `0.6.5`.
+
+Objective
+
+Integrate the P1 discovery backlog and P2 expiration/daily-slot policy into the long-running Worker so it continuously discovers and scores new stories while capped, then produces and publishes the best eligible queued story on the first normal cycle after a generation slot becomes available.
+
+Required behavior
+
+- Re-read current P1/P2 plus c6-runner-queue implementation before editing and preserve its global <=1 active Worker-managed generation invariant.
+- Every poll acquires one coherent ngest snapshot for discovery, persists unseen Articles, advances bounded durable evaluation/admission work, applies expiration, and re-derives queue priority before any generation selection.
+- Hitting the one-per-UTC-day default generation limit must not stop polling, discovery, evaluation, admission, queue growth, or reordering.
+- On the first polling cycle after a UTC-day reset, select the highest-scored still-unexpired, not-already-generated eligible candidate and start at most one generation. "Immediate" means the next normal Worker poll; do not add a second scheduler or timer subsystem.
+- After any completed generation, re-enter normal polling/discovery/queue ordering before a later generation so newer higher-scored work can overtake remaining backlog.
+- --once remains bounded to one coherent snapshot/evaluation pass and at most one generation start.
+- Generate mode never publishes. Live mode publishes a successfully generated or validly reused artifact through the existing ready Poster targets without regenerating it.
+- Poster readiness failure must not create duplicate generation. Partial/failed publication retries reuse successful media and remain independent from the next day's generation-slot accounting.
+- Existing prior-production articleId dedupe and under-lock recheck must remain effective.
+- Preserve Parallel evaluation budget/reuse, generation attempts, queue tie-break ordering, baseline behavior, artifact verification, shell-free child invocation, secret safety, and package version 0.6.5. Do not create package-lock.json.
+
+Regression proof
+
+Cover an end-to-end deterministic multi-day scenario:
+1. initial baseline;
+2. new Articles arrive and are evaluated;
+3. one highest-score video consumes today's generation slot;
+4. more Articles arrive afterward and continue to build/reorder the queue;
+5. some queued work expires;
+6. UTC day rolls over;
+7. the highest-scored remaining eligible item generates on the next poll;
+8. live publication uses that exact artifact once while partial publication retry cannot trigger regeneration.
+
+Also cover duplicate Worker contention to ensure the prerequisite global generation guard still prevents overlap.
+
+Run npm run test:worker, npm run test:app, npm run check, and git diff --check. Do not claim live provider/platform proof from mocked tests.
+
+Non-goals
+
+Do not change Web Momentum v1 scoring/threshold, add a new scheduler service, change ngest server-side result limits, add distributed/multi-host scheduling, or modify VidGen Poster platform adapters.
