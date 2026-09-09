@@ -1,0 +1,32 @@
+TASK: Correction 6 / P2 — Verified prior-production reuse
+
+- Recommended configuration: `Terra High`.
+- Required unchanged project version: `0.6.5`.
+
+Objective
+
+Prevent an admitted Article from entering generation work when VidGen already has a valid completed headline video for the same governed Article identity, and reuse that verified production instead of spending on duplicate generation.
+
+Required behavior
+
+- Re-read the current queue/state implementation from P1 and the simple headline sidecar/artifact contracts before editing.
+- Use governed ngest articleId as the primary production-deduplication identity. Do not dedupe by headline text, URL text, or provider request identity.
+- Before an admitted candidate becomes generation-eligible, check for an existing completed production for that articleId.
+- Treat an existing production as reusable only after validating the headline sidecar contract and verifying the referenced final MP4 is present, regular, non-empty, and matches the recorded final hash. Untrusted, malformed, incomplete, missing, or hash-mismatched artifacts must not be promoted to completed generation.
+- When a valid existing production is found, persist the candidate as generation-succeeded with a verified WorkerGeneratedArtifact-compatible handoff so generate mode does not regenerate it and live mode can continue to publication normally.
+- The lookup must not depend only on one transient process's memory or the current ngest snapshot. Successful future Worker generations must become discoverable by later Worker runs, including across restart.
+- Reconcile the repository's existing simple-headline production artifacts sufficiently to recognize pre-correction valid clips instead of requiring every historical clip to be regenerated. Keep traversal/inspection bounded and fail safely on malformed artifacts.
+- Keep production lookup and durable metadata free of secrets and raw provider payloads.
+- Close the duplicate race at the capability boundary: expose a lookup/recheck that the later generation-exclusion prompt can invoke immediately before spending or spawning.
+- Preserve queue score ordering for candidates that genuinely still require generation.
+- Keep package.json at 0.6.5 and do not create package-lock.json.
+
+Focused proof
+
+Add tests for valid prior-production adoption, same-headline/different-articleId non-deduplication, malformed or missing media rejection, hash mismatch rejection, restart reuse, and a successful reused artifact remaining available to live publication without invoking generation.
+
+Run focused Worker/headline artifact tests plus the broader Worker regression suite.
+
+Non-goals
+
+Do not change ngest duplicate policy, Web Momentum scoring, creative generation output, or Poster duplicate/publication semantics. Do not solve cross-process mutual exclusion in this prompt; P3 owns that.
