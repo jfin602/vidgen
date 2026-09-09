@@ -18,6 +18,7 @@ import { acquireWorkerGenerationExclusion } from '../../../src/worker/generation
 import { findVerifiedPriorProduction } from '../../../src/worker/prior-production.ts';
 import { buildCanonicalInput } from '../../../src/core/canonical-input.ts';
 import { buildStoryInput } from '../../../src/core/story-input.ts';
+import { VidGenError } from '../../../src/core/error.ts';
 import { SIMPLE_CLIP_FINISHING_POLICY } from '../../../src/integrations/ffmpeg/simple-clip-finisher.ts';
 import { loadNgestVidGenManifestFile } from '../../../src/integrations/ngest/local-manifest-file.ts';
 import { validManifest } from '../../fixtures/canonical-input.ts';
@@ -553,6 +554,65 @@ test('generation exclusion keeps competing Workers queued without spending and r
   } finally {
     firstMayFinish.resolve(); await firstRun?.catch(() => undefined); await rm(root, { recursive: true, force: true });
   }
+});
+
+test('the long-running ngest Worker retries a transient poll at the configured interval without duplicate discovery', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-daemon-'));
+  try {
+    const sleeps: number[] = []; let polls = 0; const stop = new Error('stop daemon');
+    await assert.rejects(runNgestWorker({
+      store: new WorkerStateStore(root), mode: 'observe', maxCandidates: 1, pollIntervalMs: 1_234,
+      fetchManifest: async () => { polls += 1; if (polls === 1) throw new VidGenError('transport', 'Ngest is unavailable.'); return validManifest(); },
+      sleep: async (milliseconds) => { sleeps.push(milliseconds); if (sleeps.length === 2) throw stop; },
+    }), stop);
+    assert.equal(polls, 2); assert.deepEqual(sleeps, [1_234, 1_234]);
+    assert.deepEqual(Object.keys((await new WorkerStateStore(root).load()).candidates), ['article-1', 'article-2']);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('configuration, authentication, and malformed durable state remain fatal to the daemon', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-daemon-'));
+  try {
+    let sleeps = 0; const sleep = async () => { sleeps += 1; };
+    await assert.rejects(runNgestWorker({ store: new WorkerStateStore(join(root, 'configuration')), mode: 'observe', maxCandidates: 1, pollIntervalMs: 1_000, environment: {}, sleep }), /configuration/);
+    await assert.rejects(runNgestWorker({ store: new WorkerStateStore(join(root, 'authentication')), mode: 'observe', maxCandidates: 1, pollIntervalMs: 1_000, fetchManifest: async () => { throw new VidGenError('ngest_authentication', 'Ngest authentication failed.'); }, sleep }), /authentication/);
+    await mkdir(join(root, 'state'), { recursive: true }); await writeFile(join(root, 'state', WORKER_STATE_FILE), '{}');
+    await assert.rejects(runNgestWorker({ store: new WorkerStateStore(join(root, 'state')), mode: 'observe', maxCandidates: 1, pollIntervalMs: 1_000, fetchManifest: async () => validManifest(), sleep }), /Worker state is malformed/);
+    assert.equal(sleeps, 0);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('daily live polling keeps discovering while capped, expires stale queue work, then publishes the next UTC-day winner once', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-daily-')); let clock = new Date('2026-09-08T00:00:00.000Z');
+  try {
+    const store = new WorkerStateStore(root); const generated: string[] = []; const posts: Array<readonly [string, string, string]> = [];
+    const snapshot = (ids: readonly string[]) => {
+      const manifest = validManifest(); const source = manifest.articles[0]!;
+      manifest.articles = ids.map((id) => ({ ...source, articleId: id, headline: `Headline ${id}`, originalUrl: `https://publisher.example.test/${id}` }));
+      return manifest;
+    };
+    const scores: Record<string, number> = { expired: 80, today: 100, tomorrow: 95 };
+    const runners = {
+      evaluate: async (id: string) => scoredEvaluation(scores[id]!, clock.toISOString()),
+      generate: async (id: string) => { generated.push(id); return artifact(id); },
+      doctor: async (platform: string) => { if (platform === 'bluesky') throw new Error('not ready'); },
+      caption: async () => 'caption',
+      publish: async (id: string, platform: string, generatedArtifact: { finalPath: string }) => {
+        posts.push([id, platform, generatedArtifact.finalPath]); if (id === 'today' && platform === 'reels') throw new Error('temporary publication failure');
+      },
+    };
+    const cycle = async (ids: readonly string[]) => runNgestWorkerCycle({ store, mode: 'live', processExisting: false, maxCandidates: 2, dailyGenerationLimit: 1, queueExpirationDays: 1, now: () => clock, fetchManifest: async () => snapshot(ids), runners });
+
+    await cycle(['baseline']);
+    clock = new Date('2026-09-08T01:00:00.000Z'); await cycle(['baseline', 'expired', 'today']);
+    clock = new Date('2026-09-08T23:00:00.000Z'); const capped = await cycle(['baseline', 'expired', 'today', 'tomorrow']);
+    assert.deepEqual(generated, ['today']); assert.equal(capped.candidates.tomorrow!.generation.block, 'generation_daily_limit');
+    clock = new Date('2026-09-09T01:00:00.000Z'); const nextDay = await cycle(['baseline', 'expired', 'today', 'tomorrow']);
+    assert.deepEqual(generated, ['today', 'tomorrow']); assert.equal(nextDay.candidates.expired!.generation.block, 'queue_expired');
+    assert.equal(nextDay.candidates.tomorrow!.generation.status, 'succeeded'); assert.equal(nextDay.candidates.tomorrow!.publication.x!.status, 'succeeded');
+    assert.deepEqual(posts.filter(([id, platform]) => id === 'today' && platform === 'x'), [['today', 'x', artifact('today').finalPath]]);
+    assert.equal(posts.filter(([id, platform]) => id === 'tomorrow' && platform === 'x').length, 1);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test('an existing generation guard fails closed without spending or starting a candidate', async () => {

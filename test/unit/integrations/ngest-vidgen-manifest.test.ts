@@ -122,7 +122,7 @@ test('ngest Distribution bounds each request with a timeout and keeps secrets ou
     }, async (baseUrl) => {
       await assert.rejects(fetchNgestVidGenManifestPage(environment(baseUrl)), (error: unknown) => {
         assert.equal(String(error).includes(bearer), false);
-        return error instanceof VidGenError && error.code === 'ngest_http';
+        return error instanceof VidGenError && error.code === 'transport';
       });
     });
   });

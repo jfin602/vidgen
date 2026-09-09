@@ -1,4 +1,4 @@
-import { VidGenError } from '../core/error.ts';
+import { VidGenError, isVidGenError } from '../core/error.ts';
 import { DEFAULT_HEADLINE_ARTIFACTS_ROOT } from '../app/headline-workflow.ts';
 import { buildCanonicalInput } from '../core/canonical-input.ts';
 import { buildOneArticleFixture } from '../app/sample-story-fixture.ts';
@@ -166,10 +166,20 @@ export async function runNgestWorkerCycle(options: NgestWorkerCycleOptions): Pro
 export async function runNgestWorker(options: NgestWorkerRunOptions): Promise<WorkerState> {
   const sleep = options.sleep ?? ((milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
   for (;;) {
-    const state = await runNgestWorkerCycle(options);
-    if (options.once) return state;
+    try {
+      const state = await runNgestWorkerCycle(options);
+      if (options.once) return state;
+    } catch (error) {
+      // Only a transport that never yielded a coherent snapshot is safe to retry.
+      if (options.once || !isRetryablePollFailure(error)) throw error;
+    }
     await sleep(options.pollIntervalMs);
   }
+}
+
+/** Authentication, configuration, malformed snapshots, and durable state failures stay fatal. */
+function isRetryablePollFailure(error: unknown): boolean {
+  return isVidGenError(error) && (error.code === 'transport' || error.code === 'ngest_timeout');
 }
 
 async function evaluateCandidate(state: WorkerState, candidate: WorkerCandidateState, runners: WorkerStageRunners, store: WorkerStateStore, now: () => Date): Promise<{ state: WorkerState; didWork: boolean }> {

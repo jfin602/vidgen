@@ -125,6 +125,9 @@ async function fetchDistributionPage(url: URL, config: NgestVidGenRuntimeConfig)
     throw new VidGenError('ngest_authentication', 'Ngest Distribution authentication or authorization failed.');
   }
   if (!response.ok) {
+    if (response.status === 408 || response.status === 429 || response.status >= 500) {
+      throw new VidGenError('transport', 'Ngest Distribution endpoint is temporarily unavailable.');
+    }
     throw new VidGenError('ngest_http', 'Ngest Distribution endpoint returned an unsuccessful response.');
   }
   let payload: unknown;
