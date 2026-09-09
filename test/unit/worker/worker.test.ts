@@ -22,6 +22,7 @@ import { VidGenError } from '../../../src/core/error.ts';
 import { SIMPLE_CLIP_FINISHING_POLICY } from '../../../src/integrations/ffmpeg/simple-clip-finisher.ts';
 import { loadNgestVidGenManifestFile } from '../../../src/integrations/ngest/local-manifest-file.ts';
 import { loadPresenterSourcesFile, selectPresenterSource } from '../../../src/worker/presenter-sources.ts';
+import { formatWorkerLogEvent } from '../../../src/worker/logging.ts';
 import { validManifest } from '../../fixtures/canonical-input.ts';
 
 const at = () => new Date('2026-09-08T12:00:00.000Z');
@@ -153,6 +154,28 @@ test('ngest --process-existing makes the first snapshot eligible while candidate
     assert.equal(state.candidates['article-2']!.baseline, undefined);
     assert.equal(state.candidates['article-2']!.evaluation.status, 'pending');
     assert.ok(await readFile(store.candidateFixturePath('article-2'), 'utf8'));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('Worker verbose is isolated to long-running modes and NDJSON stays bounded and safe', () => {
+  assert.equal((parseWorkerCliArgs(['observe', '--verbose']) as { verbose?: true }).verbose, true);
+  assert.throws(() => parseWorkerCliArgs(['observe', '--verbose', '--verbose']), /must not be repeated/);
+  assert.match(workerHelpText, /--verbose/);
+  assert.throws(() => parseWorkerCliArgs(['label', 'article-1', 'generate', '--verbose']), /label\/report accepts only/);
+  const line = formatWorkerLogEvent({ timestamp: at().toISOString(), level: 'info', event: 'candidate_discovered', fields: { article_id: 'article-1', secret: 'Bearer abc\u001b[2J https://private.example' } });
+  assert.doesNotMatch(line, /Bearer|\u001b|https:/); assert.ok(Buffer.byteLength(line) <= 2_048); assert.deepEqual(JSON.parse(line), { timestamp: at().toISOString(), level: 'info', event: 'candidate_discovered', fields: { article_id: 'article-1' } });
+});
+
+test('Worker logging starts before polling and logger failures cannot alter durable work', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-log-'));
+  try {
+    const events: string[] = [];
+    await runNgestWorker({ store: new WorkerStateStore(root), mode: 'observe', once: true, maxCandidates: 1, pollIntervalMs: 1_000, now: at, logger: { emit: (event) => events.push(event.event) }, fetchManifest: async () => { assert.equal(events[0], 'worker_started'); return validManifest(); } });
+    assert.deepEqual(events.slice(0, 3), ['worker_started', 'poll_started', 'poll_snapshot']);
+    const store = new WorkerStateStore(join(root, 'state'));
+    await store.save({ ...emptyWorkerState(), initialized: true, candidates: { logged: admittedCandidate('logged', 90, at().toISOString()) } });
+    const state = await runWorkerCycle({ store, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at, logger: { emit: () => { throw new Error('log sink secret'); } }, runners: { generate: async () => artifact('logged') } });
+    assert.equal(state.candidates.logged!.generation.status, 'succeeded'); assert.equal(state.generationCounts['2026-09-08'], 1);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 

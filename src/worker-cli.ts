@@ -7,11 +7,12 @@ import { runNgestWorker, type WorkerMode } from './worker/runtime.ts';
 import { WorkerStateStore } from './worker/state.ts';
 import { labelWorkerEvaluation, reportWorkerCalibration } from './worker/calibration.ts';
 import { loadPresenterSourcesFile } from './worker/presenter-sources.ts';
+import { formatWorkerLogEvent, logWorker, type WorkerLogger } from './worker/logging.ts';
 
 export const workerHelpText = `VidGen Worker
 
 Usage:
-  vidgen-worker <observe|generate|live> [--once] [--process-existing] [--max-candidates <n>] [--state-root <directory>] [--poll-interval-ms <milliseconds>] [--font-file <font-path>] [--max-seconds <4-20>] [--daily-generation-limit <n>] [--generation-attempt-limit <n>] [--publication-attempt-limit <n>]
+  vidgen-worker <observe|generate|live> [--once] [--verbose] [--process-existing] [--max-candidates <n>] [--state-root <directory>] [--poll-interval-ms <milliseconds>] [--font-file <font-path>] [--max-seconds <4-20>] [--daily-generation-limit <n>] [--generation-attempt-limit <n>] [--publication-attempt-limit <n>]
   vidgen-worker label <article-id> <generate|skip> [--state-root <directory>]
   vidgen-worker report [--state-root <directory>]
 
@@ -22,6 +23,7 @@ Modes:
 
 Options:
   --once                Process one bounded snapshot, then exit.
+  --verbose             Emit safe newline-delimited operational events for PM2.
   --process-existing    Explicitly process the first snapshot instead of baselining it.
   --max-candidates <n>  Positive evaluation/admission cap per snapshot (default: 1).
   --state-root <dir>    Durable Worker state (default: ${DEFAULT_WORKER_STATE_ROOT}).
@@ -35,7 +37,7 @@ Options:
   VIDGEN_WORKER_PRESENTER_SOURCES_FILE  Required for generate/live: absolute text manifest, one presenter image path per line. It is re-read for each unassigned generation; persisted selections remain stable for retries.
 `;
 
-export interface WorkerCommand { readonly mode: WorkerMode; readonly once: boolean; readonly processExisting: boolean; readonly maxCandidates: number; readonly stateRoot?: string; readonly pollIntervalMs?: number; readonly fontPath?: string; readonly maxSeconds?: number; readonly dailyGenerationLimit?: number; readonly generationAttemptLimit?: number; readonly publicationAttemptLimit?: number; }
+export interface WorkerCommand { readonly mode: WorkerMode; readonly once: boolean; readonly verbose?: true; readonly processExisting: boolean; readonly maxCandidates: number; readonly stateRoot?: string; readonly pollIntervalMs?: number; readonly fontPath?: string; readonly maxSeconds?: number; readonly dailyGenerationLimit?: number; readonly generationAttemptLimit?: number; readonly publicationAttemptLimit?: number; }
 export interface WorkerLabelCommand { readonly kind: 'label'; readonly candidateId: string; readonly label: 'generate' | 'skip'; readonly stateRoot?: string; }
 export interface WorkerReportCommand { readonly kind: 'report'; readonly stateRoot?: string; }
 export interface WorkerCliOutput { writeStdout(text: string): void; writeStderr(text: string): void; }
@@ -46,10 +48,10 @@ export function parseWorkerCliArgs(args: readonly string[]): WorkerCommand | Wor
   if (args[0] === 'report') return reportCommand(args.slice(1));
   const [mode, ...rest] = args;
   if (mode !== 'observe' && mode !== 'generate' && mode !== 'live') throw invalid('Worker requires mode observe, generate, or live.');
-  let once = false; let processExisting = false; let maxCandidates = 1; const values: Partial<Record<'stateRoot' | 'pollIntervalMs' | 'fontPath' | 'maxSeconds' | 'dailyGenerationLimit' | 'generationAttemptLimit' | 'publicationAttemptLimit', string>> = {};
+  let once = false; let verbose = false; let processExisting = false; let maxCandidates = 1; const values: Partial<Record<'stateRoot' | 'pollIntervalMs' | 'fontPath' | 'maxSeconds' | 'dailyGenerationLimit' | 'generationAttemptLimit' | 'publicationAttemptLimit', string>> = {};
   for (let index = 0; index < rest.length;) {
     const option = rest[index];
-    if (option === '--once' || option === '--process-existing') { if (option === '--once' ? once : processExisting) throw invalid(`Worker option ${option} must not be repeated.`); if (option === '--once') once = true; else processExisting = true; index += 1; continue; }
+    if (option === '--once' || option === '--verbose' || option === '--process-existing') { if (option === '--once' ? once : option === '--verbose' ? verbose : processExisting) throw invalid(`Worker option ${option} must not be repeated.`); if (option === '--once') once = true; else if (option === '--verbose') verbose = true; else processExisting = true; index += 1; continue; }
     if (option !== '--max-candidates' && option !== '--state-root' && option !== '--poll-interval-ms' && option !== '--font-file' && option !== '--max-seconds' && option !== '--daily-generation-limit' && option !== '--generation-attempt-limit' && option !== '--publication-attempt-limit') throw invalid(`Unknown Worker argument: ${JSON.stringify(option)}.`);
     const value = rest[index + 1]; if (value === undefined || value.trim().length === 0) throw invalid(`${option} requires exactly one non-empty value.`);
     if (option === '--max-candidates') { maxCandidates = positive(value, '--max-candidates', 10_000); }
@@ -63,22 +65,25 @@ export function parseWorkerCliArgs(args: readonly string[]): WorkerCommand | Wor
   const publicationAttemptLimit = values.publicationAttemptLimit === undefined ? undefined : positive(values.publicationAttemptLimit, '--publication-attempt-limit', 10);
   if (mode !== 'observe' && values.fontPath === undefined) throw invalid('Worker generate/live requires --font-file.');
   createWorkerRuntimeConfig({ stateRoot: values.stateRoot, pollIntervalMs, maxSeconds, dailyGenerationLimit, generationAttemptLimit, publicationAttemptLimit, requirePresenterSourcesFile: mode !== 'observe' });
-  return { mode, once, processExisting, maxCandidates, ...(values.stateRoot === undefined ? {} : { stateRoot: values.stateRoot }), ...(pollIntervalMs === undefined ? {} : { pollIntervalMs }), ...(values.fontPath === undefined ? {} : { fontPath: values.fontPath }), ...(maxSeconds === undefined ? {} : { maxSeconds }), ...(dailyGenerationLimit === undefined ? {} : { dailyGenerationLimit }), ...(generationAttemptLimit === undefined ? {} : { generationAttemptLimit }), ...(publicationAttemptLimit === undefined ? {} : { publicationAttemptLimit }) };
+  return { mode, once, ...(verbose ? { verbose: true as const } : {}), processExisting, maxCandidates, ...(values.stateRoot === undefined ? {} : { stateRoot: values.stateRoot }), ...(pollIntervalMs === undefined ? {} : { pollIntervalMs }), ...(values.fontPath === undefined ? {} : { fontPath: values.fontPath }), ...(maxSeconds === undefined ? {} : { maxSeconds }), ...(dailyGenerationLimit === undefined ? {} : { dailyGenerationLimit }), ...(generationAttemptLimit === undefined ? {} : { generationAttemptLimit }), ...(publicationAttemptLimit === undefined ? {} : { publicationAttemptLimit }) };
 }
 
 export async function runWorkerCli(args: readonly string[], output: WorkerCliOutput): Promise<number> {
+  let logger: WorkerLogger | undefined;
   try {
     const command = parseWorkerCliArgs(args);
     if ('kind' in command && command.kind === 'help') { output.writeStdout(workerHelpText); return 0; }
     if ('kind' in command && command.kind === 'label') { await labelWorkerEvaluation(new WorkerStateStore(resolve(command.stateRoot ?? DEFAULT_WORKER_STATE_ROOT)), command.candidateId, command.label); output.writeStdout(`Labeled ${command.candidateId}.\n`); return 0; }
     if ('kind' in command && command.kind === 'report') { const report = reportWorkerCalibration(await new WorkerStateStore(resolve(command.stateRoot ?? DEFAULT_WORKER_STATE_ROOT)).load({ recoverInProgress: false })); output.writeStdout(`${JSON.stringify(report)}\n`); return 0; }
+    if (command.verbose) logger = { emit: (event) => { const line = formatWorkerLogEvent(event); if (event.level === 'warn' || event.level === 'error') output.writeStderr(line); else output.writeStdout(line); } };
     const config = createWorkerRuntimeConfig({ ...command, requirePresenterSourcesFile: command.mode !== 'observe' });
     if (command.mode !== 'observe') await loadPresenterSourcesFile(config.presenterSourcesFile!);
-    await runNgestWorker({ store: new WorkerStateStore(config.stateRoot), mode: command.mode, once: command.once, processExisting: command.processExisting, maxCandidates: command.maxCandidates, pollIntervalMs: config.pollIntervalMs, ...(config.presenterSourcesFile === undefined ? {} : { presenterSourcesFile: config.presenterSourcesFile }), ...(command.fontPath === undefined ? {} : { fontPath: command.fontPath }), maxSeconds: config.maxSeconds, dailyGenerationLimit: config.dailyGenerationLimit, generationAttemptLimit: config.generationAttemptLimit, publicationAttemptLimit: config.publicationAttemptLimit, queueExpirationDays: config.queueExpirationDays });
-    output.writeStdout(`Worker ${command.mode} is running.\nstateRoot: ${config.stateRoot}\npollIntervalMs: ${config.pollIntervalMs}\n`);
+    await runNgestWorker({ store: new WorkerStateStore(config.stateRoot), mode: command.mode, once: command.once, processExisting: command.processExisting, maxCandidates: command.maxCandidates, pollIntervalMs: config.pollIntervalMs, ...(config.presenterSourcesFile === undefined ? {} : { presenterSourcesFile: config.presenterSourcesFile }), ...(command.fontPath === undefined ? {} : { fontPath: command.fontPath }), maxSeconds: config.maxSeconds, dailyGenerationLimit: config.dailyGenerationLimit, generationAttemptLimit: config.generationAttemptLimit, publicationAttemptLimit: config.publicationAttemptLimit, queueExpirationDays: config.queueExpirationDays, logger });
+    if (!command.verbose) output.writeStdout(`Worker ${command.mode} is running.\nstateRoot: ${config.stateRoot}\npollIntervalMs: ${config.pollIntervalMs}\n`);
     return 0;
   } catch (error) {
     const safe = isVidGenError(error) ? error : new VidGenError('unexpected', 'Worker failed unexpectedly.');
+    logWorker(logger, new Date().toISOString(), 'error', 'worker_fatal_exit', { code: safe.code, message: safe.publicMessage });
     output.writeStderr(`Error [${safe.code}]: ${safe.publicMessage}\n`); return 2;
   }
 }

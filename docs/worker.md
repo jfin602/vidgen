@@ -98,6 +98,14 @@ Run the complete admitted-candidate flow through VidGen and VidGen Poster.
 
 A mode change must not erase durable prior state.
 
+## PM2 operational logging
+
+`vidgen-worker observe`, `generate`, and `live` accept `--verbose`. It emits one bounded JSON event per line before the first poll and throughout each polling cycle; ordinary lifecycle events use stdout and warnings/errors use stderr, so PM2 can capture and monitor the streams directly. Without `--verbose`, Worker output remains low-noise and safe fatal errors remain concise. `label` and `report` do not accept this option.
+
+Verbose events include the mode and non-secret runtime policy, poll/heartbeat and queue summaries, governed article IDs, evaluation decisions and bounded scores, generation/publication transitions, fixed Poster platform readiness, and presenter-pool counts plus a validated safe basename when available. This permits operational diagnosis without reading `worker-state.json`.
+
+Events intentionally exclude `.env` contents, secrets, authorization data, manifest paths or contents, absolute source paths, source article text/URLs/captions, Parallel evidence, provider/platform responses, child output, and exception stacks. Logging is best-effort only: an output failure cannot change Worker state, source selection, budgets, or generation exclusion.
+
 ## Web Momentum admission
 
 Web Momentum is a Worker-owned estimate of recent event-specific web attention. It is not a claim to measure the entire Internet and is not an editorial truth score.
