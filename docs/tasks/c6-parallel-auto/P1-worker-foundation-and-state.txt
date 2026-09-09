@@ -1,0 +1,45 @@
+TASK: Correction 6 / P1 — Worker foundation and durable state
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Create the separate Phase 7 VidGen Worker runtime foundation without moving orchestration into the VidGen generation CLI or VidGen Poster. The requested correction-style folder is only the handoff container; Worker behavior remains Phase 7 architecture.
+
+Read BOOT.md, docs/worker.md, docs/architecture.md, docs/roadmap/initial-roadmap.md, current CLI/process helpers, atomic persistence utilities, and focused tests before editing.
+
+MUST REMAIN TRUE
+
+- Add a separate `vidgen-worker` package entry point; preserve every existing `vidgen` command and `headline-post` behavior unchanged.
+- Support Worker modes `observe`, `generate`, and `live`, plus bounded `--once`, explicit `--process-existing`, and positive `--max-candidates <n>`.
+- Use bounded runtime configuration for Worker state root and poll interval; default state under `artifacts/worker` and keep runtime artifacts ignored.
+- Persist validated, atomic, restart-safe Worker state. Represent discovery, evaluation, generation, and publication as separate durable stages; do not collapse them into one processed flag.
+- A successful earlier stage must be reusable after a later failure. A state left in an externally uncertain in-progress stage after restart must not be silently converted to success or automatically repeated as if nothing happened.
+- Keep filesystem state simple; no database, queue, scheduler framework, or distributed-worker abstraction.
+- Make time, sleeping, IDs, and external stage runners injectable enough for deterministic tests.
+- Treat persisted state as untrusted on read; reject malformed/unsafe state and keep secrets/runtime credentials out of durable records.
+- Package and engine version remain 0.6.5.
+
+PROOF
+
+Focused tests must cover CLI/mode validation, `--once`/backfill/candidate-cap parsing, default/bounded runtime config, atomic state publication, malformed-state rejection, restart semantics, stage independence, and secret-safe errors.
+
+Wire new tests into the explicit test command. Run focused Worker tests, `npm run check`, and `git diff --check`.
+
+Downstream-required capability -> owning implementation/export -> focused proof:
+
+restart-safe candidate lifecycle -> Worker state store/contracts -> persistence/reload/stage-transition tests.
+
+bounded execution controls -> vidgen-worker CLI/config -> parser/config tests.
+
+NON-GOALS
+
+Do not poll ngest yet, call Parallel, generate media, invoke Poster, change creative schemas, change provider adapters, or modify jfin602/vidgen-poster.
+
+FINAL RESPONSE
+
+Report the Worker CLI surface, durable state semantics, runtime configuration, validation run, preserved VidGen behavior, and unchanged 0.6.5 state.
