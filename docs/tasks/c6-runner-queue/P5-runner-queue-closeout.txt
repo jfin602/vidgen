@@ -13,7 +13,9 @@ Required review
 - Verify admitted generation backlog is durable, independent of current ngest membership, and ordered score DESC, queue/admission time ASC, articleId ASC.
 - Verify evaluation/admission occurs before generation selection so feed order cannot beat score priority.
 - Verify new higher-scored admissions can overtake remaining queued work before the next generation starts.
-- Verify daily generation limits pause rather than terminally block backlog work, while bounded per-Article attempt exhaustion still prevents infinite retries.
+- Verify `VIDGEN_WORKER_QUEUE_EXPIRATION_DAYS` exists as Worker configuration, defaults to exactly `3` days when omitted, rejects malformed/unbounded values safely, and defines a rolling queue-eligibility window from successful admission/evaluation time.
+- Verify expiration is a binary queue cutoff rather than score mutation, expired candidates persist as explicit non-failure terminal/non-generating work, and expiration consumes neither a generation attempt nor daily generation allowance.
+- Verify daily generation limits pause rather than terminally block backlog work, the next allowance selects the highest-scored still-unexpired eligible candidate, and bounded per-Article attempt exhaustion still prevents infinite retries.
 - Verify prior-production dedupe uses governed articleId and only adopts sidecar/media pairs whose contract, existence, regular-file status, and hashes are actually validated.
 - Verify successful existing media becomes a reusable generatedArtifact and can proceed to live publication without regeneration.
 - Verify the machine-wide Worker generation guard is independent of --state-root, acquired before spending/spawn, rechecks prior production under exclusion, and cannot permit two active Worker-managed headline generation subprocesses.
@@ -24,9 +26,9 @@ Required review
 
 Validation
 
-Run the focused queue/dedupe/concurrency tests, npm run test:worker, npm run test:app, npm run check, and git diff --check.
+Run the focused queue/expiration/dedupe/concurrency tests, npm run test:worker, npm run test:app, npm run check, and git diff --check.
 
-Also perform a local process-level concurrency smoke that exercises the real generation-exclusion primitive without making a live Veo/provider call: two competing processes must demonstrate that only one can own generation at a time and the loser cannot spend/spawn. Exercise deterministic queue state showing score ordering and restart persistence, and verify an existing valid headline artifact is adopted rather than regenerated.
+Also perform a local process-level concurrency smoke that exercises the real generation-exclusion primitive without making a live Veo/provider call: two competing processes must demonstrate that only one can own generation at a time and the loser cannot spend/spawn. Exercise deterministic queue state showing score ordering, three-day default expiration, configured expiration, and restart persistence, and verify an existing valid headline artifact is adopted rather than regenerated.
 
 Evidence boundaries
 
@@ -34,4 +36,4 @@ Do not make a live Parallel, Veo, render, or social publication call merely for 
 
 Closeout result
 
-Return GREEN only if the score-priority queue, verified prior-production reuse, and <=1 active Worker-managed generation invariant are all demonstrated and regressions are clean. Otherwise return NOT GREEN with the smallest bounded repair plan. Do not advance the roadmap phase or change package.json.
+Return GREEN only if the score-priority queue, configurable queue expiration, verified prior-production reuse, and <=1 active Worker-managed generation invariant are all demonstrated and regressions are clean. Otherwise return NOT GREEN with the smallest bounded repair plan. Do not advance the roadmap phase or change package.json.
