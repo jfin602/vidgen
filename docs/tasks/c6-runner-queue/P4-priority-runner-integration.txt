@@ -1,0 +1,41 @@
+TASK: Correction 6 / P4 — Priority runner integration and regression
+
+- Recommended configuration: `Terra High`.
+- Required unchanged project version: `0.6.5`.
+
+Objective
+
+Integrate the durable priority backlog, verified production reuse, and global single-generation guard into the real ngest Worker lifecycle so the runner continuously produces the highest-scored eligible video next while preserving mode, budget, retry, and publication guarantees.
+
+Required behavior
+
+- Re-read P1-P3 repository state and trace the full live flow before editing.
+- Each Worker cycle must perform bounded discovery/evaluation/admission work before selecting generation work, then select the highest-scored durable eligible candidate using the P1 ordering.
+- Start at most one generation at a time. After a generation completes, the long-running runner must re-enter discovery/evaluation/queue ordering before choosing subsequent generation work so newly arrived higher-scored candidates can overtake the remaining backlog.
+- --once must remain bounded: one coherent ngest snapshot/evaluation pass and at most one generation start, never an uncontrolled backlog drain.
+- max-candidates must remain a bounded candidate/evaluation control and must not erase or permanently strand already queued work.
+- Daily generation limits pause the backlog; they do not terminally block queued candidates. Per-Article attempt exhaustion may exclude only that candidate.
+- Generate mode must never publish. Live mode must preserve Poster readiness gating and independent per-platform publication retry semantics. A P2-reused completed video must be publishable without regeneration.
+- Publication failures, Poster readiness failures, or partial publication must never cause successful generation to be repeated.
+- Keep completed Parallel evaluations reusable and keep Parallel evaluation budgeting independent from generation queue depth.
+- Preserve baseline/backfill semantics, fixture persistence, safe subprocess argv construction, artifact verification, secret handling, and package version 0.6.5. Do not create package-lock.json.
+
+Regression proof
+
+Cover at least:
+- multiple newly evaluated candidates whose feed order differs from score order;
+- a new high-score arrival overtaking an older lower-score backlog item;
+- backlog survival across restart and ngest removal;
+- daily-limit pause and next-day resume;
+- prior-production reuse;
+- duplicate Worker contention with no overlapping generation;
+- generation failure/retry without queue corruption;
+- generate mode publication suppression;
+- live partial-publication reuse;
+- observe mode never generating or publishing.
+
+Run npm run test:worker, npm run test:app, npm run check, and git diff --check. Do not claim live ngest, Parallel, Veo, render, or social-platform proof from mocked tests.
+
+Non-goals
+
+Do not change the Web Momentum v1 algorithm or threshold, introduce score aging, add manual queue editing/UI, implement distributed scheduling, or change VidGen Poster platform adapters.
