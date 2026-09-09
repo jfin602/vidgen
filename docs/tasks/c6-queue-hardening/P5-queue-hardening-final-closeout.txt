@@ -1,0 +1,112 @@
+TASK: Correction 6 / P5 — Queue hardening final closeout
+
+- Recommended configuration: `Terra High`.
+- Required unchanged project version: `0.6.5`.
+
+Closeout objective
+
+Treat this as the final planned coding pass over the Phase 7 Worker before PM2 deployment. Review the completed c6-queue-hardening stack plus the inherited c6-runner-queue implementation as one production orchestration system. Passing tests are necessary but not sufficient. Return GREEN only when there are no known correctness, concurrency, persistence, retry, spend-control, publication-reuse, or observability defects within this scope.
+
+Required review
+
+- Inspect the complete post-c6-runner-queue baseline and the full P1-P4 c6-queue-hardening diff, not only files named by the prompts.
+- Trace producers and consumers for Worker runtime config, CLI parsing, ngest snapshot acquisition, durable discovery/evaluation state, priority selection, expiration, generation budget, prior-production reuse, generation exclusion, headline subprocess handoff, Poster readiness/publication, and verbose logging.
+- Verify ngest is a coherent discovery snapshot boundary and discovery compares governed articleIds against durable ever-seen history.
+- Verify a failed/drifting/malformed snapshot cannot partially advance discovery, reappearing seen IDs are not new, pending evaluation survives feed removal/restart, and completed evaluation is not repeated because feed membership changes.
+- Verify no client-side 20-item feed truncation was introduced; ngest remains owner of active feed/result size.
+- Verify the evaluation backlog is durable and independent of current feed membership, with bounded max-candidates behavior that cannot strand discovered work.
+- Verify generation queue ordering remains exactly score DESC, queue/admission time ASC, articleId ASC, and that evaluation/admission completes before generation selection so feed order cannot beat score priority.
+- Verify `VIDGEN_WORKER_QUEUE_EXPIRATION_DAYS` defaults to exactly 3 days, validates safely, and uses the exact boundary: eligible while `now < queuedAt + N*24h`, expired at `now >= queuedAt + N*24h`.
+- Verify expiration is binary eligibility only: no score mutation, no generation attempt/daily slot consumption, no accidental revival, and no blocking of fresher work.
+- Verify the default generation limit remains exactly one start per UTC calendar day.
+- Verify daily-limit exhaustion pauses generation only; polling, discovery, evaluation, admission, expiration, queue growth, queue reordering, and publication retry continue as intended.
+- Verify first eligible polling cycle after UTC rollover selects the highest-scored still-unexpired, not-already-generated candidate without requiring manual unblock or re-evaluation.
+- Verify generation-start accounting is performed at the intended spend boundary and lock contention/prior-production reuse/expiration cannot incorrectly consume the daily slot or attempt count.
+- Re-verify prior-production dedupe by governed articleId: only a valid sidecar plus present regular non-empty hash-matching final MP4 may be adopted; malformed/missing/hash-mismatched artifacts cannot masquerade as completed generation.
+- Re-verify the under-exclusion prior-production recheck closes duplicate-generation races.
+- Re-verify the machine-wide generation exclusion is independent of --state-root and guarantees <=1 active Worker-managed headline generation subprocess across competing Worker processes.
+- Inspect exclusion acquisition, release, definite failure, crash/uncertain state, stale guard, restart, and contention paths. Ambiguous ownership must fail closed; no automatic stale-lock guess may permit overlap.
+- Verify lock contention does not consume generation attempts/daily slots and does not corrupt queue order.
+- Verify long-running daemon behavior: retryable remote/poll failures preserve state, emit safe diagnostics, sleep the configured interval, and retry; fatal configuration/auth/local durable-state failures remain distinguishable and terminate safely. No tight retry loop is permitted.
+- Verify --once remains bounded to one coherent snapshot/evaluation pass and at most one generation start.
+- Verify observe never generates or publishes; generate never publishes; live preserves Poster readiness gating and per-platform independent retries.
+- Verify successful generation is never repeated because Poster readiness/publication later fails. Partial publication must reuse the same verified media and never consume a future generation slot.
+- Verify P4 `--verbose` logging is PM2-friendly and observational only:
+  - startup event occurs before the first poll;
+  - one bounded newline-delimited structured record per event;
+  - ISO UTC timestamp, level, stable event name, bounded primitive/safe fields;
+  - stdout for normal lifecycle and stderr for warnings/errors;
+  - no ANSI/cursor controls;
+  - no whole-state/whole-queue/evidence dumps;
+  - sufficient poll/discovery/evaluation/queue/generation/lock/publication lifecycle visibility to monitor the daemon from PM2 logs.
+- Verify verbose output cannot contain secrets, auth headers, .env contents, API keys/tokens, credentials, headlines, summaries, URLs, captions, Parallel excerpts, raw provider/platform responses, raw child output, arbitrary exception stacks/messages, or injected control characters.
+- Verify logging callback/output failure cannot alter durable state, retries, attempts, budgets, lock ownership, publication results, or process correctness.
+- Verify non-verbose behavior remains compatible and low-noise, while safe fatal errors remain visible.
+- Verify docs/worker.md and CLI help accurately describe final runtime behavior, defaults, expiration, --verbose, and PM2 stdout/stderr usage.
+- Inspect for stale pre-correction branches such as terminal daily-limit blocking, feed-bound processing, duplicate queue authority, unsafe auto-unlock, dead code, contradictory tests/docs, debug output, TODO/FIXME placeholders in the changed Worker surface, and accidental provider/platform boundary leakage.
+- Confirm package version remains exactly 0.6.5 and package-lock.json is absent.
+
+Required validation
+
+Run:
+- focused discovery/backlog tests;
+- focused expiration/day-boundary tests;
+- focused prior-production tests;
+- focused generation-exclusion/concurrency tests;
+- focused daemon retry/fatal classification tests;
+- focused verbose CLI/logging/sanitization tests;
+- npm run test:worker;
+- npm run test:app;
+- npm run test:runner;
+- npm run check;
+- git diff --check.
+
+Required deterministic/local evidence
+
+Without making live Parallel, Veo, render, or social-platform calls solely for closeout, demonstrate:
+
+1. Atomic discovery:
+   - baseline snapshot;
+   - changed snapshot with unseen IDs;
+   - seen ID disappears then reappears;
+   - no duplicate evaluation.
+
+2. Multi-day queue:
+   - multiple scored candidates;
+   - today's one generation consumes the slot;
+   - later arrivals continue evaluating and reorder the paused queue;
+   - an exact-boundary candidate expires;
+   - UTC rollover occurs;
+   - highest-scored remaining eligible candidate is selected.
+
+3. Restart/resume:
+   - pending evaluation and queued work survive restart/feed removal;
+   - generated media survives publication failure without regeneration.
+
+4. Process-level generation exclusion:
+   - two competing processes/isolated state roots contend;
+   - at most one owns generation;
+   - loser spends no attempt/daily slot;
+   - second contender adopts verified prior production where applicable;
+   - ambiguous/stale ownership fails closed.
+
+5. Daemon resilience:
+   - retryable poll failure;
+   - normal poll-interval delay;
+   - later successful recovery without PM2/process restart or duplicate state advancement;
+   - representative fatal configuration/local-state error terminates nonzero.
+
+6. PM2-oriented verbose logging:
+   - start a deterministic/no-provider Worker harness with --verbose;
+   - observe startup before first poll and at least one no-change heartbeat;
+   - exercise discovery, evaluation decision, queue state, daily-limit defer, lock contention or generation transition, and publication transition as available without live spend;
+   - feed malicious/untrusted strings through test seams and verify none reach output;
+   - verify each verbose line is bounded, parseable, and free of ANSI/control characters.
+
+Evidence boundaries
+
+Do not make new live provider/platform calls merely to satisfy closeout. Clearly separate deterministic/local proof from any previously observed live ngest, Parallel, generation, render, playback, or social publication evidence. Do not claim PM2 process-supervision behavior unless PM2 itself was actually exercised; local stdout/stderr compatibility is sufficient for code closeout.
+
+Closeout result
+
+Return GREEN only if all required invariants and validation are clean and there are no known defects in the reviewed Worker scope. If any invariant, race, retry path, persistence path, spend boundary, publication reuse path, or logging-safety path is uncertain or defective, return NOT GREEN with the smallest bounded repair required before deployment. Do not waive a failure because this is intended to be the final pass. Do not advance the roadmap phase or change package.json.
