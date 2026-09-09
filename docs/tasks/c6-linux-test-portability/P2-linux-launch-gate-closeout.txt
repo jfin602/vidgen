@@ -1,0 +1,28 @@
+TASK: Correction 6 / P2 — Linux launch gate closeout
+
+- Recommended configuration: `Terra High`.
+- Required unchanged project version: `0.6.5`.
+
+Closeout objective
+
+Verify that the prior 15 Linux Worker failures were caused by Windows-only fake artifact paths and that the production Worker remains unchanged and launch-gate clean.
+
+Required review
+
+- Inspect the complete P1 diff.
+- Confirm production artifact/path validation was not weakened.
+- Confirm no runtime queue, generation, spend, presenter-source, lock, logging, or publication logic changed unless separately justified by a newly demonstrated defect.
+- Confirm Worker fake generated artifacts use host-portable absolute paths.
+- Confirm Poster argv expectations no longer hard-code Windows artifact paths.
+- Re-run the complete deterministic suite on the Linux host:
+  - npm run test:worker
+  - npm run test:app
+  - npm run test:runner
+  - npm run check
+  - git diff --check
+- Require zero failed and zero skipped Worker tests.
+- Confirm package version remains exactly 0.6.5 and package-lock.json is absent.
+
+Closeout result
+
+Return GREEN only if the full Linux deterministic launch gate passes and production validation remains strict. Otherwise return NOT GREEN with the smallest remaining repair.
