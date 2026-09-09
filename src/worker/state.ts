@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
-import { isAbsolute, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 
 import { VidGenError } from '../core/error.ts';
 import { prettyJson, writeJsonAtomically, type AtomicJsonFilesystem } from '../shared/atomic-json.ts';
@@ -130,6 +130,9 @@ export class WorkerStateStore {
     validateCandidateId(id);
     return join(this.root, WORKER_GENERATED_DIRECTORY, createHash('sha256').update(id).digest('hex'));
   }
+
+  /** The normal simple-headline root sits beside the Worker root. */
+  headlineArtifactsRoot(): string { return join(dirname(this.root), 'headline-clips'); }
 
   /** Publishes a candidate's local manifest before its discovery state advances. */
   async saveCandidateFixture(id: string, fixture: unknown): Promise<void> {

@@ -7,6 +7,7 @@ import { fetchNgestVidGenManifestPage, type NgestVidGenEnvironment, type NgestVi
 import { createDiscoveredCandidate, type WorkerCandidateState, type WorkerEvaluation, type WorkerGeneratedArtifact, type WorkerStage, type WorkerState, WorkerStateStore, validateWorkerEvaluation, validateWorkerGeneratedArtifact } from './state.ts';
 import { createMomentumConfig, evaluateWebMomentum, WEB_MOMENTUM_METRIC, WEB_MOMENTUM_POLICY_ID, WEB_MOMENTUM_VERSION } from './web-momentum.ts';
 import { runHeadlineHandoff } from './headline-handoff.ts';
+import { findVerifiedPriorProduction } from './prior-production.ts';
 import { runPosterCommand, type PosterCommandRunner } from '../app/poster-handoff.ts';
 
 export type WorkerMode = 'observe' | 'generate' | 'live';
@@ -181,6 +182,11 @@ async function processGeneration(state: WorkerState, candidate: WorkerCandidateS
     if (runners.doctor !== undefined) for (const platform of WORKER_POSTER_VIDEO_PLATFORMS) { try { await runners.doctor(platform); targets.push(platform); } catch { /* Poster diagnostics stay outside Worker state. */ } }
     next = mergeCandidate(next, current.id, { publicationTargets: targets, publicationAttempts: {} }, 'generation', current.generation);
     current = next.candidates[current.id]!; await store.save(next); didWork = true;
+  }
+  const prior = await findVerifiedPriorProduction(store, current.id);
+  if (prior !== undefined) {
+    next = mergeCandidate(next, current.id, { generatedArtifact: prior }, 'generation', { status: 'succeeded', completedAt: timestamp(now()) });
+    await store.save(next); return { state: next, didWork: true };
   }
   if (mode === 'live' && current.publicationTargets?.length === 0) return { state: next, didWork };
   if (runners.generate === undefined) return { state: next, didWork };

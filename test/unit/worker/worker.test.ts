@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { EventEmitter } from 'node:events';
@@ -12,8 +12,10 @@ import { createPosterRunners, runNgestWorker, runNgestWorkerCycle, runWorkerCycl
 import { createDiscoveredCandidate, emptyWorkerState, isWorkerCandidateComplete, WORKER_STATE_FILE, WorkerStateStore } from '../../../src/worker/state.ts';
 import { WEB_MOMENTUM_POLICY_ID } from '../../../src/worker/web-momentum.ts';
 import { parseHeadlineSuccessOutput, runHeadlineHandoff } from '../../../src/worker/headline-handoff.ts';
+import { findVerifiedPriorProduction } from '../../../src/worker/prior-production.ts';
 import { buildCanonicalInput } from '../../../src/core/canonical-input.ts';
 import { buildStoryInput } from '../../../src/core/story-input.ts';
+import { SIMPLE_CLIP_FINISHING_POLICY } from '../../../src/integrations/ffmpeg/simple-clip-finisher.ts';
 import { loadNgestVidGenManifestFile } from '../../../src/integrations/ngest/local-manifest-file.ts';
 import { validManifest } from '../../fixtures/canonical-input.ts';
 
@@ -409,10 +411,48 @@ test('generation budgets bound spending while successful verified media is reuse
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test('verified prior headline production adopts only its governed Article ID and survives restart', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-prior-'));
+  try {
+    const store = new WorkerStateStore(join(root, 'worker')); const prior = await writeHeadlineProduction(store.headlineArtifactsRoot(), 'article-1', 'Same governed headline'); const generated: string[] = [];
+    const first = await runWorkerCycle({ store, discoveredCandidateIds: ['article-1', 'article-2'], mode: 'generate', processExisting: true, maxCandidates: 2, now: at, dailyGenerationLimit: 2, runners: { evaluate: async () => scoredEvaluation(50), generate: async (id) => { generated.push(id); return artifact(id); } } });
+    assert.equal(first.candidates['article-1']!.generation.status, 'succeeded'); assert.deepEqual(first.candidates['article-1']!.generatedArtifact, prior); assert.deepEqual(generated, ['article-2']);
+    const restarted = await runWorkerCycle({ store: new WorkerStateStore(join(root, 'worker')), discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at, runners: { generate: async () => { throw new Error('verified artifact must survive restart'); } } });
+    assert.deepEqual(restarted.candidates['article-1']!.generatedArtifact, prior);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('prior production lookup rejects malformed, missing, and hash-mismatched artifacts', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-prior-'));
+  try {
+    const store = new WorkerStateStore(join(root, 'worker')); const directory = store.candidateGenerationArtifactsRoot('article-1'); await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, 'broken.json'), '{}'); assert.equal(await findVerifiedPriorProduction(store, 'article-1'), undefined);
+    await rm(join(directory, 'broken.json'));
+    const missing = await writeHeadlineProduction(directory, 'article-1'); await rm(missing.finalPath); assert.equal(await findVerifiedPriorProduction(store, 'article-1'), undefined);
+    await writeHeadlineProduction(directory, 'article-1', 'First governed headline', 'hash-bad', '0'.repeat(64)); assert.equal(await findVerifiedPriorProduction(store, 'article-1'), undefined);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('live publishes a verified reused headline artifact without invoking generation', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-prior-'));
+  try {
+    const store = new WorkerStateStore(join(root, 'worker')); const prior = await writeHeadlineProduction(store.headlineArtifactsRoot(), 'article-1'); const posts: string[] = []; let generated = 0;
+    const state = await runWorkerCycle({ store, discoveredCandidateIds: ['article-1'], mode: 'live', processExisting: true, maxCandidates: 1, now: at, runners: {
+      evaluate: async () => scoredEvaluation(50), doctor: async () => undefined, caption: async () => 'caption', generate: async () => { generated += 1; return artifact(); }, publish: async (_id, platform, received) => { posts.push(platform); assert.deepEqual(received, prior); },
+    } });
+    assert.equal(generated, 0); assert.deepEqual(posts, ['x', 'bluesky', 'reels']); assert.equal(isWorkerCandidateComplete(state.candidates['article-1']!), true);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 function evaluation(decision: 'admitted' | 'skipped') { return { metric: 'web-momentum', version: 'v1', policyId: WEB_MOMENTUM_POLICY_ID, score: 3, threshold: 2, decision, evaluatedAt: at().toISOString(), searchId: 'search-1', sessionId: 'session-1', signature: ['article', 'headline'], results: [], components: { breadth: 0, saturation: 3, freshness: 0, reaction: 0 } } as const; }
 function scoredEvaluation(score: number, evaluatedAt = at().toISOString()) { return { ...evaluation('admitted'), score, evaluatedAt }; }
 function admittedCandidate(id: string, score: number, admittedAt: string) { return { ...createDiscoveredCandidate(id, admittedAt), evaluation: { status: 'succeeded' as const, completedAt: admittedAt }, admission: { status: 'succeeded' as const, completedAt: admittedAt }, evaluationResult: scoredEvaluation(score, admittedAt) }; }
 function artifact(id = 'article_1') { return { finalPath: `C:/worker/${id}.mp4`, metadataPath: `C:/worker/${id}.json`, sha256: 'a'.repeat(64), durationSeconds: 8 }; }
+async function writeHeadlineProduction(root: string, articleId: string, headline = 'First governed headline', clipId = 'clip-safe-1', finalHash?: string) {
+  await mkdir(root, { recursive: true }); const finalPath = join(root, `${clipId}.mp4`); const metadataPath = join(root, `${clipId}.json`); const bytes = Buffer.from(`final ${articleId} ${clipId}`); const sha256 = finalHash ?? createHash('sha256').update(bytes).digest('hex'); const manifest = validManifest(); const source = manifest.articles[0]!;
+  await writeFile(finalPath, bytes); await writeFile(metadataPath, JSON.stringify({ schemaVersion: '4', clipId, article: { ...source, articleId, headline }, profile: manifest.profile, publication: manifest.publication, story: { fingerprint: 'a'.repeat(64), provenance: { sourceInputFingerprint: 'b'.repeat(64), ngestApiVersion: manifest.apiVersion, snapshotRevision: manifest.snapshotRevision } }, presenterText: 'A concise presenter line.', requestedMaxSeconds: 8, speechPlanningDurationSeconds: 4, finalDurationSeconds: 8, rawVeo: { filename: `${clipId}.veo.mp4`, sha256: 'c'.repeat(64), byteSize: 1, durationSeconds: 8 }, final: { filename: `${clipId}.mp4`, sha256, byteSize: bytes.byteLength, technical: { output: SIMPLE_CLIP_FINISHING_POLICY.output, audio: SIMPLE_CLIP_FINISHING_POLICY.audio } }, textProvider: { provider: 'fake', model: 'fake' }, videoProvider: { provider: 'fake', model: 'fake', promptAssetIdentity: { basename: 'prompt.json', sha256: 'd'.repeat(64), byteSize: 1 } }, references: [{ ordinal: 1, basename: 'anchor.png', mimeType: 'image/png', sha256: 'e'.repeat(64), byteSize: 1 }], font: { basename: 'font.ttf', sha256: 'f'.repeat(64), byteSize: 1 }, finishing: { policy: SIMPLE_CLIP_FINISHING_POLICY.version, ffmpegVersion: 'ffmpeg version 1.0' }, engineVersion: '0.6.5' }));
+  return { finalPath, metadataPath, sha256, durationSeconds: 8 };
+}
 function child(output: string) {
   const result = new EventEmitter() as EventEmitter & { stdout: EventEmitter; kill(): boolean; };
   result.stdout = new EventEmitter(); result.kill = () => true;
