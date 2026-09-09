@@ -142,6 +142,14 @@ A successful earlier stage is not repeated only because a later stage failed. In
 
 Initial filesystem-backed state is acceptable. Database and distributed queue infrastructure are deferred until evidence requires them.
 
+## Queue scheduling and expiration
+
+Admitted work is a durable, score-priority backlog, not a second mutable queue. The Worker orders currently eligible candidates by persisted Web Momentum score descending, successful admission time ascending, then article ID ascending. It never recalculates or decays a stored score as a candidate ages.
+
+`VIDGEN_WORKER_QUEUE_EXPIRATION_DAYS` controls queue eligibility. It is a positive whole number from 1 through 365 and defaults to 3 when omitted; malformed or out-of-range values fail closed as configuration errors. Queue age starts at the Worker's persisted successful admission timestamp. A candidate remains eligible while `now < queuedAt + expirationDays * 24h` and is expired at or after that exact boundary. Expiration is a durable non-generating outcome: it preserves the record while consuming neither a generation attempt nor a daily generation start.
+
+The default daily generation limit is one start per UTC calendar day (the CLI may explicitly override it). Exhausting that limit pauses generation only: polling, discovery, bounded evaluation, admission, and queue reordering continue. On the next UTC day, the highest-scored still-unexpired queued candidate resumes automatically without re-evaluation.
+
 ## Generation handoff
 
 The Worker invokes VidGen through a CLI process boundary using argument arrays and no shell interpolation.

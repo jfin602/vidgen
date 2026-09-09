@@ -11,7 +11,7 @@ import { runHeadlineHandoff } from './headline-handoff.ts';
 import { acquireWorkerGenerationExclusion, type WorkerGenerationExclusion } from './generation-exclusion.ts';
 import { findVerifiedPriorProduction } from './prior-production.ts';
 import { runPosterCommand, type PosterCommandRunner } from '../app/poster-handoff.ts';
-import { DEFAULT_WORKER_QUEUE_EXPIRATION_DAYS, MAX_WORKER_QUEUE_EXPIRATION_DAYS } from './config.ts';
+import { DEFAULT_DAILY_GENERATION_LIMIT, DEFAULT_WORKER_QUEUE_EXPIRATION_DAYS, MAX_WORKER_QUEUE_EXPIRATION_DAYS } from './config.ts';
 
 export type WorkerMode = 'observe' | 'generate' | 'live';
 export const WORKER_POSTER_VIDEO_PLATFORMS = ['x', 'bluesky', 'reels'] as const;
@@ -109,7 +109,7 @@ export async function runWorkerCycle(options: WorkerCycleOptions): Promise<Worke
   state = await exhaustGenerationAttempts(state, options.store, now, options.generationAttemptLimit ?? 2);
   state = await expireGenerationQueue(state, options.store, now, options.queueExpirationDays ?? DEFAULT_WORKER_QUEUE_EXPIRATION_DAYS);
   if (options.mode !== 'observe') {
-    const dailyGenerationLimit = options.dailyGenerationLimit ?? 1;
+    const dailyGenerationLimit = options.dailyGenerationLimit ?? DEFAULT_DAILY_GENERATION_LIMIT;
     const generationDay = day(now());
     const candidate = generationQueue(state)[0];
     if (candidate !== undefined && generationCount(state, generationDay) >= dailyGenerationLimit) {

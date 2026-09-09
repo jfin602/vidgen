@@ -2,7 +2,7 @@ import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 
 import { VidGenError, isVidGenError } from './core/error.ts';
-import { createWorkerRuntimeConfig, DEFAULT_DAILY_GENERATION_LIMIT, DEFAULT_GENERATION_ATTEMPT_LIMIT, DEFAULT_PUBLICATION_ATTEMPT_LIMIT, DEFAULT_WORKER_MAX_SECONDS, DEFAULT_WORKER_QUEUE_EXPIRATION_DAYS, DEFAULT_WORKER_STATE_ROOT } from './worker/config.ts';
+import { createWorkerRuntimeConfig, DEFAULT_DAILY_GENERATION_LIMIT, DEFAULT_GENERATION_ATTEMPT_LIMIT, DEFAULT_PUBLICATION_ATTEMPT_LIMIT, DEFAULT_WORKER_MAX_SECONDS, DEFAULT_WORKER_QUEUE_EXPIRATION_DAYS, DEFAULT_WORKER_STATE_ROOT, MAX_WORKER_QUEUE_EXPIRATION_DAYS } from './worker/config.ts';
 import { runNgestWorker, type WorkerMode } from './worker/runtime.ts';
 import { WorkerStateStore } from './worker/state.ts';
 import { labelWorkerEvaluation, reportWorkerCalibration } from './worker/calibration.ts';
@@ -31,7 +31,7 @@ Options:
   --daily-generation-limit <n>  Generation starts per UTC day (default: ${DEFAULT_DAILY_GENERATION_LIMIT}).
   --generation-attempt-limit <n>  Generation starts per Article (default: ${DEFAULT_GENERATION_ATTEMPT_LIMIT}).
   --publication-attempt-limit <n>  Poster attempts per unresolved platform (default: ${DEFAULT_PUBLICATION_ATTEMPT_LIMIT}).
-  VIDGEN_WORKER_QUEUE_EXPIRATION_DAYS  Queue age in days (default: ${DEFAULT_WORKER_QUEUE_EXPIRATION_DAYS}; maximum: 365).
+  VIDGEN_WORKER_QUEUE_EXPIRATION_DAYS  Queue age in days (default: ${DEFAULT_WORKER_QUEUE_EXPIRATION_DAYS}; maximum: ${MAX_WORKER_QUEUE_EXPIRATION_DAYS}).
 `;
 
 export interface WorkerCommand { readonly mode: WorkerMode; readonly once: boolean; readonly processExisting: boolean; readonly maxCandidates: number; readonly stateRoot?: string; readonly pollIntervalMs?: number; readonly anchorReferencePaths?: readonly string[]; readonly fontPath?: string; readonly maxSeconds?: number; readonly dailyGenerationLimit?: number; readonly generationAttemptLimit?: number; readonly publicationAttemptLimit?: number; }

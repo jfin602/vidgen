@@ -8,7 +8,7 @@ import { EventEmitter } from 'node:events';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
 
-import { createWorkerRuntimeConfig, DEFAULT_WORKER_MAX_SECONDS, DEFAULT_WORKER_POLL_INTERVAL_MS } from '../../../src/worker/config.ts';
+import { createWorkerRuntimeConfig, DEFAULT_WORKER_MAX_SECONDS, DEFAULT_WORKER_POLL_INTERVAL_MS, MAX_WORKER_QUEUE_EXPIRATION_DAYS } from '../../../src/worker/config.ts';
 import { parseWorkerCliArgs, workerHelpText } from '../../../src/worker-cli.ts';
 import { createPosterRunners, runNgestWorker, runNgestWorkerCycle, runWorkerCycle } from '../../../src/worker/runtime.ts';
 import { createDiscoveredCandidate, emptyWorkerState, isWorkerCandidateComplete, type WorkerState, WORKER_STATE_FILE, WorkerStateStore } from '../../../src/worker/state.ts';
@@ -42,9 +42,13 @@ test('Worker runtime configuration defaults under artifacts and rejects unbounde
   const config = createWorkerRuntimeConfig();
   assert.match(config.stateRoot.replaceAll('\\', '/'), /artifacts\/worker$/); assert.equal(config.pollIntervalMs, DEFAULT_WORKER_POLL_INTERVAL_MS); assert.equal(config.maxSeconds, DEFAULT_WORKER_MAX_SECONDS);
   assert.equal(config.queueExpirationDays, 3); assert.equal(createWorkerRuntimeConfig({ environment: { VIDGEN_WORKER_QUEUE_EXPIRATION_DAYS: '7' } }).queueExpirationDays, 7);
+  assert.equal(createWorkerRuntimeConfig({ environment: { VIDGEN_WORKER_QUEUE_EXPIRATION_DAYS: String(MAX_WORKER_QUEUE_EXPIRATION_DAYS) } }).queueExpirationDays, MAX_WORKER_QUEUE_EXPIRATION_DAYS);
   assert.equal(createWorkerRuntimeConfig({ maxSeconds: 12 }).maxSeconds, 12);
   assert.throws(() => createWorkerRuntimeConfig({ pollIntervalMs: 999 }), /1000 through/);
   assert.throws(() => createWorkerRuntimeConfig({ environment: { VIDGEN_WORKER_QUEUE_EXPIRATION_DAYS: '0' } }), /queue expiration/);
+  assert.throws(() => createWorkerRuntimeConfig({ environment: { VIDGEN_WORKER_QUEUE_EXPIRATION_DAYS: 'three' } }), /queue expiration/);
+  assert.throws(() => createWorkerRuntimeConfig({ environment: { VIDGEN_WORKER_QUEUE_EXPIRATION_DAYS: String(MAX_WORKER_QUEUE_EXPIRATION_DAYS + 1) } }), /queue expiration/);
+  assert.match(workerHelpText, new RegExp(`maximum: ${MAX_WORKER_QUEUE_EXPIRATION_DAYS}`));
   assert.throws(() => createWorkerRuntimeConfig({ stateRoot: '' }), /state root/);
 });
 
@@ -599,6 +603,32 @@ test('queue expiration is binary, defaults to three days, and leaves fresh lower
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test('queue expiration keeps work eligible immediately before its rolling boundary and expires it at the boundary', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-queue-'));
+  try {
+    const store = new WorkerStateStore(root); const generated: string[] = []; const queuedAt = '2026-09-05T12:00:00.000Z';
+    await store.save({ ...emptyWorkerState(), initialized: true, candidates: { boundary: admittedCandidate('boundary', 90, queuedAt) } });
+    const before = await runWorkerCycle({ store, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: () => new Date('2026-09-08T11:59:59.999Z'), runners: { generate: async (id) => { generated.push(id); return artifact(id); } } });
+    assert.equal(before.candidates.boundary!.generation.status, 'succeeded'); assert.deepEqual(generated, ['boundary']);
+    await store.save({ ...emptyWorkerState(), initialized: true, candidates: { boundary: admittedCandidate('boundary', 90, queuedAt) } });
+    const expired = await runWorkerCycle({ store, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at, runners: { generate: async (id) => { generated.push(id); return artifact(id); } } });
+    assert.equal(expired.candidates.boundary!.generation.block, 'queue_expired'); assert.equal(expired.candidates.boundary!.generationAttempts, undefined); assert.deepEqual(expired.generationCounts, {}); assert.deepEqual(generated, ['boundary']);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('configured queue expiration changes generation eligibility without changing the stored score', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-queue-'));
+  try {
+    const store = new WorkerStateStore(root); const generated: string[] = []; const candidate = admittedCandidate('configured', 90, '2026-09-06T12:00:00.000Z');
+    await store.save({ ...emptyWorkerState(), initialized: true, candidates: { configured: candidate } });
+    const expired = await runWorkerCycle({ store, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at, queueExpirationDays: 1, runners: { generate: async (id) => { generated.push(id); return artifact(id); } } });
+    assert.equal(expired.candidates.configured!.generation.block, 'queue_expired'); assert.equal(expired.candidates.configured!.evaluationResult!.score, 90);
+    await store.save({ ...emptyWorkerState(), initialized: true, candidates: { configured: candidate } });
+    const eligible = await runWorkerCycle({ store, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at, queueExpirationDays: 3, runners: { generate: async (id) => { generated.push(id); return artifact(id); } } });
+    assert.equal(eligible.candidates.configured!.generation.status, 'succeeded'); assert.deepEqual(generated, ['configured']);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test('configured queue expiration and UTC rollover select the highest fresh queued score', async () => {
   const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-queue-'));
   try {
@@ -608,12 +638,15 @@ test('configured queue expiration and UTC rollover select the highest fresh queu
       stale: admittedCandidate('stale', 99, '2026-09-06T12:00:00.000Z'),
       backlog: admittedCandidate('backlog', 50, at().toISOString()),
     } });
-    const runners = { evaluate: async (id: string) => scoredEvaluation(id === 'late_high' ? 90 : 0), generate: async (id: string) => { generated.push(id); return artifact(id); } };
+    let evaluations = 0;
+    const runners = { evaluate: async (id: string) => { evaluations += 1; return scoredEvaluation(id === 'late_high' ? 90 : 0); }, generate: async (id: string) => { generated.push(id); return artifact(id); } };
     await runWorkerCycle({ store, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at, dailyGenerationLimit: 1, queueExpirationDays: 1, runners });
     const paused = await runWorkerCycle({ store, discoveredCandidateIds: ['late_high'], mode: 'generate', maxCandidates: 1, now: at, dailyGenerationLimit: 1, queueExpirationDays: 1, runners });
-    assert.equal(paused.candidates.stale!.generation.block, 'queue_expired'); assert.equal(paused.candidates.late_high!.generation.block, 'generation_daily_limit'); assert.deepEqual(generated, ['today']);
-    await runWorkerCycle({ store, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: () => new Date('2026-09-09T12:00:00.000Z'), dailyGenerationLimit: 1, queueExpirationDays: 3, runners });
-    assert.deepEqual(generated, ['today', 'late_high']);
+    assert.equal(paused.candidates.stale!.generation.block, 'queue_expired'); assert.equal(paused.candidates.late_high!.generation.block, 'generation_daily_limit'); assert.equal(evaluations, 1); assert.deepEqual(generated, ['today']);
+    const stillPaused = await runWorkerCycle({ store, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at, dailyGenerationLimit: 1, queueExpirationDays: 1, runners });
+    assert.equal(stillPaused.candidates.late_high!.generation.block, 'generation_daily_limit'); assert.deepEqual(generated, ['today']);
+    await runWorkerCycle({ store, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: () => new Date('2026-09-09T12:00:00.000Z'), dailyGenerationLimit: 1, queueExpirationDays: 3, runners: { evaluate: async () => { throw new Error('evaluation must not repeat'); }, generate: runners.generate } });
+    assert.equal(evaluations, 1); assert.deepEqual(generated, ['today', 'late_high']);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
