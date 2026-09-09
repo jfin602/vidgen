@@ -15,8 +15,9 @@ Required behavior
 
 - `VIDGEN_WORKER_QUEUE_EXPIRATION_DAYS` is the Worker queue-expiration environment variable.
 - Omitted expiration configuration defaults to exactly `3` days.
-- Accept only a bounded positive whole-day value; malformed/out-of-range configuration fails closed with a safe configuration error. Document the chosen supported maximum consistently in config/tests/help/docs.
+- Accept only a bounded positive whole-day value; malformed/out-of-range configuration fails closed with a safe configuration error. Document the supported maximum consistently in config/tests/help/docs.
 - Queue age is a rolling duration from the persisted successful admission/queue timestamp established by the Worker. Do not derive queue age from publisher dates or mutate/recompute Web Momentum scores over time.
+- Define the expiration boundary exactly: a queued candidate is eligible while `now < queuedAt + expirationDays * 24h`; it is expired when `now >= queuedAt + expirationDays * 24h`.
 - Expiration is binary generation eligibility, not score decay. Expired candidates stay durably recorded but cannot generate, cannot consume a generation attempt, cannot consume the daily generation allowance, and cannot block lower-scored still-eligible work.
 - Preserve `DEFAULT_DAILY_GENERATION_LIMIT = 1`. One generation start per UTC calendar day is the default policy; the existing explicit CLI override may remain supported.
 - Reaching the daily generation limit pauses generation only. Discovery, Parallel evaluation within its independent evaluation budget, admission, queue insertion, and score reordering must continue normally.
@@ -30,6 +31,7 @@ Focused proof
 Add deterministic clock-driven tests proving:
 - default expiration is three days;
 - configured expiration changes eligibility;
+- the exact expiration boundary is correct immediately before and exactly at expiry;
 - an expired high score loses to a fresh lower score;
 - expired work spends no attempt/daily slot;
 - after today's one generation, later arrivals continue evaluating and reorder the paused queue;
