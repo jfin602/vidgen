@@ -4,53 +4,85 @@ Status: CURRENT MVP DIRECTION / EARLY-STAGE
 
 ## Conceptual pipeline
 
-StoryInput is the shared production boundary. VidGen has two downstream production paths:
+StoryInput remains the shared production boundary inside VidGen. Phase 7 adds a separate Worker in front of automatic generation:
 
-    manually selected or live governed input
-                    |
-                    v
-            boundary validation
-                    |
-                    v
-              CanonicalInput
-                    |
-                    v
-                StoryInput
-                 /    \
-                /      \
-               v        v
-      simple headline   cinematic template
-           path             path
-      CURRENT PRIORITY     PRESERVED
-             |                 |
-             v                 v
-   bounded presenter copy   ClipPlan
-             |                 |
-             v                 v
-   one presenter video    generated media
-             |                 |
-             v                 v
-   deterministic lower    optional wrappers
-      third + finishing         |
-             |                 v
-             v            FFmpeg assembly
-      MP4 + JSON pair           |
-                               v
-                         final clip.mp4
+    live governed ngest feed
+              |
+              v
+       VidGen Worker
+       - discover new Articles
+       - Parallel Web Momentum
+       - cost/admission policy
+              |
+        admitted candidate
+              |
+              v
+        boundary validation
+              |
+              v
+         CanonicalInput
+              |
+              v
+          StoryInput
+           /    \
+          /      \
+         v        v
+ simple headline  cinematic template
+      path             path
+ CURRENT PRIORITY     PRESERVED
+       |                 |
+       v                 v
+ bounded presenter    ClipPlan
+      copy               |
+       |                 v
+       v            generated media
+ one presenter            |
+    video                 v
+       |            optional wrappers
+       v                 |
+ deterministic           v
+ lower third +      FFmpeg assembly
+   finishing              |
+       |                 v
+       v            final clip.mp4
+ MP4 + JSON pair
 
-The simple path must not be forced through AssemblyTemplate, ClipPlan, cinematic GeneratedMediaUnit resolution, or cinematic AssemblyPlan. The existing cinematic `story -> plan -> media -> assemble` behavior remains supported and regression-protected.
+Manual operator invocation may submit a story directly to VidGen without Worker admission. The Worker therefore controls automatic-production spend, not the validity of the VidGen generation contract.
 
-Live ngest acquisition remains a supported boundary from Phase 1. `c5-config-fix` remains owner-approved but deferred. Live production story fan-out is now Phase 7 work.
+The simple path must not be forced through AssemblyTemplate, ClipPlan, cinematic GeneratedMediaUnit resolution, or cinematic AssemblyPlan. The existing story -> plan -> media -> assemble behavior remains supported and regression-protected.
+
+Parallel Web Momentum is Worker-only evidence. It must not become CanonicalInput, StoryInput, ClipPlan grounding, presenter-copy context, or provider prompt input.
+
+See docs/worker.md and docs/integrations/parallel.md.
 
 ## Runtime and execution shape
 
 The MVP application runtime is Node.js + TypeScript.
 
-Development execution is manually invoked through the CLI and processes one selected story at a time.
+Development execution remains manually invokable through the CLI and processes one selected story at a time. Phase 7 adds a long-running Worker around those CLI boundaries; the engine remains independently usable without it.
 
-The engine should remain separable enough that live feed orchestration can later fan stories into the same story pipeline, but queues, workers, databases, and distributed orchestration are not initial requirements.
+The initial Worker should be single-process and single-flight for expensive generation. Durable filesystem state is sufficient initially; databases, distributed queues, and multi-worker coordination remain deferred until workload evidence requires them.
 
 FFmpeg runs locally. Managed media providers supply their own generation infrastructure.
+
+## Worker orchestration boundary
+
+The planned Phase 7 Worker is an orchestration layer, not a third creative pipeline.
+
+It owns:
+- polling live ngest through the existing authenticated boundary;
+- first-start baseline establishment and new-Article discovery;
+- one bounded Parallel Web Momentum evaluation per eligible evaluation identity;
+- versioned scoring and configurable admission thresholds;
+- hard spend limits and fail-closed admission when evaluation is unavailable;
+- durable per-Article stage state across restart;
+- invoking VidGen generation through CLI process boundaries;
+- discovering ready video-capable VidGen Poster platforms via doctor;
+- invoking VidGen Poster independently per platform and retaining partial-success state.
+
+It must not import VidGen internal implementation modules as an orchestration shortcut, move platform authentication/publishing into VidGen, or ingest Poster credentials. Successful earlier stages are not repeated merely because a later stage fails.
+
+Worker operating modes are observe, generate, and live. Normal first startup establishes a baseline without treating the entire current feed as new work. See docs/worker.md.
 
 ## Ngest boundary
 
@@ -76,14 +108,16 @@ If the owner later resumes the approved deferred `c5-config-fix` correction, it 
 
 The transitional adapter must discard Distribution-only digest/generatedAt state, validate the returned Profile identity, preserve canonical Article order/destinations, and supply neutral VidGen-owned controls. This does not replace the future dedicated feed-plus-controls boundary.
 
-Ngest's feed is pre-curated for VidGen production. Every supplied story is already eligible for content creation.
+Ngest's feed is pre-curated. Every supplied Article is a governed production candidate.
 
-VidGen must not:
+The VidGen generation engine must not:
 - rank stories for production eligibility;
 - cluster stories to choose winners;
 - apply a second newsworthiness filter;
 - recreate ngest moderation, duplicate, eligibility, Profile filtering, or ordering logic;
 - connect directly to ngest persistence.
+
+The planned Worker may make a separate automatic-production admission decision using bounded Web Momentum and cost policy. That decision must remain outside the generation engine and must not reinterpret ngest trust or moderation semantics.
 
 See docs/integrations/ngest.md.
 
@@ -136,7 +170,7 @@ The initial manual pipeline should use a story with a usable headline and summar
 
 If StoryInput lacks a non-null summary, ClipPlan planning fails with a clear insufficient-context outcome before provider activity rather than automatically retrieving the publisher page or fabricating missing facts.
 
-Publisher-page retrieval, HTML extraction, SSRF/network policy, and broader web research are deferred capabilities. If later added, they must be separately bounded and provenance-aware.
+Publisher-page retrieval, HTML extraction, SSRF/network policy, and broader web research for creative generation are deferred capabilities. Phase 7's bounded Parallel Search is not creative retrieval: it is Worker-only Web Momentum evidence for automatic-production admission. If creative retrieval is later added, it must be separately bounded and provenance-aware.
 
 ## Cinematic ClipPlan boundary
 
