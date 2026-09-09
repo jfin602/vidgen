@@ -284,6 +284,84 @@ test('only a persisted qualified Web Momentum admission can start generation', a
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test('the selected evaluation pass completes before score-priority generation starts', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-queue-'));
+  try {
+    const events: string[] = [];
+    await runWorkerCycle({
+      store: new WorkerStateStore(root), discoveredCandidateIds: ['earlier-low', 'later-high'], mode: 'generate', processExisting: true, maxCandidates: 2, now: at, dailyGenerationLimit: 2,
+      runners: {
+        evaluate: async (id) => { events.push(`evaluate:${id}`); return scoredEvaluation(id === 'earlier-low' ? 10 : 90); },
+        generate: async (id) => { events.push(`generate:${id}`); return artifact(id); },
+      },
+    });
+    assert.deepEqual(events, ['evaluate:earlier-low', 'evaluate:later-high', 'generate:later-high', 'generate:earlier-low']);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('a newly admitted higher score reprioritizes the durable generation backlog', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-queue-'));
+  try {
+    const store = new WorkerStateStore(root); const generated: string[] = [];
+    await store.save({ ...emptyWorkerState(), initialized: true, candidates: { existing_low: admittedCandidate('existing_low', 10, '2026-09-08T11:00:00.000Z') } });
+    await runWorkerCycle({
+      store, discoveredCandidateIds: ['new_high'], mode: 'generate', maxCandidates: 1, now: at, dailyGenerationLimit: 2,
+      runners: { evaluate: async () => scoredEvaluation(90), generate: async (id) => { generated.push(id); return artifact(id); } },
+    });
+    assert.deepEqual(generated, ['new_high', 'existing_low']);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('score-priority ties use admission time then Article ID deterministically', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-queue-'));
+  try {
+    const store = new WorkerStateStore(root); const generated: string[] = [];
+    await store.save({ ...emptyWorkerState(), initialized: true, candidates: {
+      tie_z: admittedCandidate('tie_z', 50, '2026-09-08T12:00:00.000Z'),
+      later: admittedCandidate('later', 50, '2026-09-08T12:01:00.000Z'),
+      tie_a: admittedCandidate('tie_a', 50, '2026-09-08T12:00:00.000Z'),
+    } });
+    await runWorkerCycle({ store, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at, dailyGenerationLimit: 3, runners: { generate: async (id) => { generated.push(id); return artifact(id); } } });
+    assert.deepEqual(generated, ['tie_a', 'tie_z', 'later']);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('an admitted backlog entry survives feed disappearance and Worker restart', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-queue-'));
+  try {
+    const store = new WorkerStateStore(root); let evaluations = 0; const generated: string[] = [];
+    await runWorkerCycle({ store, discoveredCandidateIds: ['gone_from_feed'], mode: 'observe', processExisting: true, maxCandidates: 1, now: at, runners: { evaluate: async () => { evaluations += 1; return scoredEvaluation(70); } } });
+    await runWorkerCycle({ store: new WorkerStateStore(root), discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at, runners: { evaluate: async () => { throw new Error('evaluation must be reused'); }, generate: async (id) => { generated.push(id); return artifact(id); } } });
+    assert.equal(evaluations, 1); assert.deepEqual(generated, ['gone_from_feed']);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('UTC-day rollover resumes a queued candidate without re-evaluation', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-queue-'));
+  try {
+    const store = new WorkerStateStore(root); const generated: string[] = []; let evaluations = 0;
+    const runners = { evaluate: async (id: string) => { evaluations += 1; return scoredEvaluation(id === 'today' ? 90 : 10); }, generate: async (id: string) => { generated.push(id); return artifact(id); } };
+    const first = await runWorkerCycle({ store, discoveredCandidateIds: ['today', 'tomorrow'], mode: 'generate', processExisting: true, maxCandidates: 2, now: at, dailyGenerationLimit: 1, runners });
+    assert.equal(first.candidates.tomorrow!.generation.block, 'generation_daily_limit'); assert.deepEqual(generated, ['today']);
+    const tomorrow = () => new Date('2026-09-09T12:00:00.000Z');
+    const resumed = await runWorkerCycle({ store, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: tomorrow, dailyGenerationLimit: 1, runners: { evaluate: async () => { throw new Error('evaluation must be reused'); }, generate: runners.generate } });
+    assert.equal(evaluations, 2); assert.equal(resumed.candidates.tomorrow!.generation.status, 'succeeded'); assert.deepEqual(generated, ['today', 'tomorrow']);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('an attempt-exhausted high score does not block lower-ranked eligible work', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-queue-'));
+  try {
+    const store = new WorkerStateStore(root); const generated: string[] = [];
+    await store.save({ ...emptyWorkerState(), initialized: true, candidates: {
+      exhausted: { ...admittedCandidate('exhausted', 90, at().toISOString()), generationAttempts: 2, generation: { status: 'failed', completedAt: at().toISOString(), failure: { code: 'stage_failed', message: 'Worker stage failed.' } } },
+      lower: admittedCandidate('lower', 10, at().toISOString()),
+    } });
+    const state = await runWorkerCycle({ store, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at, dailyGenerationLimit: 2, generationAttemptLimit: 2, runners: { generate: async (id) => { generated.push(id); return artifact(id); } } });
+    assert.equal(state.candidates.exhausted!.generation.block, 'generation_attempt_limit'); assert.deepEqual(generated, ['lower']);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test('headline handoff uses exact shell-free argv, accepts only bounded final_ready output, and rechecks files', async () => {
   const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-headline-'));
   try {
@@ -332,6 +410,8 @@ test('generation budgets bound spending while successful verified media is reuse
 });
 
 function evaluation(decision: 'admitted' | 'skipped') { return { metric: 'web-momentum', version: 'v1', policyId: WEB_MOMENTUM_POLICY_ID, score: 3, threshold: 2, decision, evaluatedAt: at().toISOString(), searchId: 'search-1', sessionId: 'session-1', signature: ['article', 'headline'], results: [], components: { breadth: 0, saturation: 3, freshness: 0, reaction: 0 } } as const; }
+function scoredEvaluation(score: number, evaluatedAt = at().toISOString()) { return { ...evaluation('admitted'), score, evaluatedAt }; }
+function admittedCandidate(id: string, score: number, admittedAt: string) { return { ...createDiscoveredCandidate(id, admittedAt), evaluation: { status: 'succeeded' as const, completedAt: admittedAt }, admission: { status: 'succeeded' as const, completedAt: admittedAt }, evaluationResult: scoredEvaluation(score, admittedAt) }; }
 function artifact(id = 'article_1') { return { finalPath: `C:/worker/${id}.mp4`, metadataPath: `C:/worker/${id}.json`, sha256: 'a'.repeat(64), durationSeconds: 8 }; }
 function child(output: string) {
   const result = new EventEmitter() as EventEmitter & { stdout: EventEmitter; kill(): boolean; };

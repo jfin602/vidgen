@@ -22,7 +22,7 @@ Modes:
 Options:
   --once                Process one bounded snapshot, then exit.
   --process-existing    Explicitly process the first snapshot instead of baselining it.
-  --max-candidates <n>  Positive cap per snapshot (default: 1).
+  --max-candidates <n>  Positive evaluation/admission cap per snapshot (default: 1).
   --state-root <dir>    Durable Worker state (default: ${DEFAULT_WORKER_STATE_ROOT}).
   --poll-interval-ms <n>  Bounded polling interval (default: 60000).
   --anchor-reference <path>  Required one to three times for generate/live.

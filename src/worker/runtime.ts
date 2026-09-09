@@ -81,9 +81,30 @@ export async function runWorkerCycle(options: WorkerCycleOptions): Promise<Worke
     if (processed >= options.maxCandidates) break;
     const candidate = state.candidates[id];
     if (candidate === undefined || candidate.baseline === true) continue;
-    const next = await processCandidate(state, candidate, options.mode, options.runners ?? {}, options.store, now, options.dailyGenerationLimit ?? 1, options.generationAttemptLimit ?? 2, options.publicationAttemptLimit ?? 2);
+    const next = await evaluateCandidate(state, candidate, options.runners ?? {}, options.store, now);
     state = next.state;
     if (next.didWork) processed += 1;
+  }
+  if (options.mode !== 'observe') {
+    const dailyGenerationLimit = options.dailyGenerationLimit ?? 1;
+    const attempted = new Set<string>();
+    const generationDay = day(now());
+    for (;;) {
+      const candidate = generationQueue(state).find((item) => !attempted.has(item.id));
+      if (candidate === undefined) break;
+      if (generationCount(state, generationDay) >= dailyGenerationLimit) {
+        if (candidate.generation.status !== 'blocked' || candidate.generation.block !== 'generation_daily_limit') {
+          state = replaceStage(state, candidate.id, 'generation', { status: 'blocked', completedAt: timestamp(now()), block: 'generation_daily_limit' });
+          await options.store.save(state);
+        }
+        break;
+      }
+      attempted.add(candidate.id);
+      state = (await processGeneration(state, candidate, options.mode, options.runners ?? {}, options.store, now, generationDay, dailyGenerationLimit, options.generationAttemptLimit ?? 2)).state;
+    }
+    if (options.mode === 'live') for (const candidate of Object.values(state.candidates)) {
+      state = (await processPublication(state, candidate, options.runners ?? {}, options.store, now, options.publicationAttemptLimit ?? 2)).state;
+    }
   }
   await options.store.save(state);
   return state;
@@ -131,7 +152,7 @@ export async function runNgestWorker(options: NgestWorkerRunOptions): Promise<Wo
   }
 }
 
-async function processCandidate(state: WorkerState, candidate: WorkerCandidateState, mode: WorkerMode, runners: WorkerStageRunners, store: WorkerStateStore, now: () => Date, dailyGenerationLimit: number, generationAttemptLimit: number, publicationAttemptLimit: number): Promise<{ state: WorkerState; didWork: boolean }> {
+async function evaluateCandidate(state: WorkerState, candidate: WorkerCandidateState, runners: WorkerStageRunners, store: WorkerStateStore, now: () => Date): Promise<{ state: WorkerState; didWork: boolean }> {
   let next = state; let current = candidate; let didWork = false;
   if (current.evaluation.status === 'pending' && runners.evaluate !== undefined) {
     didWork = true; ({ state: next, candidate: current } = await runExternalStage(next, current.id, 'evaluation', store, now, async () => {
@@ -139,7 +160,22 @@ async function processCandidate(state: WorkerState, candidate: WorkerCandidateSt
       return { evaluationResult: evaluation, admission: { status: evaluation.decision === 'admitted' ? 'succeeded' : 'skipped', completedAt: timestamp(now()) } };
     }));
   }
-  if (mode === 'observe' || !isQualifiedForGeneration(current)) return { state: next, didWork };
+  return { state: next, didWork };
+}
+
+/** The backlog is derived from durable candidate state, never a second queue. */
+function generationQueue(state: WorkerState): WorkerCandidateState[] {
+  return Object.values(state.candidates)
+    .filter((candidate) => isQualifiedForGeneration(candidate) && ['pending', 'failed', 'blocked'].includes(candidate.generation.status) && (candidate.generation.status !== 'blocked' || candidate.generation.block === 'generation_daily_limit'))
+    .sort((left, right) => right.evaluationResult!.score - left.evaluationResult!.score
+      || (admissionTime(left) < admissionTime(right) ? -1 : admissionTime(left) > admissionTime(right) ? 1 : 0)
+      || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
+}
+
+function admissionTime(candidate: WorkerCandidateState): string { return candidate.admission.completedAt ?? candidate.evaluationResult!.evaluatedAt; }
+
+async function processGeneration(state: WorkerState, candidate: WorkerCandidateState, mode: Exclude<WorkerMode, 'observe'>, runners: WorkerStageRunners, store: WorkerStateStore, now: () => Date, generationDay: string, dailyGenerationLimit: number, generationAttemptLimit: number): Promise<{ state: WorkerState; didWork: boolean }> {
+  let next = state; let current = candidate; let didWork = false;
   if (mode === 'live' && (current.publicationTargets === undefined || (current.publicationTargets.length === 0 && current.generation.status === 'pending'))) {
     const targets: typeof WORKER_POSTER_VIDEO_PLATFORMS[number][] = [];
     if (runners.doctor !== undefined) for (const platform of WORKER_POSTER_VIDEO_PLATFORMS) { try { await runners.doctor(platform); targets.push(platform); } catch { /* Poster diagnostics stay outside Worker state. */ } }
@@ -147,22 +183,25 @@ async function processCandidate(state: WorkerState, candidate: WorkerCandidateSt
     current = next.candidates[current.id]!; await store.save(next); didWork = true;
   }
   if (mode === 'live' && current.publicationTargets?.length === 0) return { state: next, didWork };
-  if (current.generation.status !== 'succeeded') {
-    if (runners.generate === undefined) return { state: next, didWork };
-    if (current.generation.status === 'blocked' && current.generation.block === 'generation_daily_limit' && generationCount(next, day(now())) < dailyGenerationLimit) {
-      next = replaceStage(next, current.id, 'generation', { status: 'pending' }); current = next.candidates[current.id]!; await store.save(next);
-    }
-    if (current.generation.status === 'failed' && (current.generationAttempts ?? 0) >= generationAttemptLimit) {
-      next = replaceStage(next, current.id, 'generation', { status: 'blocked', completedAt: timestamp(now()), block: 'generation_attempt_limit' }); current = next.candidates[current.id]!; await store.save(next); return { state: next, didWork: true };
-    }
-    if (current.generation.status !== 'pending' && current.generation.status !== 'failed') return { state: next, didWork };
-    if (generationCount(next, day(now())) >= dailyGenerationLimit) {
-      next = replaceStage(next, current.id, 'generation', { status: 'blocked', completedAt: timestamp(now()), block: 'generation_daily_limit' }); await store.save(next); return { state: next, didWork: true };
-    }
-    next = spendGeneration(next, current.id, day(now())); current = next.candidates[current.id]!; await store.save(next);
-    didWork = true; ({ state: next, candidate: current } = await runExternalStage(next, current.id, 'generation', store, now, async () => ({ generatedArtifact: validateWorkerGeneratedArtifact(await runners.generate!(current.id)) })));
+  if (runners.generate === undefined) return { state: next, didWork };
+  if (current.generation.status === 'blocked' && current.generation.block === 'generation_daily_limit' && generationCount(next, generationDay) < dailyGenerationLimit) {
+    next = replaceStage(next, current.id, 'generation', { status: 'pending' }); current = next.candidates[current.id]!; await store.save(next);
   }
-  if (mode !== 'live' || current.generation.status !== 'succeeded' || current.publicationTargets === undefined || runners.publish === undefined || runners.caption === undefined) return { state: next, didWork };
+  if (current.generation.status === 'failed' && (current.generationAttempts ?? 0) >= generationAttemptLimit) {
+    next = replaceStage(next, current.id, 'generation', { status: 'blocked', completedAt: timestamp(now()), block: 'generation_attempt_limit' }); await store.save(next); return { state: next, didWork: true };
+  }
+  if (current.generation.status !== 'pending' && current.generation.status !== 'failed') return { state: next, didWork };
+  if (generationCount(next, generationDay) >= dailyGenerationLimit) {
+    next = replaceStage(next, current.id, 'generation', { status: 'blocked', completedAt: timestamp(now()), block: 'generation_daily_limit' }); await store.save(next); return { state: next, didWork: true };
+  }
+  next = spendGeneration(next, current.id, generationDay); current = next.candidates[current.id]!; await store.save(next);
+  didWork = true; ({ state: next, candidate: current } = await runExternalStage(next, current.id, 'generation', store, now, async () => ({ generatedArtifact: validateWorkerGeneratedArtifact(await runners.generate!(current.id)) })));
+  return { state: next, didWork };
+}
+
+async function processPublication(state: WorkerState, candidate: WorkerCandidateState, runners: WorkerStageRunners, store: WorkerStateStore, now: () => Date, publicationAttemptLimit: number): Promise<{ state: WorkerState; didWork: boolean }> {
+  let next = state; let current = candidate; let didWork = false;
+  if (current.generation.status !== 'succeeded' || current.publicationTargets === undefined || runners.publish === undefined || runners.caption === undefined) return { state: next, didWork };
   let caption: string | undefined;
   for (const platform of current.publicationTargets) {
     if (current.publication[platform]?.status === 'succeeded') continue;
