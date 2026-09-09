@@ -1,0 +1,47 @@
+TASK: Correction 6 / P5 — Poster fan-out and live mode
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Complete Worker `live` mode by discovering ready video-capable VidGen Poster destinations before generation and publishing one verified generated clip independently to each selected platform.
+
+Read docs/worker.md, current jfin602/vidgen-poster README/architecture/platform contract, P1-P4 Worker state, and existing `runPosterCommand` handoff tests before editing. Poster inspection is read-only; implementation remains in this repository.
+
+MUST REMAIN TRUE
+
+- The Worker owns fan-out; VidGen Poster remains the authority for platform authentication, validation, upload/publish behavior, duplicate protection, and receipts.
+- In `live` mode, run shell-free Poster `doctor` checks for exactly `x`, `bluesky`, then `reels`. Threads is not a video target. Preserve existing `headline-post` behavior and its legacy platform surface unchanged.
+- Persist the ready target-platform set for the candidate before paying for generation. If none are ready, hold the candidate and do not generate.
+- `observe` and `generate` must never call Poster.
+- After verified generation, invoke Poster separately for each persisted target using `post <platform> --video <final> --text <caption>`, never `--allow-duplicate`.
+- Preserve the current caption semantics: `"<headline>" by <source display name>`, using the governed candidate data rather than trusting child output.
+- Persist per-platform publishing state/attempts. A successful platform is never reposted because another platform fails; unresolved platforms may retry only within a bounded per-platform attempt policy and always remain subject to Poster duplicate/uncertain-publication protection.
+- A Poster failure or unknown external state never becomes success. Do not expose child output, credentials, provider payloads, runtime secrets, or authorization material in Worker artifacts/logs.
+- A candidate is complete only when every persisted target is known published. Generated media remains reusable when publication is partial.
+- Do not read Poster credentials or implement platform APIs in the Worker. Reuse/extend only the existing shell-free CLI handoff abstraction as necessary.
+- Package and engine version remain 0.6.5.
+
+PROOF
+
+Tests must prove fixed doctor order, zero-ready no-generation behavior, persisted ready subset, exact per-platform post argv/caption, observe/generate Poster suppression, partial failure with later-platform continuation, no repost of successful platforms, bounded unresolved retry, no `--allow-duplicate`, generated-media reuse, complete-state semantics, and child diagnostic/secret suppression.
+
+Run focused Worker/poster-handoff/CLI tests, `npm run check`, and `git diff --check`.
+
+Downstream-required capability -> owning implementation/export -> focused proof:
+
+ready destination set -> VidGen Poster doctor CLI via shell-free handoff -> readiness-order/subset tests.
+
+independent publish resume -> per-platform Worker state + Poster post CLI -> partial-success/retry/no-repost tests.
+
+NON-GOALS
+
+Do not modify jfin602/vidgen-poster, add Threads video, implement social APIs, move publishing into VidGen, change `headline-post`, or add scheduling/database/distributed orchestration.
+
+FINAL RESPONSE
+
+Report connected-platform discovery, fan-out/retry semantics, caption contract, Poster boundary preservation, exact tests, and unchanged 0.6.5 state.
