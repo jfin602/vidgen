@@ -2,7 +2,7 @@
 
 VidGen is a standalone news video generation engine.
 
-Ngest supplies a governed, pre-curated feed in which every delivered story is already intended for content production. VidGen does not rank, cluster, select, or reject those stories. Its job is to turn each supplied story into its own self-contained, postable video clip.
+Ngest supplies a governed, pre-curated feed of valid production candidates. VidGen itself does not rank, cluster, select, or reject stories explicitly submitted to its production CLI; its job is to turn each submitted story into its own self-contained, postable video clip. Phase 7 adds a separate VidGen Worker that may decline automatic generation for newly discovered candidates based on bounded Parallel Web Momentum and cost policy.
 
 ## Current MVP direction
 
@@ -49,9 +49,11 @@ The implemented cinematic `story -> plan -> media -> assemble` pipeline remains 
 
 ## System boundary
 
-Ngest owns governed source trust, normalization, Article identity/provenance, duplicate/moderation behavior, Profile filtering/order, production eligibility, original publisher destinations, authentication, and delivery.
+Ngest owns governed source trust, normalization, Article identity/provenance, duplicate/moderation behavior, Profile filtering/order, candidate eligibility, original publisher destinations, authentication, and delivery.
 
-VidGen owns boundary validation, story-level production identity, simple presenter-headline generation, cinematic ClipPlan generation, source traceability, generated media, deterministic FFmpeg finishing/assembly, and final artifacts.
+The planned VidGen Worker owns live polling, new-Article discovery, bounded Parallel Web Momentum evaluation, automatic-production admission/cost policy, durable orchestration state, VidGen CLI invocation, and VidGen Poster fan-out. Parallel evidence is not creative StoryInput.
+
+VidGen owns boundary validation, story-level production identity, simple presenter-headline generation, cinematic ClipPlan generation, source traceability, generated media, deterministic FFmpeg finishing/assembly, and final artifacts. VidGen Poster independently owns platform authentication and publication.
 
 VidGen does not connect directly to ngest persistence.
 
@@ -81,7 +83,7 @@ Phases 1 and 2 are complete and closed at versions 0.1.5 and 0.2.5. Phase 3 was 
 
 The project was simplified after Phase 1. FeedAnalysis, EditorialPlan, separate Script and ProductionPlan stages, Remotion composition, edition-level planning, and story-selection logic are no longer part of the current MVP.
 
-The repository package baseline is 0.6.5. Phase 5's deterministic assembly path is implemented. The original Phase 5 closeout host lacked ffmpeg/ffprobe and owner-supplied real media, so that closeout did not establish a real render. Since then, the deployment VPS has directly qualified FFmpeg 6.1.1, FFprobe 6.1.1, libx264, AAC, and the required assembly filters. `c5-optional-assets` is closed: intro and outro are independently optional, omitted wrappers contribute no placeholder media, duration, identity, or provenance, and supplied wrappers remain fully qualified. A complete owner-media generated story render and human playback review are still unclaimed. `c5-config-fix` remains owner-approved but is deferred. Phase 6 simple presenter-headline implementation and the `c6-agent-platform` correction are implemented at 0.6.5: Agent Platform is the sole Google integration, with capability-specific authentication and qualification. Live story fan-out and operational hardening remain Phase 7. The future dedicated ngest VidGen feed-plus-controls endpoint remains the intended production boundary.
+The repository package baseline is 0.6.5. Phase 5's deterministic assembly path is implemented. The original Phase 5 closeout host lacked ffmpeg/ffprobe and owner-supplied real media, so that closeout did not establish a real render. Since then, the deployment VPS has directly qualified FFmpeg 6.1.1, FFprobe 6.1.1, libx264, AAC, and the required assembly filters. `c5-optional-assets` is closed: intro and outro are independently optional, omitted wrappers contribute no placeholder media, duration, identity, or provenance, and supplied wrappers remain fully qualified. A complete owner-media generated story render and human playback review are still unclaimed. `c5-config-fix` remains owner-approved but is deferred. Phase 6 simple presenter-headline implementation and the `c6-agent-platform` correction are implemented at 0.6.5: Agent Platform is the sole Google integration, with capability-specific authentication and qualification. Phase 7 is now planned as the VidGen Worker: live ngest polling, Parallel Web Momentum admission, cost controls, durable retry/resume, generation orchestration, and downstream Poster fan-out. The future dedicated ngest VidGen feed-plus-controls endpoint remains the intended production boundary.
 
 ## Start here
 
@@ -93,6 +95,8 @@ Documentation:
 - docs/architecture.md
 - docs/template-system.md
 - docs/integrations/ngest.md
+- docs/worker.md
+- docs/integrations/parallel.md
 - docs/control-interface.md
 - docs/roadmap/initial-roadmap.md
 - docs/planning/initial-engineering-question-worksheet.md
