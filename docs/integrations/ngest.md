@@ -4,9 +4,9 @@ Status: CURRENT DIRECTION / TRANSITIONAL LIVE DEVELOPMENT PATH APPROVED / FUTURE
 
 ## Purpose
 
-VidGen consumes governed ngest Profile output without taking ownership of Source trust, eligibility, moderation, duplicate handling, Profile filtering, ordering, or publisher destinations.
+VidGen consumes governed ngest Profile output without taking ownership of Source trust, candidate eligibility, moderation, duplicate handling, Profile filtering, ordering, or publisher destinations.
 
-Every story supplied through the governed Profile feed is already intended for content production. VidGen does not perform another story-worthiness, ranking, clustering, or selection pass.
+Every Article supplied through the governed Profile feed is a valid production candidate. The VidGen generation engine does not perform another story-worthiness, ranking, clustering, or selection pass. Phase 7's separate Worker may decide whether a newly discovered candidate is admitted to automatic generation based on bounded Web Momentum and cost policy.
 
 The intended production architecture remains a dedicated authenticated VidGen integration response carrying:
 
@@ -98,17 +98,20 @@ Generic Distribution endpoints and PHP integration packages must not gain VidGen
 
 The transitional Distribution-v1 adapter does not weaken this separation. It exists so the current VidGen engine can qualify live governed feed input before the dedicated endpoint is implemented and deployed.
 
-## Production-eligibility contract
+## Production-candidate contract
 
-Ngest owns the decision that a story appears in the governed Profile feed.
+Ngest owns the decision that an Article appears in the governed Profile feed.
 
 For the current product:
-- every supplied Article is production-worthy;
-- every supplied Article is intended to enter its own story-production pipeline;
-- VidGen must not add a second eligibility filter;
-- VidGen may fail a production for technical, validation, safety, or grounding reasons, but that is not editorial re-selection.
+- every supplied Article is a valid governed production candidate;
+- ngest remains authoritative for source trust, moderation, duplicate behavior, Profile filtering, and outward Article eligibility;
+- the VidGen generation engine must not add a second editorial or source-validity filter;
+- the Phase 7 Worker may independently decline automatic generation based on bounded Web Momentum and cost policy;
+- Worker admission is an automation/spend decision, not a statement that the ngest Article is invalid or unworthy;
+- an operator may still submit a governed story directly to VidGen regardless of a prior Worker skip;
+- VidGen may fail an admitted production for technical, validation, safety, or grounding reasons without redefining ngest eligibility.
 
-Feed ordering may remain useful as upstream provenance or later execution order, but it is not a VidGen ranking exercise.
+Feed ordering remains upstream provenance and may also serve as deterministic discovery/execution order. It is not a VidGen ranking exercise.
 
 ## Ownership
 
@@ -123,6 +126,13 @@ Ngest owns:
 - exact original publisher destinations;
 - persistence/admin editing of future Profile-associated VidGen controls;
 - eventual assembly/delivery of the dedicated VidGen response.
+
+The VidGen Worker owns:
+- polling cadence and first-start baseline state;
+- new-Article discovery from the governed feed;
+- bounded Parallel Web Momentum evaluation and automatic-production admission;
+- durable orchestration/retry state;
+- CLI invocation of VidGen and VidGen Poster.
 
 VidGen owns:
 - secure runtime storage/use of its ngest credential;
@@ -164,7 +174,7 @@ The local fixture is not permission to invent a second creative schema.
 
 The owner-approved `c5-config-fix` sample helper is intended to accept one publisher Article URL, find exactly one governed Article through the live adapter, and materialize a validated one-Article fixture under ignored runtime artifacts. That helper performs no publisher retrieval, provider call, media generation, or rendering.
 
-Once live production fan-out is implemented, it must reuse the same canonical/StoryInput boundary and dispatch each story into the selected VidGen production path rather than inventing a new ngest-specific creative contract.
+Phase 7 Worker orchestration must reuse the same canonical/StoryInput boundary for admitted stories rather than inventing a new ngest-specific creative contract. Parallel Web Momentum evidence remains outside that creative boundary.
 
 ## Database boundary
 
@@ -180,7 +190,7 @@ Publisher retrieval is not part of the implemented ClipPlan/media-generation pat
 
 Publisher-page retrieval may be added later as an explicit fallback capability before live production requires support for insufficient upstream context. Any such implementation must be bounded, provenance-aware, and safe against untrusted URLs, redirects, response sizes, and content types.
 
-Broader web research remains deferred.
+Broader web research for creative generation remains deferred. Phase 7's bounded Parallel Search is permitted only as Worker-level Web Momentum evidence and does not enrich StoryInput or model prompts.
 
 Permission to retrieve a publisher page for factual context is not permission to reuse media from the page. Publisher media may enter production only when reuse is explicitly permitted.
 
@@ -209,7 +219,7 @@ For the owner-approved `c5-config-fix` path, the ngest Distribution v1 continuat
 
 The correction may therefore acquire one coherent complete governed feed snapshot by bounded cursor traversal. It must preserve page/article order, require stable Profile/Publication/snapshot identity, reject loops or unsafe bounds, and fail closed on drift.
 
-This resolves transport acquisition semantics only. Production story fan-out, per-story isolation, retries/resume, idempotency, operational limits, and orchestration are now Phase 7 work. Phase 6 is the simple presenter-headline clip path.
+This resolves transport acquisition semantics only. Phase 7 now owns Worker polling, candidate discovery, Web Momentum admission, per-story isolation, retries/resume, idempotency, operational limits, generation invocation, and publishing orchestration. Phase 6 remains the implemented simple presenter-headline clip path.
 
 ## Security
 
