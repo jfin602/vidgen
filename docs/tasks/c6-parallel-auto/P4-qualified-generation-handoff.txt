@@ -1,0 +1,47 @@
+TASK: Correction 6 / P4 — Qualified VidGen generation handoff
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Make admitted Worker candidates invoke the existing VidGen `headline` CLI as an external process, preserving generation as a separate engine boundary and making expensive work restart/cost safe.
+
+Read docs/worker.md, P1-P3 Worker state, current VidGen CLI/headline workflow/output, shell-free Poster handoff patterns, and focused tests before editing.
+
+MUST REMAIN TRUE
+
+- Only a persisted qualified Web Momentum decision may enter automatic generation. `observe` never generates; `generate` generates but never publishes.
+- Extend Worker runtime arguments for one-to-three `--anchor-reference`, required `--font-file`, and optional `--max-seconds <4-20>`; default Worker maxSeconds to 8 to keep the automatic path to the shortest normal Veo coverage unless explicitly raised.
+- Support a bounded daily generation-count ceiling and a bounded per-Article generation-attempt ceiling. Exhausted budget leaves the Article qualified but blocked from new spend.
+- Invoke the current repository `src/cli.ts headline` through a shell-free child process with discrete arguments, the candidate fixture/articleId, configured references/font/maxSeconds, and a Worker-owned per-Article generation artifact root.
+- Do not import headline-generation internals into the Worker. Preserve the existing `vidgen headline` CLI behavior.
+- Capture only bounded child stdout needed to recognize the existing `final_ready` success contract. Suppress/untrust child diagnostics. Require one unambiguous final path, metadata path, SHA-256, and duration, then recheck the final regular file and hash before marking generated.
+- Persist generated identity/path data in restart-safe Worker state. A completed generation is reused and never regenerated because publication later fails.
+- On restart, a prior externally in-progress generation without a durably verified result is uncertain; do not silently rerun expensive generation automatically.
+- A definite bounded generation failure may retry only within the configured attempt policy; never create an unbounded retry loop.
+- Keep simple/cinematic generation contracts, providers, schemas, and `headline-post` unchanged.
+- Package and engine version remain 0.6.5.
+
+PROOF
+
+Tests must prove qualified-only dispatch, observe suppression, generation-mode behavior, default/explicit maxSeconds, daily/per-Article spend limits, exact shell-free argv including hostile path/text characters, bounded success-output parsing, hash/file revalidation, completed reuse, failure retry bounds, uncertain-restart blocking, and no Poster calls.
+
+Run focused Worker/CLI/headline regression tests, `npm run check`, and `git diff --check`.
+
+Downstream-required capability -> owning implementation/export -> focused proof:
+
+qualified candidate -> Worker generation runner -> exact VidGen headline argv test.
+
+verified reusable final media -> existing headline CLI success output + Worker file/hash verification -> generated-state/restart tests.
+
+NON-GOALS
+
+Do not call Poster, change VidGen provider behavior, add a second generation API, parse raw provider responses, change headline sidecars, or modify jfin602/vidgen-poster.
+
+FINAL RESPONSE
+
+Report generation gating, CLI argv/result verification, spend/retry behavior, preserved engine contracts, exact tests, and unchanged 0.6.5 state.
