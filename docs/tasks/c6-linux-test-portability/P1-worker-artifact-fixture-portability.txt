@@ -1,0 +1,34 @@
+TASK: Correction 6 / P1 — Worker artifact fixture portability
+
+- Recommended configuration: `Terra Medium`.
+- Required unchanged project version: `0.6.5`.
+
+Objective
+
+Repair the Worker unit-test fixtures so the deterministic launch gate is portable across Windows and Linux without weakening production artifact validation.
+
+Required behavior
+
+- Re-read the current Worker runtime/state validation and failing Worker tests before editing.
+- Production validation must remain unchanged: WorkerGeneratedArtifact paths must still be absolute on the current host platform.
+- Remove Windows-only fake artifact paths such as `C:/worker/...` from Worker tests.
+- Build fake artifact paths using the current platform's path utilities so they are absolute on both Windows and Linux.
+- Update any expected Poster argv assertions to derive expected paths from the same portable fixture helper rather than hard-coded Windows paths.
+- Do not relax `validateWorkerGeneratedArtifact`, `isAbsolute` checks, prior-production verification, generation spend ordering, queue behavior, publication behavior, presenter-source behavior, or logging behavior.
+- Keep the correction test-only unless inspection reveals a distinct production defect.
+- Keep package.json at 0.6.5 and do not create package-lock.json.
+
+Validation
+
+Run:
+- npm run test:worker
+- npm run test:app
+- npm run test:runner
+- npm run check
+- git diff --check
+
+The Linux Worker suite must pass with no skipped tests. If failures remain after portable artifact fixtures are corrected, stop and report the remaining production/test defects rather than broadening this prompt.
+
+Non-goals
+
+Do not change runtime queue/generation/publication semantics, provider integrations, Poster behavior, or security validation merely to satisfy tests.
