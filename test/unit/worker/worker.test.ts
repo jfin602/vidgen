@@ -359,8 +359,8 @@ test('live discovers fixed ready destinations before generation, fans out exact 
     const candidate = state.candidates.article_1!;
     assert.equal(generated, 1); assert.deepEqual(candidate.publicationTargets, ['x', 'reels']); assert.deepEqual(calls, [
       ['doctor', 'x'], ['doctor', 'bluesky'], ['doctor', 'reels'],
-      ['post', 'x', '--video', 'C:/worker/article_1.mp4', '--text', '"First governed headline" by Publisher Main'],
-      ['post', 'reels', '--video', 'C:/worker/article_1.mp4', '--text', '"First governed headline" by Publisher Main'],
+      ['post', 'x', '--video', artifact().finalPath, '--text', '"First governed headline" by Publisher Main'],
+      ['post', 'reels', '--video', artifact().finalPath, '--text', '"First governed headline" by Publisher Main'],
     ]);
     assert.equal(calls.flat().includes('--allow-duplicate'), false); assert.equal(isWorkerCandidateComplete(candidate), true); assert.equal(JSON.stringify(state).includes('child-secret'), false);
   } finally { await rm(root, { recursive: true, force: true }); }
@@ -421,7 +421,7 @@ test('live uses governed fixture data for the Poster caption', async () => {
         ...createPosterRunners(async (arguments_) => { calls.push([...arguments_]); if (arguments_[0] === 'doctor' && arguments_[1] !== 'x') throw new Error('not ready'); }),
       },
     });
-    assert.deepEqual(calls.at(-1), ['post', 'x', '--video', 'C:/worker/article_1.mp4', '--text', '"First governed headline" by Publisher Main']);
+    assert.deepEqual(calls.at(-1), ['post', 'x', '--video', artifact().finalPath, '--text', '"First governed headline" by Publisher Main']);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
@@ -903,7 +903,7 @@ test('the guarded recheck adopts a first Worker production instead of regenerati
 function evaluation(decision: 'admitted' | 'skipped') { return { metric: 'web-momentum', version: 'v1', policyId: WEB_MOMENTUM_POLICY_ID, score: 3, threshold: 2, decision, evaluatedAt: at().toISOString(), searchId: 'search-1', sessionId: 'session-1', signature: ['article', 'headline'], results: [], components: { breadth: 0, saturation: 3, freshness: 0, reaction: 0 } } as const; }
 function scoredEvaluation(score: number, evaluatedAt = at().toISOString()) { return { ...evaluation('admitted'), score, evaluatedAt }; }
 function admittedCandidate(id: string, score: number, admittedAt: string) { return { ...createDiscoveredCandidate(id, admittedAt), evaluation: { status: 'succeeded' as const, completedAt: admittedAt }, admission: { status: 'succeeded' as const, completedAt: admittedAt }, evaluationResult: scoredEvaluation(score, admittedAt) }; }
-function artifact(id = 'article_1') { return { finalPath: `C:/worker/${id}.mp4`, metadataPath: `C:/worker/${id}.json`, sha256: 'a'.repeat(64), durationSeconds: 8 }; }
+function artifact(id = 'article_1') { return { finalPath: resolve('worker', `${id}.mp4`), metadataPath: resolve('worker', `${id}.json`), sha256: 'a'.repeat(64), durationSeconds: 8 }; }
 async function writeHeadlineProduction(root: string, articleId: string, headline = 'First governed headline', clipId = 'clip-safe-1', finalHash?: string) {
   await mkdir(root, { recursive: true }); const finalPath = join(root, `${clipId}.mp4`); const metadataPath = join(root, `${clipId}.json`); const bytes = Buffer.from(`final ${articleId} ${clipId}`); const sha256 = finalHash ?? createHash('sha256').update(bytes).digest('hex'); const manifest = validManifest(); const source = manifest.articles[0]!;
   await writeFile(finalPath, bytes); await writeFile(metadataPath, JSON.stringify({ schemaVersion: '4', clipId, article: { ...source, articleId, headline }, profile: manifest.profile, publication: manifest.publication, story: { fingerprint: 'a'.repeat(64), provenance: { sourceInputFingerprint: 'b'.repeat(64), ngestApiVersion: manifest.apiVersion, snapshotRevision: manifest.snapshotRevision } }, presenterText: 'A concise presenter line.', requestedMaxSeconds: 8, speechPlanningDurationSeconds: 4, finalDurationSeconds: 8, rawVeo: { filename: `${clipId}.veo.mp4`, sha256: 'c'.repeat(64), byteSize: 1, durationSeconds: 8 }, final: { filename: `${clipId}.mp4`, sha256, byteSize: bytes.byteLength, technical: { output: SIMPLE_CLIP_FINISHING_POLICY.output, audio: SIMPLE_CLIP_FINISHING_POLICY.audio } }, textProvider: { provider: 'fake', model: 'fake' }, videoProvider: { provider: 'fake', model: 'fake', promptAssetIdentity: { basename: 'prompt.json', sha256: 'd'.repeat(64), byteSize: 1 } }, references: [{ ordinal: 1, basename: 'anchor.png', mimeType: 'image/png', sha256: 'e'.repeat(64), byteSize: 1 }], font: { basename: 'font.ttf', sha256: 'f'.repeat(64), byteSize: 1 }, finishing: { policy: SIMPLE_CLIP_FINISHING_POLICY.version, ffmpegVersion: 'ffmpeg version 1.0' }, engineVersion: '0.6.5' }));
