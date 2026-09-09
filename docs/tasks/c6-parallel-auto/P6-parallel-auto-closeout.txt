@@ -1,0 +1,60 @@
+TASK: Correction 6 / P6 — Parallel auto closeout
+
+MODEL / REASONING / USAGE
+- Recommended configuration: `Terra High`.
+
+VERSIONING
+- Required unchanged project version: `0.6.5`.
+
+GOAL
+
+Review P1-P5 as the bounded implementation of the documented Phase 7 VidGen Worker. Inspect the actual resulting code and state transitions beyond the happy path; do not approve merely because tests pass.
+
+ACCEPTANCE
+
+Confirm:
+- Worker is a separate runtime around existing ngest, VidGen CLI, and VidGen Poster CLI boundaries;
+- first normal startup baselines current feed with zero automatic work and backfill is explicit;
+- new candidates are durable/restart-safe and reuse validated one-Article manifests without duplicate ngest transport;
+- Parallel uses exactly the intended one-request Search v1 policy for `web-momentum` v1, no SDK/extra API/hidden retry loop, and no creative-grounding leakage;
+- normalized evidence/scoring is deterministic, versioned, bounded, explainable, and calibratable against owner labels;
+- evaluation and generation budgets fail closed on new spend;
+- only qualified candidates generate, automatic maxSeconds defaults to 8, and VidGen is invoked shell-free through its existing CLI;
+- generated media is verified/reused across restart/publication failures and uncertain in-progress external work is not blindly repeated;
+- `live` requires at least one ready video-capable Poster target, persists the target set, and publishes independently to x/bluesky/reels only;
+- partial publication never causes regeneration or repost of known-successful platforms and never uses `--allow-duplicate`;
+- observe/generate/live side-effect boundaries are exact;
+- Worker, Parallel, ngest, VidGen, and Poster secrets/diagnostics cannot enter durable evidence or public output;
+- existing simple/cinematic VidGen behavior and existing `headline-post` behavior remain regression-protected;
+- package/engine version remains 0.6.5 despite the requested correction-style task folder; documentation continues to describe this product behavior as Phase 7 Worker scope.
+
+VALIDATION
+
+Run:
+- `npm run codex:phase:validate -- c6-parallel-auto`;
+- all focused Worker, ngest, sample-story, headline/CLI, and poster-handoff tests;
+- `npm test`;
+- `npm run check`;
+- `node src/cli.ts --help`;
+- the new Worker help command;
+- `git diff --check`;
+- a bounded source/artifact sweep for Parallel keys, authorization headers, raw responses, hidden provider retries, direct social API logic, or creative use of Parallel evidence.
+
+LIVE EVIDENCE
+
+Keep evidence capability-specific and spend-bounded.
+
+- If ngest and Parallel credentials are available, use a temporary Worker state root and perform at most one real observe-mode candidate evaluation with `--once`, explicit existing processing if needed, and `--max-candidates 1`. Report the safe search/evidence/score result without exposing credentials or raw excerpts.
+- Do not force Gemini/Veo generation merely to close the stack. If owner-approved generation configuration/assets and budget are available, at most one qualified generate-mode smoke may be observed; otherwise report the blocker.
+- Do not perform a live social write unless explicit owner authorization for that designated write is present in the execution context. Mock/dry-run/doctor evidence is not a publication.
+- Report ngest polling, Parallel Search, generation, X, Bluesky, Reels, render, and human-playback evidence separately; never infer one from another.
+
+BOUNDED REPAIRS
+
+Repair only defects clearly inside this Worker/Parallel stack and focused regressions required to protect it. Do not redesign creative generation, Poster adapters, ngest, provider architecture, databases, queues, or distributed deployment.
+
+If deterministic implementation is complete, reconcile active Worker/roadmap status docs to the evidence actually established. Preserve unobserved live capabilities as unqualified.
+
+FINAL RESPONSE
+
+Report architecture/boundary review, any bounded repairs, exact automated validation, Web Momentum policy/calibration evidence, cost/idempotency/restart behavior, exact live evidence or blockers per capability, secret safety, preserved engine/Poster behavior, unchanged 0.6.5 state, and whether `c6-parallel-auto` is ready for human review.
