@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 import { VidGenError, isVidGenError } from './core/error.ts';
 import { createWorkerRuntimeConfig, DEFAULT_WORKER_STATE_ROOT } from './worker/config.ts';
-import { runWorker, type WorkerMode } from './worker/runtime.ts';
+import { runNgestWorker, type WorkerMode } from './worker/runtime.ts';
 import { WorkerStateStore } from './worker/state.ts';
 
 export const workerHelpText = `VidGen Worker
@@ -51,7 +51,7 @@ export async function runWorkerCli(args: readonly string[], output: WorkerCliOut
     const command = parseWorkerCliArgs(args);
     if ('kind' in command) { output.writeStdout(workerHelpText); return 0; }
     const config = createWorkerRuntimeConfig(command);
-    await runWorker({ store: new WorkerStateStore(config.stateRoot), mode: command.mode, once: command.once, processExisting: command.processExisting, maxCandidates: command.maxCandidates, pollIntervalMs: config.pollIntervalMs, discover: async () => [] });
+    await runNgestWorker({ store: new WorkerStateStore(config.stateRoot), mode: command.mode, once: command.once, processExisting: command.processExisting, maxCandidates: command.maxCandidates, pollIntervalMs: config.pollIntervalMs });
     output.writeStdout(`Worker ${command.mode} is running.\nstateRoot: ${config.stateRoot}\npollIntervalMs: ${config.pollIntervalMs}\n`);
     return 0;
   } catch (error) {

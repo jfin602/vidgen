@@ -1,7 +1,11 @@
 import { VidGenError } from '../core/error.ts';
+import { buildCanonicalInput } from '../core/canonical-input.ts';
+import { buildOneArticleFixture } from '../app/sample-story-fixture.ts';
+import { fetchNgestVidGenManifestPage, type NgestVidGenEnvironment, type NgestVidGenManifestPage } from '../integrations/ngest/vidgen-manifest.ts';
 import { createDiscoveredCandidate, type WorkerCandidateState, type WorkerEvaluation, type WorkerStage, type WorkerState, WorkerStateStore, validateWorkerEvaluation } from './state.ts';
 
 export type WorkerMode = 'observe' | 'generate' | 'live';
+const MAX_WORKER_DISCOVERED_CANDIDATES = 10_000;
 
 export interface WorkerStageRunners {
   readonly evaluate?: (candidateId: string) => Promise<WorkerEvaluation>;
@@ -18,6 +22,8 @@ export interface WorkerCycleOptions {
   readonly publicationPlatforms?: readonly string[];
   readonly runners?: WorkerStageRunners;
   readonly now?: () => Date;
+  /** Must atomically persist a local fixture before its ID becomes durable state. */
+  readonly persistCandidateFixture?: (candidateId: string) => Promise<void>;
 }
 
 export interface WorkerRunOptions extends Omit<WorkerCycleOptions, 'discoveredCandidateIds'> {
@@ -27,14 +33,29 @@ export interface WorkerRunOptions extends Omit<WorkerCycleOptions, 'discoveredCa
   readonly pollIntervalMs: number;
 }
 
+export interface NgestWorkerCycleOptions extends Omit<WorkerCycleOptions, 'discoveredCandidateIds' | 'persistCandidateFixture'> {
+  readonly environment?: NgestVidGenEnvironment;
+  readonly fetchManifest?: (environment: NgestVidGenEnvironment) => Promise<NgestVidGenManifestPage>;
+}
+
+export interface NgestWorkerRunOptions extends Omit<NgestWorkerCycleOptions, 'now'> {
+  readonly once?: boolean;
+  readonly pollIntervalMs: number;
+  readonly sleep?: (milliseconds: number) => Promise<void>;
+  readonly now?: () => Date;
+}
+
 /** Runs one bounded snapshot. Discovery is injected; this foundation does not poll ngest itself. */
 export async function runWorkerCycle(options: WorkerCycleOptions): Promise<WorkerState> {
   if (!Number.isSafeInteger(options.maxCandidates) || options.maxCandidates < 1) throw new VidGenError('invalid_argument', 'Worker max candidates must be a positive whole number.');
   const now = options.now ?? (() => new Date());
   let state = await options.store.load();
   const initial = !state.initialized;
-  const candidateIds = [...new Set(options.discoveredCandidateIds)];
-  for (const id of candidateIds) if (state.candidates[id] === undefined) state = addCandidate(state, id, timestamp(now()), initial && !options.processExisting);
+  const candidateIds = [...options.discoveredCandidateIds];
+  if (new Set(candidateIds).size !== candidateIds.length) throw new VidGenError('ngest_manifest', 'Ngest snapshot contains ambiguous duplicate Article IDs.');
+  const newIds = candidateIds.filter((id) => state.candidates[id] === undefined);
+  for (const id of newIds) await options.persistCandidateFixture?.(id);
+  for (const id of newIds) state = addCandidate(state, id, timestamp(now()), initial && !options.processExisting);
   if (initial) { state = { ...state, initialized: true }; await options.store.save(state); if (!options.processExisting) return state; }
   if (options.processExisting) state = clearBaseline(state, new Set(candidateIds));
   let processed = 0;
@@ -55,6 +76,27 @@ export async function runWorker(options: WorkerRunOptions): Promise<WorkerState>
   const sleep = options.sleep ?? ((milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
   for (;;) {
     const state = await runWorkerCycle({ ...options, discoveredCandidateIds: await options.discover() });
+    if (options.once) return state;
+    await sleep(options.pollIntervalMs);
+  }
+}
+
+/** Polls one already-coherent ngest snapshot and persists its local candidates. */
+export async function runNgestWorkerCycle(options: NgestWorkerCycleOptions): Promise<WorkerState> {
+  const manifest = await (options.fetchManifest ?? fetchNgestVidGenManifestPage)(options.environment ?? process.env);
+  const fixtures = fixturesFromSnapshot(manifest);
+  return runWorkerCycle({
+    ...options,
+    discoveredCandidateIds: [...fixtures.keys()],
+    persistCandidateFixture: async (id) => options.store.saveCandidateFixture(id, fixtures.get(id)!),
+  });
+}
+
+/** Long-running ngest wrapper; each iteration fetches exactly one coherent snapshot. */
+export async function runNgestWorker(options: NgestWorkerRunOptions): Promise<WorkerState> {
+  const sleep = options.sleep ?? ((milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
+  for (;;) {
+    const state = await runNgestWorkerCycle(options);
     if (options.once) return state;
     await sleep(options.pollIntervalMs);
   }
@@ -93,6 +135,17 @@ async function runExternalStage(state: WorkerState, candidateId: string, stageNa
 }
 
 function addCandidate(state: WorkerState, id: string, at: string, baseline: boolean): WorkerState { return { ...state, candidates: { ...state.candidates, [id]: { ...createDiscoveredCandidate(id, at), ...(baseline ? { baseline: true as const } : {}) } } }; }
+function fixturesFromSnapshot(manifest: NgestVidGenManifestPage): ReadonlyMap<string, NgestVidGenManifestPage> {
+  const canonical = buildCanonicalInput(manifest);
+  if (canonical.feed.articles.length > MAX_WORKER_DISCOVERED_CANDIDATES) throw new VidGenError('ngest_manifest', 'Ngest snapshot exceeds the Worker candidate limit.');
+  const fixtures = new Map<string, NgestVidGenManifestPage>();
+  for (const article of canonical.feed.articles) {
+    if (fixtures.has(article.articleId)) throw new VidGenError('ngest_manifest', 'Ngest snapshot contains ambiguous duplicate Article IDs.');
+    fixtures.set(article.articleId, manifest);
+  }
+  for (const id of fixtures.keys()) fixtures.set(id, buildOneArticleFixture(manifest, id));
+  return fixtures;
+}
 function clearBaseline(state: WorkerState, ids: ReadonlySet<string>): WorkerState {
   let changed = false;
   const candidates = Object.fromEntries(Object.entries(state.candidates).map(([id, candidate]) => {

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
@@ -5,6 +6,7 @@ import { VidGenError } from '../core/error.ts';
 import { prettyJson, writeJsonAtomically, type AtomicJsonFilesystem } from '../shared/atomic-json.ts';
 
 export const WORKER_STATE_FILE = 'worker-state.json';
+export const WORKER_CANDIDATES_DIRECTORY = 'candidates';
 export const WORKER_STATE_VERSION = 1;
 export type WorkerStageStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'skipped' | 'uncertain';
 
@@ -90,6 +92,22 @@ export class WorkerStateStore {
       await writeJsonAtomically(this.filesystem, this.path, state, prettyJson, this.createTemporarySuffix);
     } catch {
       throw new VidGenError('artifact', 'Unable to persist Worker state.');
+    }
+  }
+
+  candidateFixturePath(id: string): string {
+    validateCandidateId(id);
+    return join(this.root, WORKER_CANDIDATES_DIRECTORY, `${createHash('sha256').update(id).digest('hex')}.json`);
+  }
+
+  /** Publishes a candidate's local manifest before its discovery state advances. */
+  async saveCandidateFixture(id: string, fixture: unknown): Promise<void> {
+    const path = this.candidateFixturePath(id);
+    try {
+      await this.filesystem.mkdir(join(this.root, WORKER_CANDIDATES_DIRECTORY), { recursive: true });
+      await writeJsonAtomically(this.filesystem, path, fixture, prettyJson, this.createTemporarySuffix);
+    } catch {
+      throw new VidGenError('artifact', 'Unable to persist Worker candidate fixture.');
     }
   }
 }

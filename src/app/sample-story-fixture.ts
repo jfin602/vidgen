@@ -3,6 +3,8 @@ import { mkdir, rename, unlink, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 import { isVidGenError, VidGenError } from '../core/error.ts';
+import { buildCanonicalInput } from '../core/canonical-input.ts';
+import { buildStoryInput } from '../core/story-input.ts';
 import {
   fetchNgestVidGenManifestPage,
   validateNgestVidGenManifestPage,
@@ -45,15 +47,7 @@ export async function createSampleStoryFixture(
   if (matches.length !== 1) throw new VidGenError('story_selection', 'The supplied URL matches multiple governed Articles.');
 
   const article = matches[0]!;
-  const fixture = validateNgestVidGenManifestPage({
-    apiVersion: manifest.apiVersion,
-    profile: manifest.profile,
-    publication: manifest.publication,
-    articles: [article],
-    control: manifest.control,
-    nextCursor: null,
-    ...(manifest.snapshotRevision === undefined ? {} : { snapshotRevision: manifest.snapshotRevision }),
-  });
+  const fixture = buildOneArticleFixture(manifest, article.articleId as string);
   const artifactsRoot = resolve(dependencies.artifactsRoot ?? DEFAULT_SAMPLE_STORY_ARTIFACTS_ROOT);
   const outputPath = join(artifactsRoot, sampleStoryFilename(article.originalUrl as string));
   const filesystem = dependencies.filesystem ?? { mkdir, writeFile, rename, unlink };
@@ -68,6 +62,28 @@ export async function createSampleStoryFixture(
 
 export function sampleStoryFilename(originalUrl: string): string {
   return `article-${createHash('sha256').update(originalUrl).digest('hex').slice(0, 24)}.json`;
+}
+
+/** Builds the same validated local-manifest boundary used by Worker candidates. */
+export function buildOneArticleFixture(
+  manifest: NgestVidGenManifestPage,
+  articleId: string,
+): NgestVidGenManifestPage {
+  const matches = manifest.articles.filter((article) => typeof article.articleId === 'string'
+    && article.articleId.trim() === articleId);
+  if (matches.length === 0) throw new VidGenError('story_selection', 'The requested Article is not available in the governed snapshot.');
+  if (matches.length !== 1) throw new VidGenError('story_selection', 'The requested Article is ambiguous in the governed snapshot.');
+  const fixture = validateNgestVidGenManifestPage({
+    apiVersion: manifest.apiVersion,
+    profile: manifest.profile,
+    publication: manifest.publication,
+    articles: [matches[0]!],
+    control: manifest.control,
+    nextCursor: null,
+    ...(manifest.snapshotRevision === undefined ? {} : { snapshotRevision: manifest.snapshotRevision }),
+  });
+  buildStoryInput(buildCanonicalInput(fixture), articleId);
+  return fixture;
 }
 
 function validateArticleUrl(value: string): string {

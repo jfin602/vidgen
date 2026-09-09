@@ -6,8 +6,12 @@ import test from 'node:test';
 
 import { createWorkerRuntimeConfig, DEFAULT_WORKER_POLL_INTERVAL_MS } from '../../../src/worker/config.ts';
 import { parseWorkerCliArgs, workerHelpText } from '../../../src/worker-cli.ts';
-import { runWorkerCycle } from '../../../src/worker/runtime.ts';
+import { runNgestWorker, runNgestWorkerCycle, runWorkerCycle } from '../../../src/worker/runtime.ts';
 import { createDiscoveredCandidate, emptyWorkerState, WORKER_STATE_FILE, WorkerStateStore } from '../../../src/worker/state.ts';
+import { buildCanonicalInput } from '../../../src/core/canonical-input.ts';
+import { buildStoryInput } from '../../../src/core/story-input.ts';
+import { loadNgestVidGenManifestFile } from '../../../src/integrations/ngest/local-manifest-file.ts';
+import { validManifest } from '../../fixtures/canonical-input.ts';
 
 const at = () => new Date('2026-09-08T12:00:00.000Z');
 
@@ -64,6 +68,91 @@ test('the first snapshot is a durable baseline until explicit backfill', async (
     assert.equal(evaluations, 0);
     const backfill = await runWorkerCycle({ store, discoveredCandidateIds: ['article_1'], mode: 'observe', processExisting: true, maxCandidates: 1, now: at, runners });
     assert.equal(backfill.candidates.article_1!.baseline, undefined); assert.equal(backfill.candidates.article_1!.evaluation.status, 'succeeded'); assert.equal(evaluations, 1);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('ngest polling baselines once, discovers unseen Articles in feed order, and persists compatible fixtures', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-'));
+  try {
+    const store = new WorkerStateStore(root); let evaluations: string[] = [];
+    const first = validManifest();
+    const baseline = await runNgestWorkerCycle({ store, mode: 'observe', maxCandidates: 1, now: at, fetchManifest: async () => first, runners: { evaluate: async (id) => { evaluations.push(id); return evaluation('admitted'); } } });
+    assert.deepEqual(Object.keys(baseline.candidates), ['article-1', 'article-2']);
+    assert.equal(baseline.candidates['article-1']!.baseline, true); assert.deepEqual(evaluations, []);
+
+    const next = validManifest();
+    next.articles = [...next.articles, {
+      ...next.articles[0]!, articleId: 'article-3', headline: 'Third governed headline', originalUrl: 'https://publisher.example.test/story-3',
+    }, {
+      ...next.articles[0]!, articleId: 'article-4', headline: 'Fourth governed headline', originalUrl: 'https://publisher.example.test/story-4',
+    }];
+    const discovered = await runNgestWorkerCycle({ store, mode: 'observe', maxCandidates: 1, now: at, fetchManifest: async () => next, runners: { evaluate: async (id) => { evaluations.push(id); return evaluation('admitted'); } } });
+    assert.deepEqual(evaluations, ['article-3']);
+    assert.equal(discovered.candidates['article-3']!.evaluation.status, 'succeeded');
+    assert.equal(discovered.candidates['article-4']!.evaluation.status, 'pending');
+    const fixture = await loadNgestVidGenManifestFile(store.candidateFixturePath('article-3'));
+    assert.deepEqual(fixture.articles.map((article) => article.articleId), ['article-3']);
+    assert.equal(buildStoryInput(buildCanonicalInput(fixture), 'article-3').article.headline, 'Third governed headline');
+    assert.equal((await loadNgestVidGenManifestFile(store.candidateFixturePath('article-4'))).articles[0]!.articleId, 'article-4');
+
+    await runNgestWorkerCycle({ store, mode: 'observe', maxCandidates: 1, now: at, fetchManifest: async () => next, runners: { evaluate: async (id) => { evaluations.push(id); return evaluation('admitted'); } } });
+    assert.deepEqual(evaluations, ['article-3', 'article-4']);
+    await runNgestWorkerCycle({ store, mode: 'observe', maxCandidates: 1, now: at, fetchManifest: async () => next, runners: { evaluate: async (id) => { evaluations.push(id); return evaluation('admitted'); } } });
+    assert.deepEqual(evaluations, ['article-3', 'article-4']);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('--once fetches exactly one coherent ngest snapshot', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-'));
+  try {
+    let polls = 0;
+    await runNgestWorker({ store: new WorkerStateStore(root), mode: 'observe', once: true, maxCandidates: 1, pollIntervalMs: 1_000, fetchManifest: async () => { polls += 1; return validManifest(); } });
+    assert.equal(polls, 1);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('ngest --process-existing makes the first snapshot eligible while candidate limits do not erase discoveries', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-'));
+  try {
+    const store = new WorkerStateStore(root); const evaluations: string[] = [];
+    const state = await runNgestWorkerCycle({
+      store, mode: 'observe', processExisting: true, maxCandidates: 1, now: at, fetchManifest: async () => validManifest(),
+      runners: { evaluate: async (id) => { evaluations.push(id); return evaluation('admitted'); } },
+    });
+    assert.deepEqual(evaluations, ['article-1']);
+    assert.equal(state.candidates['article-1']!.baseline, undefined);
+    assert.equal(state.candidates['article-2']!.baseline, undefined);
+    assert.equal(state.candidates['article-2']!.evaluation.status, 'pending');
+    assert.ok(await readFile(store.candidateFixturePath('article-2'), 'utf8'));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('ngest poll errors, malformed or duplicate candidates, and fixture persistence failures do not advance discovery state', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-'));
+  try {
+    const store = new WorkerStateStore(root);
+    await assert.rejects(runNgestWorkerCycle({ store, mode: 'observe', maxCandidates: 1, fetchManifest: async () => { throw new Error('unavailable'); } }));
+    assert.deepEqual(await store.load(), emptyWorkerState());
+
+    const duplicate = validManifest(); duplicate.articles = [...duplicate.articles, { ...duplicate.articles[0]! }];
+    await assert.rejects(runNgestWorkerCycle({ store, mode: 'observe', maxCandidates: 1, fetchManifest: async () => duplicate }), /duplicate Article IDs/);
+    assert.deepEqual(await store.load(), emptyWorkerState());
+
+    const malformed = validManifest(); malformed.articles = [{ ...malformed.articles[0]!, articleId: 'malformed', originalUrl: 'not-a-url' }];
+    await assert.rejects(runNgestWorkerCycle({ store, mode: 'observe', maxCandidates: 1, fetchManifest: async () => malformed }), /absolute HTTP/);
+    assert.deepEqual(await store.load(), emptyWorkerState());
+
+    const failingStore = new WorkerStateStore(join(root, 'failing'), {
+      filesystem: {
+        mkdir: async () => undefined,
+        readFile: async () => { const error = new Error('missing') as NodeJS.ErrnoException; error.code = 'ENOENT'; throw error; },
+        writeFile: async () => undefined,
+        rename: async () => { throw new Error('no'); },
+        unlink: async () => undefined,
+      },
+    });
+    await assert.rejects(runNgestWorkerCycle({ store: failingStore, mode: 'observe', maxCandidates: 1, fetchManifest: async () => validManifest() }), /candidate fixture/);
+    assert.deepEqual(await failingStore.load(), emptyWorkerState());
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
