@@ -1,0 +1,71 @@
+TASK: Correction 6 / P4 — Presenter source manifest and stable selection
+
+- Recommended configuration: `Terra High`.
+- Required unchanged project version: `0.6.5`.
+
+Objective
+
+Replace Worker-specific repeated --anchor-reference configuration with one external presenter-source text manifest under vidgen-assets, then choose exactly one presenter source per generated story for visual variety while preserving deterministic retry/restart behavior.
+
+Operational contract
+
+- Automatic Worker generation uses `VIDGEN_WORKER_PRESENTER_SOURCES_FILE` as the path to the presenter-source manifest.
+- Production deployment will point this once at:
+  `/home/deploy/vidgen-assets/presenter-sources.txt`
+- The manifest contains one absolute presenter source-image path per non-empty line.
+- Adding a new presenter source for future videos must require only adding its absolute path as a new line in that manifest. The Worker must re-read the manifest before assigning a source to an unassigned generation, so a PM2 restart is not required for ordinary pool additions/removals.
+- Blank lines may be ignored. Do not introduce another config syntax, JSON/YAML format, directory scan, filename convention, or image registry.
+
+Required behavior
+
+- Re-read the current Worker config/CLI/state/generation handoff and simple headline reference-image validation before editing.
+- The manual `vidgen headline` CLI retains its current one-to-three `--anchor-reference` contract unchanged.
+- Worker observe mode must continue functioning without presenter assets because it never generates.
+- Worker generate/live modes use the presenter-source manifest for automatic generation. Remove the need to supply repeated Worker `--anchor-reference` values; do not retain two competing automatic presenter-source authorities.
+- Require `VIDGEN_WORKER_PRESENTER_SOURCES_FILE` for Worker-managed generation/live configuration and fail clearly/safely when it is missing or invalid. Do not hard-code the deployment path into portable generation internals.
+- Bound manifest acquisition and parsing. At minimum:
+  - regular non-empty text file;
+  - maximum 64 KiB;
+  - 1 through 100 non-empty source entries;
+  - each non-empty line, after surrounding whitespace normalization, is one absolute path;
+  - reject NUL/control-character paths and overlong paths;
+  - reject duplicate normalized absolute paths rather than silently weighting one source twice.
+- Treat manifest contents and filesystem state as untrusted local configuration. Fail closed on malformed entries or unsupported/missing/non-regular/empty source images rather than silently dropping bad entries and changing selection distribution.
+- Reuse existing approved anchor/reference-image validation semantics where practical. Keep the selected source within the same supported image-size/type constraints as the headline workflow.
+- Choose exactly one source image for each Worker-managed headline generation. Never pass the entire pool or multiple pool entries to the headline generator.
+- Selection must be deterministic pseudo-random by governed articleId over the currently valid pool, giving variety across different stories while the same articleId/pool resolves consistently. Do not use Math.random(), clock time, process ID, feed position, or other nondeterministic state.
+- Persist the selected presenter source before consuming a generation attempt/daily slot and before spawning VidGen. Persist enough bounded identity to make later retries reproducible and to detect source-file drift; include the selected absolute path plus safe file identity such as basename/hash/byte-size as appropriate.
+- Once a candidate has a persisted presenter-source selection, restart, retry, manifest reordering, manifest additions/removals, or pool-size changes must not silently replace it with another source.
+- Before a later attempt uses a persisted selection, verify that the selected source still exists and matches its persisted identity. Missing/changed/invalid selected media must fail closed before generation spend rather than choosing a replacement automatically.
+- Candidates already admitted/queued before this correction but lacking a selection must receive and persist one at the next actual generation opportunity using the then-current valid manifest.
+- Prior-production reuse takes precedence over new presenter selection. If a valid completed video already exists for the articleId, do not require or persist a new presenter selection merely to reuse it.
+- The generation-exclusion invariant remains global. Source assignment for a real generation attempt must be reconciled with the latest durable candidate state under the existing generation exclusion before spend/spawn so duplicate Workers cannot create conflicting active generations.
+- Do not place presenter paths or manifest contents into CanonicalInput, StoryInput, Parallel evidence, creative text prompts, or publication captions. The actual selected reference identity remains represented through the normal headline-generation sidecar.
+- Do not log full presenter paths or manifest contents. P5 owns safe operational logging.
+- Update Worker help/docs to explain the environment variable, one-path-per-line manifest, hot-reload behavior for future unassigned videos, stable persisted selection for retries, and that manual headline anchor flags are unchanged.
+- Keep package.json at 0.6.5 and do not create package-lock.json.
+
+Focused proof
+
+Add deterministic tests proving:
+- observe mode does not require the manifest;
+- generate/live fail safely when presenter-source configuration is absent or malformed;
+- a valid one-line manifest works;
+- a five-source manifest can select different sources for different articleIds while the same articleId is stable;
+- each generation handoff receives exactly one anchor reference;
+- blank lines are harmless;
+- relative/control-character/duplicate/empty/oversized/unbounded manifests fail safely;
+- invalid/missing/non-regular/unsupported pool entries fail closed rather than being silently skipped;
+- a selected source is persisted before generation spend/spawn;
+- retry and restart preserve the same selected source;
+- manifest reordering/addition/removal does not alter an already-selected candidate;
+- re-reading the manifest lets a newly added valid line participate in a future unassigned selection without restarting the Worker;
+- changing/deleting a persisted selected source fails before attempt/daily-slot consumption and does not auto-select another source;
+- valid prior-production reuse does not require a fresh source assignment;
+- manual headline one-to-three anchor behavior remains covered and unchanged.
+
+Run focused Worker/source-manifest tests, npm run test:worker, npm run test:app, npm run check, and git diff --check.
+
+Non-goals
+
+Do not implement weighted source probabilities, "avoid the last N presenters" history, per-source scheduling, directory watching, creative image generation, multi-image Worker generations, a presenter admin UI, or source-pool logic inside VidGen Poster.

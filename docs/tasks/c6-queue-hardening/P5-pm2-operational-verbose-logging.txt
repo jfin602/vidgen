@@ -1,41 +1,43 @@
-TASK: Correction 6 / P4 — PM2 operational verbose logging
+TASK: Correction 6 / P5 — PM2 operational verbose logging
 
 - Recommended configuration: `Terra High`.
 - Required unchanged project version: `0.6.5`.
 
 Objective
 
-Make the long-running VidGen Worker operationally observable under PM2 without changing its decisions, durable state, spend accounting, concurrency guarantees, or provider/platform boundaries.
+Make the long-running VidGen Worker operationally observable under PM2 without changing its decisions, durable state, spend accounting, presenter-source selection, concurrency guarantees, or provider/platform boundaries.
 
 Required behavior
 
-- Re-read the completed P1-P3 plus c6-runner-queue implementation before editing and trace every long-running lifecycle branch that an operator must diagnose.
+- Re-read the completed P1-P4 plus c6-runner-queue implementation before editing and trace every long-running lifecycle branch that an operator must diagnose.
 - Add a boolean `--verbose` option to Worker observe/generate/live commands. It must be documented in Worker CLI help, rejected if repeated, and must not alter label/report command semantics.
 - Normal non-verbose behavior remains low-noise and preserves existing safe fatal errors. Verbose mode adds operational events; it must not change Worker state-machine behavior.
 - Emit the startup event before entering the long-running polling loop. Do not retain the current ineffective pattern where a "running" message can only appear after the daemon returns.
 - Emit PM2-friendly newline-delimited structured log events with an ISO-8601 UTC timestamp, level, stable event name, and only bounded safe fields. Output must contain no ANSI/cursor control sequences and one event must fit on one bounded line.
 - INFO/normal lifecycle events go to stdout; warnings/errors go to stderr so PM2 can separate streams.
 - Verbose logging must provide enough context to reconstruct what the Worker is doing without opening worker-state.json. At minimum cover:
-  - worker startup and effective non-secret runtime policy: mode, poll interval, max-candidates, daily generation limit, generation-attempt limit, publication-attempt limit, queue expiration days;
+  - worker startup and effective non-secret runtime policy: mode, poll interval, max-candidates, daily generation limit, generation-attempt limit, publication-attempt limit, queue expiration days, and whether presenter-source configuration is available; never log the manifest path;
   - poll start, successful poll completion, retryable poll failure/retry, and a per-poll heartbeat/summary even when nothing changed;
   - coherent snapshot article count and newly discovered count;
   - new candidate articleId discovery;
   - evaluation start and completion with articleId, score, threshold, decision, and budget-blocked status when applicable;
   - queue summary after relevant mutations: eligible count, expired count, daily generation starts used/limit, top eligible articleId and score when present;
+  - presenter-source pool load/refresh count and per-story selection using only bounded safe metadata such as selected ordinal and validated basename; never log an absolute path or manifest contents;
+  - presenter-source validation/defer/failure using safe fixed reason codes, without raw path or filesystem exception text;
   - generation defer reasons including daily limit, no eligible candidate, Poster readiness hold in live mode, and generation-lock contention;
   - verified prior-production reuse;
   - generation selection/start, success, definite failure, attempt exhaustion, and uncertain/ambiguous ownership states;
   - platform readiness outcome using only fixed platform names;
   - publication start, success, failure, retry/attempt exhaustion, and uncertain states;
   - fatal Worker exit using only sanitized VidGen error code/publicMessage.
-- Do not log headlines, summaries, original URLs, captions, Parallel excerpts, raw provider/platform responses, raw child stdout/stderr, authorization data, environment secrets, API keys/tokens, credentials, or untrusted exception stacks/messages.
-- Never log the contents of .env. Numeric/enum Worker policy values are safe; secret-bearing configuration is not.
-- Candidate identity in logs is the already-validated governed articleId. Platform values must be restricted to the Worker's fixed platform enum.
-- Logging is observational only. Logger/output failures must not mutate durable state, consume attempts/budgets, release/acquire generation exclusion incorrectly, or turn a successful/failed stage into a different state.
-- Keep log volume bounded: do not dump the entire queue, full Worker state, full evidence arrays, or repetitive per-result Parallel details. One concise queue/poll summary plus meaningful transition events is sufficient.
+- Do not log headlines, summaries, original URLs, captions, Parallel excerpts, raw provider/platform responses, raw child stdout/stderr, authorization data, environment secrets, API keys/tokens, credentials, manifest contents, full filesystem paths, or untrusted exception stacks/messages.
+- Never log the contents of .env. Numeric/enum Worker policy values are safe; secret-bearing configuration and absolute paths are not.
+- Candidate identity in logs is the already-validated governed articleId. Platform values must be restricted to the Worker's fixed platform enum. Presenter basename logging, if retained, must pass a strict basename sanitizer and remain bounded.
+- Logging is observational only. Logger/output failures must not mutate durable state, source selection, consume attempts/budgets, release/acquire generation exclusion incorrectly, or turn a successful/failed stage into a different state.
+- Keep log volume bounded: do not dump the entire queue, full Worker state, full evidence arrays, presenter manifest, or repetitive per-result Parallel details. One concise queue/poll summary plus meaningful transition events is sufficient.
 - Prefer an injected/no-op runtime logger boundary so deterministic Worker tests can capture events without coupling the state machine directly to process.stdout/process.stderr. CLI owns terminal stream formatting/writes.
 - PM2 remains the process/log manager. Do not add a PM2 runtime dependency, custom log-file writer, log rotation subsystem, database sink, remote telemetry service, or ecosystem configuration solely for this task.
-- Update docs/worker.md with `--verbose` behavior, what is intentionally logged/not logged, and that PM2 can capture stdout/stderr for monitoring.
+- Update docs/worker.md with `--verbose` behavior, what is intentionally logged/not logged, presenter-source observability, and that PM2 can capture stdout/stderr for monitoring.
 - Keep package.json at 0.6.5 and do not create package-lock.json.
 
 Focused proof
@@ -44,15 +46,15 @@ Add deterministic tests proving:
 - `--verbose` parses and is shown in help while non-verbose behavior remains compatible;
 - startup is emitted before the first poll;
 - a no-change poll still emits a bounded heartbeat/summary;
-- new discovery, admitted/skipped evaluation, queue reorder, daily-limit pause, expiration, lock contention, prior-production reuse, generation success/failure/uncertain, Poster readiness, and publication outcomes emit the expected safe events;
+- new discovery, admitted/skipped evaluation, queue reorder, daily-limit pause, expiration, presenter pool refresh/selection, lock contention, prior-production reuse, generation success/failure/uncertain, Poster readiness, and publication outcomes emit the expected safe events;
 - retryable poll failure emits a safe warning and later recovery events;
 - fatal errors remain sanitized;
-- secret strings, auth headers, raw provider output, URLs/headlines/captions, and injected malicious control characters cannot appear in verbose output;
-- logger/output callback failure cannot change Worker state or spend counters;
+- secret strings, auth headers, manifest contents/paths, selected absolute source paths, raw provider output, URLs/headlines/captions, and injected malicious control characters cannot appear in verbose output;
+- logger/output callback failure cannot change Worker state, persisted presenter selection, or spend counters;
 - every emitted verbose event is one bounded newline-delimited parseable record with no ANSI/control output.
 
 Run focused Worker CLI/logging tests, npm run test:worker, npm run test:app, npm run check, and git diff --check.
 
 Non-goals
 
-Do not add creative diagnostics, raw provider debug logging, a web dashboard, metrics backend, PM2 dependency/config generator, distributed tracing, or change any admission/generation/publication decision solely for logging.
+Do not add creative diagnostics, raw provider debug logging, a web dashboard, metrics backend, PM2 dependency/config generator, distributed tracing, or change any admission/source-selection/generation/publication decision solely for logging.
