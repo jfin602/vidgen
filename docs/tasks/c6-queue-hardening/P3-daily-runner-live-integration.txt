@@ -15,6 +15,9 @@ Required behavior
 - On the first polling cycle after a UTC-day reset, select the highest-scored still-unexpired, not-already-generated eligible candidate and start at most one generation. "Immediate" means the next normal Worker poll; do not add a second scheduler or timer subsystem.
 - After any completed generation, re-enter normal polling/discovery/queue ordering before a later generation so newer higher-scored work can overtake remaining backlog.
 - --once remains bounded to one coherent snapshot/evaluation pass and at most one generation start.
+- Harden daemon behavior for PM2 operation: a retryable polling-cycle failure must fail closed for that cycle without partial state advancement, then sleep the normal poll interval and retry instead of terminating the long-running Worker.
+- Fatal local/configuration/authentication/durable-state failures must remain distinguishable from retryable remote/transient failures and may terminate nonzero rather than looping forever. Keep this classification explicit, narrow, safe, and covered by tests.
+- Do not create a tight retry loop after failures; successful or retryable-failed cycles both respect the configured poll interval.
 - Generate mode never publishes. Live mode publishes a successfully generated or validly reused artifact through the existing ready Poster targets without regenerating it.
 - Poster readiness failure must not create duplicate generation. Partial/failed publication retries reuse successful media and remain independent from the next day's generation-slot accounting.
 - Existing prior-production articleId dedupe and under-lock recheck must remain effective.
@@ -32,7 +35,11 @@ Cover an end-to-end deterministic multi-day scenario:
 7. the highest-scored remaining eligible item generates on the next poll;
 8. live publication uses that exact artifact once while partial publication retry cannot trigger regeneration.
 
-Also cover duplicate Worker contention to ensure the prerequisite global generation guard still prevents overlap.
+Also cover:
+- one retryable ngest/poll failure followed by successful recovery without process restart or duplicate state advancement;
+- fatal configuration/auth/local-state failure remaining fatal;
+- poll interval respected after a retryable failure;
+- duplicate Worker contention to ensure the prerequisite global generation guard still prevents overlap.
 
 Run npm run test:worker, npm run test:app, npm run check, and git diff --check. Do not claim live provider/platform proof from mocked tests.
 
