@@ -6,7 +6,7 @@ Status: CURRENT COMPATIBILITY / FINAL FIELD SET DEFERRED
 
 VidGen controls let an administrator influence how supplied stories are presented without moving creative-generation behavior into ngest.
 
-Controls carry preferences or constraints. They do not carry generated creative output and they do not decide which stories are production-worthy.
+Controls carry preferences or constraints. They do not carry generated creative output, ngest source-trust decisions, or Phase 7 Worker automatic-production admission policy.
 
 ## Current implementation compatibility
 
@@ -55,6 +55,12 @@ A fixed cinematic template should own its normal timing. Avoid adding arbitrary 
 The Phase 6 simple presenter-headline CLI is intentionally different: it may accept a `maxSeconds` copy/planning constraint from 4 through 20 seconds inclusive. That value selects provider coverage but does not trim qualified final media, and is not currently a persistent ngest `CanonicalControl` field. Provider-specific duration granularity remains a runtime/provider concern.
 
 The exact v1 field set is intentionally not locked yet.
+
+## Worker admission policy
+
+Web Momentum scoring, automatic-production thresholds, polling cadence, Parallel budget limits, generation limits, and publishing-mode decisions belong to Phase 7 Worker runtime configuration. They are not CanonicalControl fields and must not be persisted in ngest merely to control local automation economics.
+
+A Worker skip does not mutate the Article, StoryInput, CanonicalControl, or later ability to invoke VidGen manually.
 
 ## Defaults
 
