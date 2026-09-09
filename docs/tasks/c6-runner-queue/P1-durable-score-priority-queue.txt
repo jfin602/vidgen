@@ -1,0 +1,35 @@
+TASK: Correction 6 / P1 — Durable score-priority generation queue
+
+- Recommended configuration: `Terra High`.
+- Required unchanged project version: `0.6.5`.
+
+Objective
+
+Correct the Phase 7 Worker so admitted generation work becomes a durable score-priority backlog instead of being generated immediately while iterating the current ngest snapshot.
+
+Required behavior
+
+- Inspect the current Worker state/runtime/tests before editing and preserve the ngest -> Worker -> VidGen -> VidGen Poster ownership boundaries.
+- Separate bounded discovery/evaluation/admission work from generation scheduling. A candidate encountered earlier in feed order must not begin generation before other candidates selected for that evaluation pass have had the opportunity to receive their Web Momentum scores.
+- Derive generation queue eligibility from durable candidate state rather than maintaining a second mutable authoritative queue structure.
+- Order eligible generation work by:
+  1. Web Momentum score descending;
+  2. queue/admission time ascending;
+  3. articleId ascending as the deterministic final tie-breaker.
+- Every newly admitted candidate must therefore be able to reorder the remaining backlog before the next generation starts.
+- Durable admitted work must remain generation-eligible even if that Article later disappears from the current ngest snapshot.
+- Reaching the daily generation limit must pause the backlog without converting queued work into a terminal or spend-exhausted failure. Queued work must become eligible again after the UTC-day budget permits it.
+- Preserve bounded per-Article generation attempt handling; an attempt-exhausted candidate must not block lower-ranked eligible work forever.
+- Preserve observe/generate/live mode separation. Observe must never generate or publish.
+- Preserve completed evaluation reuse, Parallel daily evaluation budgeting, baseline/backfill behavior, and current Web Momentum v1 semantics.
+- Keep package.json at 0.6.5 and do not create package-lock.json.
+
+Focused proof
+
+Add deterministic tests proving that a lower-scored earlier feed item cannot generate ahead of a higher-scored later item, newly admitted higher scores reorder remaining work, backlog survives ngest feed disappearance/restart, deterministic tie-breaking is stable, and daily generation rollover resumes queued work without re-evaluation.
+
+Run the focused Worker tests and the broader Worker regression suite.
+
+Non-goals
+
+Do not change Web Momentum scoring, threshold semantics, provider adapters, headline generation internals, Poster adapters, or publishing platform behavior. Do not implement the cross-process generation lock or prior-production artifact lookup in this prompt; later prompts own those capabilities.
