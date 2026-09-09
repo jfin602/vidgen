@@ -13,7 +13,7 @@ const MAX_FINAL_BYTES = 1_000_000_000;
 
 /** Finds only a complete, contract-valid headline package for this governed Article ID. */
 export async function findVerifiedPriorProduction(store: WorkerStateStore, articleId: string): Promise<WorkerGeneratedArtifact | undefined> {
-  const state = await store.load();
+  const state = await store.load({ recoverInProgress: false });
   const recorded = state.candidates[articleId]?.generatedArtifact;
   if (recorded !== undefined && await verifyHeadlineProduction(recorded.metadataPath, articleId, recorded.finalPath)) return recorded;
   for (const directory of new Set([store.candidateGenerationArtifactsRoot(articleId), store.headlineArtifactsRoot(), resolve(DEFAULT_HEADLINE_ARTIFACTS_ROOT)])) {

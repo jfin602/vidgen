@@ -13,7 +13,7 @@ export interface CalibrationReport {
 
 /** Owner labels are local calibration metadata; they never modify admission. */
 export async function labelWorkerEvaluation(store: WorkerStateStore, candidateId: string, label: 'generate' | 'skip'): Promise<void> {
-  const state = await store.load(); const candidate = state.candidates[candidateId];
+  const state = await store.load({ recoverInProgress: false }); const candidate = state.candidates[candidateId];
   if (candidate === undefined || candidate.evaluation.status !== 'succeeded' || candidate.evaluationResult?.metric !== WEB_MOMENTUM_METRIC || candidate.evaluationResult.version !== WEB_MOMENTUM_VERSION) throw new VidGenError('invalid_argument', 'Worker candidate has no current Web Momentum evaluation to label.');
   await store.save({ ...state, candidates: { ...state.candidates, [candidateId]: { ...candidate, ownerLabel: label } } });
 }

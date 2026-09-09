@@ -82,6 +82,11 @@ export interface WorkerStateStoreDependencies {
   readonly createTemporarySuffix?: () => string;
 }
 
+export interface WorkerStateLoadOptions {
+  /** Runtime recovery must first distinguish an active machine-wide generation guard from a crash. */
+  readonly recoverInProgress?: boolean;
+}
+
 /** A small, atomically published state file; no queue or database is needed yet. */
 export class WorkerStateStore {
   readonly root: string;
@@ -96,7 +101,7 @@ export class WorkerStateStore {
     this.createTemporarySuffix = dependencies.createTemporarySuffix;
   }
 
-  async load(): Promise<WorkerState> {
+  async load(options: WorkerStateLoadOptions = {}): Promise<WorkerState> {
     let text: string;
     try { text = await this.filesystem.readFile(this.path, 'utf8'); }
     catch (error: unknown) {
@@ -106,6 +111,7 @@ export class WorkerStateStore {
     let value: unknown;
     try { value = JSON.parse(text); } catch { throw new VidGenError('artifact', 'Worker state is malformed.'); }
     const state = validateWorkerState(isPlainRecord(value) && value.generationCounts === undefined ? { ...value, generationCounts: {} } : value);
+    if (options.recoverInProgress === false) return state;
     const recovered = recoverInProgressStages(state);
     if (recovered !== state) await this.save(recovered);
     return recovered;

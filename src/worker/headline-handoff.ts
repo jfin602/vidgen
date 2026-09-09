@@ -11,6 +11,7 @@ export const MAX_HEADLINE_STDOUT_BYTES = 16_384;
 export type { WorkerGeneratedArtifact } from './state.ts';
 
 export interface HeadlineChild {
+  readonly pid?: number;
   readonly stdout: NodeJS.ReadableStream;
   once(event: 'error' | 'close', listener: (...args: any[]) => void): this;
   kill(): boolean;
@@ -71,11 +72,20 @@ export function parseHeadlineSuccessOutput(output: string): WorkerGeneratedArtif
 
 function collectHeadlineOutput(child: HeadlineChild): Promise<string> {
   return new Promise((resolveOutput, reject) => {
-    const chunks: Buffer[] = []; let bytes = 0; let settled = false;
-    const fail = (error: VidGenError) => { if (!settled) { settled = true; try { child.kill(); } catch {} reject(error); } };
-    child.stdout.on('data', (chunk: Buffer | string) => { const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk); bytes += value.length; if (bytes > MAX_HEADLINE_STDOUT_BYTES) return fail(new VidGenError('artifact', 'VidGen headline output exceeded the supported limit.')); chunks.push(value); });
-    child.once('error', (cause) => fail(new VidGenError('configuration', 'VidGen headline could not be started.', { cause })));
-    child.once('close', (code: number | null) => { if (settled) return; settled = true; if (code !== 0) reject(new VidGenError('artifact', 'VidGen headline generation failed.')); else resolveOutput(Buffer.concat(chunks).toString('utf8')); });
+    const chunks: Buffer[] = []; let bytes = 0; let settled = false; let failure: VidGenError | undefined;
+    const settle = (result: () => void) => { if (!settled) { settled = true; result(); } };
+    const stopAfterClose = (error: VidGenError) => { if (failure === undefined) { failure = error; try { child.kill(); } catch {} } };
+    child.stdout.on('data', (chunk: Buffer | string) => { if (failure !== undefined) return; const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk); bytes += value.length; if (bytes > MAX_HEADLINE_STDOUT_BYTES) return stopAfterClose(new VidGenError('artifact', 'VidGen headline output exceeded the supported limit.')); chunks.push(value); });
+    child.once('error', () => {
+      const error = new VidGenError('configuration', 'VidGen headline could not be started.');
+      if (child.pid === undefined) settle(() => reject(error));
+      else stopAfterClose(error);
+    });
+    child.once('close', (code: number | null) => settle(() => {
+      if (failure !== undefined) reject(failure);
+      else if (code !== 0) reject(new VidGenError('artifact', 'VidGen headline generation failed.'));
+      else resolveOutput(Buffer.concat(chunks).toString('utf8'));
+    }));
   });
 }
 

@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { EventEmitter } from 'node:events';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
@@ -9,9 +11,10 @@ import test from 'node:test';
 import { createWorkerRuntimeConfig, DEFAULT_WORKER_MAX_SECONDS, DEFAULT_WORKER_POLL_INTERVAL_MS } from '../../../src/worker/config.ts';
 import { parseWorkerCliArgs, workerHelpText } from '../../../src/worker-cli.ts';
 import { createPosterRunners, runNgestWorker, runNgestWorkerCycle, runWorkerCycle } from '../../../src/worker/runtime.ts';
-import { createDiscoveredCandidate, emptyWorkerState, isWorkerCandidateComplete, WORKER_STATE_FILE, WorkerStateStore } from '../../../src/worker/state.ts';
+import { createDiscoveredCandidate, emptyWorkerState, isWorkerCandidateComplete, type WorkerState, WORKER_STATE_FILE, WorkerStateStore } from '../../../src/worker/state.ts';
 import { WEB_MOMENTUM_POLICY_ID } from '../../../src/worker/web-momentum.ts';
 import { parseHeadlineSuccessOutput, runHeadlineHandoff } from '../../../src/worker/headline-handoff.ts';
+import { acquireWorkerGenerationExclusion } from '../../../src/worker/generation-exclusion.ts';
 import { findVerifiedPriorProduction } from '../../../src/worker/prior-production.ts';
 import { buildCanonicalInput } from '../../../src/core/canonical-input.ts';
 import { buildStoryInput } from '../../../src/core/story-input.ts';
@@ -401,7 +404,7 @@ test('generation budgets bound spending while successful verified media is reuse
 
     const restartStore = new WorkerStateStore(join(root, 'restart'));
     await restartStore.save({ ...emptyWorkerState(), initialized: true, candidates: { article_3: { ...createDiscoveredCandidate('article_3', at().toISOString()), evaluation: { status: 'succeeded', completedAt: at().toISOString() }, admission: { status: 'succeeded', completedAt: at().toISOString() }, evaluationResult: evaluation('admitted'), generation: { status: 'running', startedAt: at().toISOString() } } } });
-    const restarted = await runWorkerCycle({ store: restartStore, discoveredCandidateIds: ['article_3'], mode: 'generate', maxCandidates: 1, now: at, runners });
+    const restarted = await runWorkerCycle({ store: restartStore, discoveredCandidateIds: ['article_3'], mode: 'generate', maxCandidates: 1, now: at, acquireGenerationExclusion: () => acquireWorkerGenerationExclusion({ lockPath: join(root, 'recovery.lock') }), runners });
     assert.equal(restarted.candidates.article_3!.generation.status, 'uncertain'); assert.equal(calls, 1);
 
     const retryStore = new WorkerStateStore(join(root, 'retry')); let failures = 0;
@@ -444,6 +447,145 @@ test('live publishes a verified reused headline artifact without invoking genera
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test('headline handoff waits for an active child error to close before settling', async () => {
+  const pending = controlledChild();
+  const handoff = runHeadlineHandoff({ candidateId: 'article_1', fixturePath: 'fixture.json', artifactsRoot: 'artifacts', anchorReferencePaths: ['anchor.png'], fontPath: 'font.ttf', maxSeconds: 8 }, { spawn: () => pending });
+  let settled = false; void handoff.then(() => { settled = true; }, () => { settled = true; });
+  pending.emit('error', new Error('untrusted child detail')); await Promise.resolve();
+  assert.equal(settled, false);
+  pending.emit('close', 1);
+  await assert.rejects(handoff, /could not be started/);
+});
+
+test('generation exclusion ignores per-process temp settings and releases only after its owner exits', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-guard-')); let holder: ReturnType<typeof spawn> | undefined;
+  try {
+    const alternateTemp = join(root, 'alternate-temp'); await mkdir(alternateTemp); holder = holdGenerationExclusion(undefined, { ...process.env, TEMP: alternateTemp, TMP: alternateTemp, TMPDIR: alternateTemp });
+    assert.equal((await firstOutput(holder.stdout!)).trim(), 'owned');
+    assert.equal(await acquireWorkerGenerationExclusion(), undefined);
+    const closed = waitForClose(holder); holder.stdin!.end(); await closed;
+    const next = await acquireWorkerGenerationExclusion(); assert.notEqual(next, undefined); await next!.release();
+  } finally {
+    if (holder !== undefined && holder.exitCode === null) { const closed = waitForClose(holder); holder.stdin?.end(); await closed.catch(() => { holder.kill(); }); }
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('generation exclusion keeps competing Workers queued without spending and releases after a completed generation', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-guard-'));
+  const firstMayFinish = deferred<void>(); let firstRun: Promise<Awaited<ReturnType<typeof runWorkerCycle>>> | undefined;
+  try {
+    const lockPath = join(root, 'generation.lock'); const acquire = () => acquireWorkerGenerationExclusion({ lockPath });
+    const firstStore = new WorkerStateStore(join(root, 'first')); const secondStore = new WorkerStateStore(join(root, 'second'));
+    await firstStore.save({ ...emptyWorkerState(), initialized: true, candidates: { first: admittedCandidate('first', 90, at().toISOString()) } });
+    await secondStore.save({ ...emptyWorkerState(), initialized: true, candidates: { second: admittedCandidate('second', 80, at().toISOString()) } });
+    const firstStarted = deferred<void>(); let active = 0; let maximumActive = 0; let secondStarts = 0;
+    firstRun = runWorkerCycle({
+      store: firstStore, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at, acquireGenerationExclusion: acquire,
+      runners: { generate: async () => { active += 1; maximumActive = Math.max(maximumActive, active); firstStarted.resolve(); try { await firstMayFinish.promise; return artifact('first'); } finally { active -= 1; } } },
+    });
+    await firstStarted.promise;
+    const contended = await runWorkerCycle({
+      store: secondStore, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at, acquireGenerationExclusion: acquire,
+      runners: { generate: async () => { secondStarts += 1; active += 1; maximumActive = Math.max(maximumActive, active); active -= 1; return artifact('second'); } },
+    });
+    assert.equal(contended.candidates.second!.generation.status, 'pending'); assert.equal(contended.candidates.second!.generationAttempts, undefined); assert.deepEqual(contended.generationCounts, {}); assert.equal(secondStarts, 0); assert.equal(maximumActive, 1);
+    firstMayFinish.resolve(); await firstRun;
+    const resumed = await runWorkerCycle({
+      store: secondStore, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at, acquireGenerationExclusion: acquire,
+      runners: { generate: async () => { secondStarts += 1; active += 1; maximumActive = Math.max(maximumActive, active); active -= 1; return artifact('second'); } },
+    });
+    assert.equal(resumed.candidates.second!.generation.status, 'succeeded'); assert.equal(secondStarts, 1); assert.equal(maximumActive, 1);
+  } finally {
+    firstMayFinish.resolve(); await firstRun?.catch(() => undefined); await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('an existing generation guard fails closed without spending or starting a candidate', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-guard-'));
+  try {
+    const lockPath = join(root, 'generation.lock'); await writeFile(lockPath, ''); const store = new WorkerStateStore(join(root, 'worker')); let generated = 0; let acquisitions = 0;
+    await store.save({ ...emptyWorkerState(), initialized: true, candidates: { stale: admittedCandidate('stale', 90, at().toISOString()), lower: admittedCandidate('lower', 80, at().toISOString()) } });
+    const state = await runWorkerCycle({
+      store, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at, acquireGenerationExclusion: () => { acquisitions += 1; return acquireWorkerGenerationExclusion({ lockPath }); },
+      runners: { generate: async () => { generated += 1; return artifact('stale'); } },
+    });
+    assert.equal(state.candidates.stale!.generation.status, 'pending'); assert.equal(state.candidates.lower!.generation.status, 'pending'); assert.equal(state.candidates.stale!.generationAttempts, undefined); assert.deepEqual(state.generationCounts, {}); assert.equal(generated, 0); assert.equal(acquisitions, 1); assert.equal(await readFile(lockPath, 'utf8'), '');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('a recovered running generation latches a missing guard rather than starting anything', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-guard-'));
+  try {
+    const lockPath = join(root, 'generation.lock'); const store = new WorkerStateStore(join(root, 'worker')); let generated = 0;
+    await store.save({ ...emptyWorkerState(), initialized: true, candidates: { interrupted: { ...admittedCandidate('interrupted', 90, at().toISOString()), generation: { status: 'running', startedAt: at().toISOString() } }, lower: admittedCandidate('lower', 80, at().toISOString()) } });
+    const state = await runWorkerCycle({
+      store, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at, acquireGenerationExclusion: () => acquireWorkerGenerationExclusion({ lockPath }),
+      runners: { generate: async () => { generated += 1; return artifact(); } },
+    });
+    assert.equal(state.candidates.interrupted!.generation.status, 'uncertain'); assert.equal(state.candidates.lower!.generation.status, 'pending'); assert.equal(generated, 0); assert.equal(await acquireWorkerGenerationExclusion({ lockPath }), undefined);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('a second Worker sharing state does not recover a live guarded generation', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-guard-')); const mayFinish = deferred<void>(); let firstRun: Promise<Awaited<ReturnType<typeof runWorkerCycle>>> | undefined;
+  try {
+    const lockPath = join(root, 'generation.lock'); const acquire = () => acquireWorkerGenerationExclusion({ lockPath }); const store = new WorkerStateStore(join(root, 'worker')); const started = deferred<void>(); let secondStarts = 0;
+    await store.save({ ...emptyWorkerState(), initialized: true, candidates: { shared: admittedCandidate('shared', 90, at().toISOString()) } });
+    firstRun = runWorkerCycle({
+      store, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at, acquireGenerationExclusion: acquire,
+      runners: { generate: async () => { started.resolve(); await mayFinish.promise; return artifact('shared'); } },
+    });
+    await started.promise;
+    const second = await runWorkerCycle({
+      store: new WorkerStateStore(join(root, 'worker')), discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at, acquireGenerationExclusion: acquire,
+      runners: { generate: async () => { secondStarts += 1; return artifact('shared'); } },
+    });
+    assert.equal(second.candidates.shared!.generation.status, 'running'); assert.equal(secondStarts, 0);
+    mayFinish.resolve(); const first = await firstRun; assert.equal(first.candidates.shared!.generation.status, 'succeeded'); assert.equal((await new WorkerStateStore(join(root, 'worker')).load()).candidates.shared!.generation.status, 'succeeded');
+  } finally { mayFinish.resolve(); await firstRun?.catch(() => undefined); await rm(root, { recursive: true, force: true }); }
+});
+
+test('a generation result that cannot be persisted retains the guard and recovers as uncertain', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-guard-'));
+  try {
+    class FailingStore extends WorkerStateStore {
+      fail = false;
+      override async save(state: WorkerState): Promise<void> { if (this.fail) throw new Error('persistence failed'); await super.save(state); }
+    }
+    const lockPath = join(root, 'generation.lock'); const store = new FailingStore(join(root, 'worker'));
+    await store.save({ ...emptyWorkerState(), initialized: true, candidates: { interrupted: admittedCandidate('interrupted', 90, at().toISOString()) } });
+    await assert.rejects(runWorkerCycle({
+      store, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at, acquireGenerationExclusion: () => acquireWorkerGenerationExclusion({ lockPath }),
+      runners: { generate: async () => { store.fail = true; return artifact('interrupted'); } },
+    }));
+    assert.equal(await acquireWorkerGenerationExclusion({ lockPath }), undefined);
+    store.fail = false; assert.equal((await store.load()).candidates.interrupted!.generation.status, 'uncertain'); assert.equal(await acquireWorkerGenerationExclusion({ lockPath }), undefined);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('the guarded recheck adopts a first Worker production instead of regenerating it', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-guard-'));
+  try {
+    const lockPath = join(root, 'generation.lock'); const articleId = 'same-article'; const firstStore = new WorkerStateStore(join(root, 'first')); const secondStore = new WorkerStateStore(join(root, 'second'));
+    await firstStore.save({ ...emptyWorkerState(), initialized: true, candidates: { [articleId]: admittedCandidate(articleId, 90, at().toISOString()) } });
+    await secondStore.save({ ...emptyWorkerState(), initialized: true, candidates: { [articleId]: admittedCandidate(articleId, 90, at().toISOString()) } });
+    const secondReachedGuard = deferred<void>(); let firstArtifact: Awaited<ReturnType<typeof writeHeadlineProduction>> | undefined; let secondGenerated = 0;
+    const firstRun = runWorkerCycle({
+      store: firstStore, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at, acquireGenerationExclusion: () => acquireWorkerGenerationExclusion({ lockPath }),
+      runners: { generate: async () => { await secondReachedGuard.promise; firstArtifact = await writeHeadlineProduction(firstStore.headlineArtifactsRoot(), articleId); return firstArtifact; } },
+    });
+    const firstFinished = firstRun.then(() => undefined);
+    const secondRun = runWorkerCycle({
+      store: secondStore, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at,
+      acquireGenerationExclusion: async () => { secondReachedGuard.resolve(); await firstFinished; return acquireWorkerGenerationExclusion({ lockPath }); },
+      runners: { generate: async () => { secondGenerated += 1; return artifact(articleId); } },
+    });
+    const [, second] = await Promise.all([firstRun, secondRun]); assert.ok(firstArtifact);
+    assert.equal(second.candidates[articleId]!.generation.status, 'succeeded'); assert.deepEqual(second.candidates[articleId]!.generatedArtifact, firstArtifact); assert.equal(second.candidates[articleId]!.generationAttempts, undefined); assert.deepEqual(second.generationCounts, {}); assert.equal(secondGenerated, 0);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 function evaluation(decision: 'admitted' | 'skipped') { return { metric: 'web-momentum', version: 'v1', policyId: WEB_MOMENTUM_POLICY_ID, score: 3, threshold: 2, decision, evaluatedAt: at().toISOString(), searchId: 'search-1', sessionId: 'session-1', signature: ['article', 'headline'], results: [], components: { breadth: 0, saturation: 3, freshness: 0, reaction: 0 } } as const; }
 function scoredEvaluation(score: number, evaluatedAt = at().toISOString()) { return { ...evaluation('admitted'), score, evaluatedAt }; }
 function admittedCandidate(id: string, score: number, admittedAt: string) { return { ...createDiscoveredCandidate(id, admittedAt), evaluation: { status: 'succeeded' as const, completedAt: admittedAt }, admission: { status: 'succeeded' as const, completedAt: admittedAt }, evaluationResult: scoredEvaluation(score, admittedAt) }; }
@@ -454,8 +596,30 @@ async function writeHeadlineProduction(root: string, articleId: string, headline
   return { finalPath, metadataPath, sha256, durationSeconds: 8 };
 }
 function child(output: string) {
-  const result = new EventEmitter() as EventEmitter & { stdout: EventEmitter; kill(): boolean; };
-  result.stdout = new EventEmitter(); result.kill = () => true;
+  const result = controlledChild();
   queueMicrotask(() => { result.stdout.emit('data', Buffer.from(output)); result.emit('close', 0); });
   return result;
+}
+function controlledChild() {
+  const result = new EventEmitter() as EventEmitter & { stdout: EventEmitter; pid: number; kill(): boolean; };
+  result.stdout = new EventEmitter(); result.pid = 1; result.kill = () => true;
+  return result;
+}
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  return { promise: new Promise<T>((done) => { resolve = done; }), resolve };
+}
+function holdGenerationExclusion(lockPath?: string, environment?: NodeJS.ProcessEnv) {
+  const moduleUrl = pathToFileURL(resolve('src/worker/generation-exclusion.ts')).href;
+  const script = `import { acquireWorkerGenerationExclusion } from ${JSON.stringify(moduleUrl)};
+const exclusion = await acquireWorkerGenerationExclusion(${lockPath === undefined ? '' : `{ lockPath: ${JSON.stringify(lockPath)} }`});
+process.stdout.write(exclusion === undefined ? 'busy\\n' : 'owned\\n');
+if (exclusion !== undefined) { process.stdin.resume(); await new Promise((done) => process.stdin.once('end', done)); await exclusion.release(); }`;
+  return spawn(process.execPath, ['--input-type=module', '--eval', script], { cwd: process.cwd(), shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'], ...(environment === undefined ? {} : { env: environment }) });
+}
+function firstOutput(stream: NodeJS.ReadableStream): Promise<string> {
+  return new Promise((resolveOutput, reject) => { stream.once('data', (chunk: Buffer | string) => resolveOutput(Buffer.isBuffer(chunk) ? chunk.toString('utf8') : chunk)); stream.once('end', () => reject(new Error('Generation guard holder did not report ownership.'))); });
+}
+function waitForClose(childProcess: ReturnType<typeof spawn>): Promise<void> {
+  return new Promise((resolveClose, reject) => { childProcess.once('error', reject); childProcess.once('close', (code) => { if (code === 0) resolveClose(); else reject(new Error('Generation guard holder did not exit cleanly.')); }); });
 }
