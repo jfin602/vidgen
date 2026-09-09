@@ -354,9 +354,9 @@ async function processGeneration(state: WorkerState, candidate: WorkerCandidateS
         next = mergeCandidate(next, current.id, { presenterSource: source }, 'generation', current.generation); current = next.candidates[current.id]!; await store.save(next); logWorker(logger, logTimestamp(), 'info', 'presenter_source_selected', { article_id: current.id, ...(safePresenterBasename(source.basename) === undefined ? {} : { basename: safePresenterBasename(source.basename)! }) });
       }
     }
-    next = spendGeneration(next, current.id, generationDay); current = next.candidates[current.id]!; await store.save(next);
-    logWorker(logger, logTimestamp(), 'info', 'generation_started', { article_id: current.id });
-    didWork = true; ({ state: next, candidate: current } = await runExternalStage(next, current.id, 'generation', store, now, async () => ({ generatedArtifact: validateWorkerGeneratedArtifact(await runners.generate!(current.id, source)) }), undefined, () => { externalWorkStarted = true; }));
+    // Publish the spend record with the durable running marker, before the provider can start.
+    next = spendGeneration(next, current.id, generationDay); current = next.candidates[current.id]!;
+    didWork = true; ({ state: next, candidate: current } = await runExternalStage(next, current.id, 'generation', store, now, async () => ({ generatedArtifact: validateWorkerGeneratedArtifact(await runners.generate!(current.id, source)) }), undefined, () => { externalWorkStarted = true; logWorker(logger, logTimestamp(), 'info', 'generation_started', { article_id: current.id }); }));
     logWorker(logger, logTimestamp(), current.generation.status === 'succeeded' ? 'info' : 'warn', current.generation.status === 'succeeded' ? 'generation_succeeded' : 'generation_failed', { article_id: current.id });
     resultHandled = true;
     return { state: next, didWork };

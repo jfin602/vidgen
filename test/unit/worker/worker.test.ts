@@ -857,6 +857,27 @@ test('a generation result that cannot be persisted retains the guard and recover
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test('a pre-spawn generation state write cannot consume a daily slot or attempt', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-guard-'));
+  try {
+    class FailingStore extends WorkerStateStore {
+      override async save(state: WorkerState): Promise<void> {
+        if (state.candidates.article_1?.generation.status === 'running') throw new Error('persistence failed');
+        await super.save(state);
+      }
+    }
+    const lockPath = join(root, 'generation.lock'); const store = new FailingStore(join(root, 'worker')); let generated = 0;
+    await store.save({ ...emptyWorkerState(), initialized: true, candidates: { article_1: admittedCandidate('article_1', 90, at().toISOString()) } });
+    await assert.rejects(runWorkerCycle({
+      store, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at, acquireGenerationExclusion: () => acquireWorkerGenerationExclusion({ lockPath }),
+      runners: { generate: async () => { generated += 1; return artifact(); } },
+    }));
+    const state = await store.load({ recoverInProgress: false });
+    assert.equal(generated, 0); assert.equal(state.candidates.article_1!.generation.status, 'pending'); assert.equal(state.candidates.article_1!.generationAttempts, undefined); assert.deepEqual(state.generationCounts, {});
+    const released = await acquireWorkerGenerationExclusion({ lockPath }); assert.notEqual(released, undefined); await released!.release();
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test('the guarded recheck adopts a first Worker production instead of regenerating it', async () => {
   const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-guard-'));
   try {
