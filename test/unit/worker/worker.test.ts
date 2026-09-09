@@ -8,8 +8,8 @@ import test from 'node:test';
 
 import { createWorkerRuntimeConfig, DEFAULT_WORKER_MAX_SECONDS, DEFAULT_WORKER_POLL_INTERVAL_MS } from '../../../src/worker/config.ts';
 import { parseWorkerCliArgs, workerHelpText } from '../../../src/worker-cli.ts';
-import { runNgestWorker, runNgestWorkerCycle, runWorkerCycle } from '../../../src/worker/runtime.ts';
-import { createDiscoveredCandidate, emptyWorkerState, WORKER_STATE_FILE, WorkerStateStore } from '../../../src/worker/state.ts';
+import { createPosterRunners, runNgestWorker, runNgestWorkerCycle, runWorkerCycle } from '../../../src/worker/runtime.ts';
+import { createDiscoveredCandidate, emptyWorkerState, isWorkerCandidateComplete, WORKER_STATE_FILE, WorkerStateStore } from '../../../src/worker/state.ts';
 import { WEB_MOMENTUM_POLICY_ID } from '../../../src/worker/web-momentum.ts';
 import { parseHeadlineSuccessOutput, runHeadlineHandoff } from '../../../src/worker/headline-handoff.ts';
 import { buildCanonicalInput } from '../../../src/core/canonical-input.ts';
@@ -169,10 +169,12 @@ test('successful evaluation and generation survive later failures, and modes kee
   try {
     const store = new WorkerStateStore(root); let generated = 0; let published = 0;
     const state = await runWorkerCycle({
-      store, discoveredCandidateIds: ['article_1', 'article_2'], mode: 'live', processExisting: true, maxCandidates: 2, publicationPlatforms: ['x', 'bluesky'], now: at, dailyGenerationLimit: 2,
+      store, discoveredCandidateIds: ['article_1', 'article_2'], mode: 'live', processExisting: true, maxCandidates: 2, now: at, dailyGenerationLimit: 2,
       runners: {
         evaluate: async () => evaluation('admitted'),
         generate: async (id) => { generated += 1; if (id === 'article_2') throw new Error('Bearer secret-token'); return artifact(id); },
+        doctor: async () => undefined,
+        caption: async () => 'safe caption',
         publish: async (_id, platform) => { published += 1; if (platform === 'bluesky') throw new Error('Bearer secret-token'); },
       },
     });
@@ -180,11 +182,92 @@ test('successful evaluation and generation survive later failures, and modes kee
     assert.equal(candidate.evaluation.status, 'succeeded'); assert.equal(candidate.admission.status, 'succeeded'); assert.equal(candidate.generation.status, 'succeeded');
     assert.equal(candidate.publication.x!.status, 'succeeded'); assert.equal(candidate.publication.bluesky!.status, 'failed');
     assert.equal(state.candidates.article_2!.evaluation.status, 'succeeded'); assert.equal(state.candidates.article_2!.generation.status, 'failed');
-    assert.equal(generated, 2); assert.equal(published, 2);
+    assert.equal(generated, 2); assert.equal(published, 3);
     assert.equal(JSON.stringify(state).includes('secret-token'), false);
     const observed = await runWorkerCycle({ store, discoveredCandidateIds: ['article_1', 'article_2'], mode: 'observe', maxCandidates: 2, now: at, runners: { evaluate: async () => { throw new Error('must not repeat'); } } });
     assert.equal(observed.candidates.article_1!.generation.status, 'succeeded');
     assert.equal(observed.candidates.article_2!.generation.status, 'failed');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('live discovers fixed ready destinations before generation, fans out exact argv, and persists complete state', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-poster-'));
+  try {
+    const calls: string[][] = []; let generated = 0;
+    const state = await runWorkerCycle({
+      store: new WorkerStateStore(root), discoveredCandidateIds: ['article_1'], mode: 'live', processExisting: true, maxCandidates: 1, now: at,
+      runners: {
+        evaluate: async () => evaluation('admitted'), generate: async () => { generated += 1; assert.deepEqual(calls, [['doctor', 'x'], ['doctor', 'bluesky'], ['doctor', 'reels']]); return artifact(); },
+        caption: async () => '"First governed headline" by Publisher Main',
+        ...createPosterRunners(async (arguments_) => { calls.push([...arguments_]); if (arguments_[0] === 'doctor' && arguments_[1] === 'bluesky') throw new Error('Bearer child-secret'); }),
+      },
+    });
+    const candidate = state.candidates.article_1!;
+    assert.equal(generated, 1); assert.deepEqual(candidate.publicationTargets, ['x', 'reels']); assert.deepEqual(calls, [
+      ['doctor', 'x'], ['doctor', 'bluesky'], ['doctor', 'reels'],
+      ['post', 'x', '--video', 'C:/worker/article_1.mp4', '--text', '"First governed headline" by Publisher Main'],
+      ['post', 'reels', '--video', 'C:/worker/article_1.mp4', '--text', '"First governed headline" by Publisher Main'],
+    ]);
+    assert.equal(calls.flat().includes('--allow-duplicate'), false); assert.equal(isWorkerCandidateComplete(candidate), true); assert.equal(JSON.stringify(state).includes('child-secret'), false);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('zero ready live targets hold generation, while observe and generate never call Poster', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-poster-'));
+  try {
+    let poster = 0; let generated = 0;
+    const runners = { evaluate: async () => evaluation('admitted'), generate: async () => { generated += 1; return artifact(); }, doctor: async () => { poster += 1; throw new Error('not ready'); }, caption: async () => 'caption', publish: async () => { poster += 1; } };
+    const held = await runWorkerCycle({ store: new WorkerStateStore(root), discoveredCandidateIds: ['article_1'], mode: 'live', processExisting: true, maxCandidates: 1, now: at, runners });
+    assert.deepEqual(held.candidates.article_1!.publicationTargets, []); assert.equal(held.candidates.article_1!.generation.status, 'pending'); assert.equal(generated, 0); assert.equal(poster, 3); assert.equal(isWorkerCandidateComplete(held.candidates.article_1!), false);
+    const suppressedStore = new WorkerStateStore(join(root, 'suppressed'));
+    await runWorkerCycle({ store: suppressedStore, discoveredCandidateIds: ['article_2'], mode: 'observe', processExisting: true, maxCandidates: 1, now: at, runners });
+    await runWorkerCycle({ store: suppressedStore, discoveredCandidateIds: ['article_2'], mode: 'generate', maxCandidates: 1, now: at, runners });
+    assert.equal(poster, 3); assert.equal(generated, 1);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('partial publication continues, reuses media, and bounds only unresolved platform retries', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-poster-'));
+  try {
+    const store = new WorkerStateStore(root); let generated = 0; const posts: string[] = [];
+    const runners = {
+      evaluate: async () => evaluation('admitted'), doctor: async () => undefined, caption: async () => 'caption',
+      generate: async () => { generated += 1; return artifact(); },
+      publish: async (_id: string, platform: string) => { posts.push(platform); if (platform === 'bluesky') throw new Error('Authorization: secret'); },
+    };
+    const first = await runWorkerCycle({ store, discoveredCandidateIds: ['article_1'], mode: 'live', processExisting: true, maxCandidates: 1, now: at, publicationAttemptLimit: 2, runners });
+    assert.deepEqual(posts, ['x', 'bluesky', 'reels']); assert.equal(first.candidates.article_1!.publication.x!.status, 'succeeded'); assert.equal(first.candidates.article_1!.publication.reels!.status, 'succeeded'); assert.equal(first.candidates.article_1!.publication.bluesky!.status, 'failed');
+    const second = await runWorkerCycle({ store, discoveredCandidateIds: ['article_1'], mode: 'live', maxCandidates: 1, now: at, publicationAttemptLimit: 2, runners });
+    assert.deepEqual(posts, ['x', 'bluesky', 'reels', 'bluesky']); assert.equal(generated, 1); assert.equal(second.candidates.article_1!.publicationAttempts!.bluesky, 2);
+    const third = await runWorkerCycle({ store, discoveredCandidateIds: ['article_1'], mode: 'live', maxCandidates: 1, now: at, publicationAttemptLimit: 2, runners });
+    assert.deepEqual(posts, ['x', 'bluesky', 'reels', 'bluesky']); assert.equal(third.candidates.article_1!.publication.bluesky!.status, 'blocked'); assert.equal(isWorkerCandidateComplete(third.candidates.article_1!), false); assert.equal(JSON.stringify(third).includes('secret'), false);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('interrupted Poster publication remains uncertain and is never reposted as success', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-poster-'));
+  try {
+    const store = new WorkerStateStore(root); const candidate = createDiscoveredCandidate('article_1', at().toISOString()); let posts = 0;
+    await store.save({ ...emptyWorkerState(), initialized: true, candidates: { article_1: {
+      ...candidate, evaluation: { status: 'succeeded', completedAt: at().toISOString() }, admission: { status: 'succeeded', completedAt: at().toISOString() }, evaluationResult: evaluation('admitted'), generation: { status: 'succeeded', completedAt: at().toISOString() }, generatedArtifact: artifact(), publicationTargets: ['x'], publicationAttempts: { x: 1 }, publication: { x: { status: 'running', startedAt: at().toISOString() } },
+    } } });
+    const state = await runWorkerCycle({ store, discoveredCandidateIds: ['article_1'], mode: 'live', maxCandidates: 1, now: at, runners: { caption: async () => 'caption', publish: async () => { posts += 1; } } });
+    assert.equal(state.candidates.article_1!.publication.x!.status, 'uncertain'); assert.equal(posts, 0); assert.equal(isWorkerCandidateComplete(state.candidates.article_1!), false);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('live uses governed fixture data for the Poster caption', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-poster-'));
+  try {
+    const calls: string[][] = [];
+    await runNgestWorkerCycle({
+      store: new WorkerStateStore(root), mode: 'live', processExisting: true, maxCandidates: 1, now: at, fetchManifest: async () => validManifest(),
+      runners: {
+        evaluate: async () => evaluation('admitted'), generate: async () => artifact(),
+        ...createPosterRunners(async (arguments_) => { calls.push([...arguments_]); if (arguments_[0] === 'doctor' && arguments_[1] !== 'x') throw new Error('not ready'); }),
+      },
+    });
+    assert.deepEqual(calls.at(-1), ['post', 'x', '--video', 'C:/worker/article_1.mp4', '--text', '"First governed headline" by Publisher Main']);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 

@@ -7,14 +7,18 @@ import { fetchNgestVidGenManifestPage, type NgestVidGenEnvironment, type NgestVi
 import { createDiscoveredCandidate, type WorkerCandidateState, type WorkerEvaluation, type WorkerGeneratedArtifact, type WorkerStage, type WorkerState, WorkerStateStore, validateWorkerEvaluation, validateWorkerGeneratedArtifact } from './state.ts';
 import { createMomentumConfig, evaluateWebMomentum, WEB_MOMENTUM_METRIC, WEB_MOMENTUM_POLICY_ID, WEB_MOMENTUM_VERSION } from './web-momentum.ts';
 import { runHeadlineHandoff } from './headline-handoff.ts';
+import { runPosterCommand, type PosterCommandRunner } from '../app/poster-handoff.ts';
 
 export type WorkerMode = 'observe' | 'generate' | 'live';
+export const WORKER_POSTER_VIDEO_PLATFORMS = ['x', 'bluesky', 'reels'] as const;
 const MAX_WORKER_DISCOVERED_CANDIDATES = 10_000;
 
 export interface WorkerStageRunners {
   readonly evaluate?: (candidateId: string) => Promise<WorkerEvaluation>;
   readonly generate?: (candidateId: string) => Promise<WorkerGeneratedArtifact>;
-  readonly publish?: (candidateId: string, platform: string) => Promise<void>;
+  readonly doctor?: (platform: typeof WORKER_POSTER_VIDEO_PLATFORMS[number]) => Promise<void>;
+  readonly caption?: (candidateId: string) => Promise<string>;
+  readonly publish?: (candidateId: string, platform: typeof WORKER_POSTER_VIDEO_PLATFORMS[number], artifact: WorkerGeneratedArtifact, caption: string) => Promise<void>;
 }
 
 export interface WorkerCycleOptions {
@@ -23,9 +27,9 @@ export interface WorkerCycleOptions {
   readonly mode: WorkerMode;
   readonly processExisting?: boolean;
   readonly maxCandidates: number;
-  readonly publicationPlatforms?: readonly string[];
   readonly dailyGenerationLimit?: number;
   readonly generationAttemptLimit?: number;
+  readonly publicationAttemptLimit?: number;
   readonly runners?: WorkerStageRunners;
   readonly now?: () => Date;
   /** Must atomically persist a local fixture before its ID becomes durable state. */
@@ -61,6 +65,7 @@ export async function runWorkerCycle(options: WorkerCycleOptions): Promise<Worke
   if (!Number.isSafeInteger(options.maxCandidates) || options.maxCandidates < 1) throw new VidGenError('invalid_argument', 'Worker max candidates must be a positive whole number.');
   if (options.dailyGenerationLimit !== undefined && (!Number.isSafeInteger(options.dailyGenerationLimit) || options.dailyGenerationLimit < 1 || options.dailyGenerationLimit > 100)) throw new VidGenError('invalid_argument', 'Worker daily generation limit must be a whole number from 1 through 100.');
   if (options.generationAttemptLimit !== undefined && (!Number.isSafeInteger(options.generationAttemptLimit) || options.generationAttemptLimit < 1 || options.generationAttemptLimit > 10)) throw new VidGenError('invalid_argument', 'Worker generation attempt limit must be a whole number from 1 through 10.');
+  if (options.publicationAttemptLimit !== undefined && (!Number.isSafeInteger(options.publicationAttemptLimit) || options.publicationAttemptLimit < 1 || options.publicationAttemptLimit > 10)) throw new VidGenError('invalid_argument', 'Worker publication attempt limit must be a whole number from 1 through 10.');
   const now = options.now ?? (() => new Date());
   let state = await options.store.load();
   const initial = !state.initialized;
@@ -76,7 +81,7 @@ export async function runWorkerCycle(options: WorkerCycleOptions): Promise<Worke
     if (processed >= options.maxCandidates) break;
     const candidate = state.candidates[id];
     if (candidate === undefined || candidate.baseline === true) continue;
-    const next = await processCandidate(state, candidate, options.mode, options.publicationPlatforms ?? [], options.runners ?? {}, options.store, now, options.dailyGenerationLimit ?? 1, options.generationAttemptLimit ?? 2);
+    const next = await processCandidate(state, candidate, options.mode, options.runners ?? {}, options.store, now, options.dailyGenerationLimit ?? 1, options.generationAttemptLimit ?? 2, options.publicationAttemptLimit ?? 2);
     state = next.state;
     if (next.didWork) processed += 1;
   }
@@ -100,9 +105,14 @@ export async function runNgestWorkerCycle(options: NgestWorkerCycleOptions): Pro
   const fixtures = fixturesFromSnapshot(manifest);
   const momentumRunners = options.runners?.evaluate === undefined ? { ...options.runners, evaluate: defaultMomentumEvaluator(options.store, options.environment ?? process.env, options.parallelFetch) } : options.runners;
   if (momentumRunners?.generate === undefined && options.mode !== 'observe' && (options.anchorReferencePaths === undefined || options.fontPath === undefined)) throw new VidGenError('configuration', 'Worker generation requires anchor references and a font file.');
-  const runners = momentumRunners?.generate === undefined && options.mode !== 'observe'
+  const generationRunners = momentumRunners?.generate === undefined && options.mode !== 'observe'
     ? { ...momentumRunners, generate: (candidateId: string) => runHeadlineHandoff({ candidateId, fixturePath: options.store.candidateFixturePath(candidateId), artifactsRoot: options.store.candidateGenerationArtifactsRoot(candidateId), anchorReferencePaths: options.anchorReferencePaths!, fontPath: options.fontPath!, maxSeconds: options.maxSeconds ?? 8 }) }
     : momentumRunners;
+  const runners = options.mode !== 'live' ? generationRunners : {
+    ...createPosterRunners(),
+    ...generationRunners,
+    caption: generationRunners?.caption ?? ((candidateId) => governedCaption(options.store, candidateId)),
+  };
   return runWorkerCycle({
     ...options,
     runners,
@@ -121,7 +131,7 @@ export async function runNgestWorker(options: NgestWorkerRunOptions): Promise<Wo
   }
 }
 
-async function processCandidate(state: WorkerState, candidate: WorkerCandidateState, mode: WorkerMode, platforms: readonly string[], runners: WorkerStageRunners, store: WorkerStateStore, now: () => Date, dailyGenerationLimit: number, generationAttemptLimit: number): Promise<{ state: WorkerState; didWork: boolean }> {
+async function processCandidate(state: WorkerState, candidate: WorkerCandidateState, mode: WorkerMode, runners: WorkerStageRunners, store: WorkerStateStore, now: () => Date, dailyGenerationLimit: number, generationAttemptLimit: number, publicationAttemptLimit: number): Promise<{ state: WorkerState; didWork: boolean }> {
   let next = state; let current = candidate; let didWork = false;
   if (current.evaluation.status === 'pending' && runners.evaluate !== undefined) {
     didWork = true; ({ state: next, candidate: current } = await runExternalStage(next, current.id, 'evaluation', store, now, async () => {
@@ -129,24 +139,40 @@ async function processCandidate(state: WorkerState, candidate: WorkerCandidateSt
       return { evaluationResult: evaluation, admission: { status: evaluation.decision === 'admitted' ? 'succeeded' : 'skipped', completedAt: timestamp(now()) } };
     }));
   }
-  if (mode === 'observe' || !isQualifiedForGeneration(current) || runners.generate === undefined) return { state: next, didWork };
-  if (current.generation.status === 'blocked' && current.generation.block === 'generation_daily_limit' && generationCount(next, day(now())) < dailyGenerationLimit) {
-    next = replaceStage(next, current.id, 'generation', { status: 'pending' }); current = next.candidates[current.id]!; await store.save(next);
+  if (mode === 'observe' || !isQualifiedForGeneration(current)) return { state: next, didWork };
+  if (mode === 'live' && (current.publicationTargets === undefined || (current.publicationTargets.length === 0 && current.generation.status === 'pending'))) {
+    const targets: typeof WORKER_POSTER_VIDEO_PLATFORMS[number][] = [];
+    if (runners.doctor !== undefined) for (const platform of WORKER_POSTER_VIDEO_PLATFORMS) { try { await runners.doctor(platform); targets.push(platform); } catch { /* Poster diagnostics stay outside Worker state. */ } }
+    next = mergeCandidate(next, current.id, { publicationTargets: targets, publicationAttempts: {} }, 'generation', current.generation);
+    current = next.candidates[current.id]!; await store.save(next); didWork = true;
   }
-  if (current.generation.status === 'failed' && (current.generationAttempts ?? 0) >= generationAttemptLimit) {
-    next = replaceStage(next, current.id, 'generation', { status: 'blocked', completedAt: timestamp(now()), block: 'generation_attempt_limit' }); current = next.candidates[current.id]!; await store.save(next); return { state: next, didWork: true };
+  if (mode === 'live' && current.publicationTargets?.length === 0) return { state: next, didWork };
+  if (current.generation.status !== 'succeeded') {
+    if (runners.generate === undefined) return { state: next, didWork };
+    if (current.generation.status === 'blocked' && current.generation.block === 'generation_daily_limit' && generationCount(next, day(now())) < dailyGenerationLimit) {
+      next = replaceStage(next, current.id, 'generation', { status: 'pending' }); current = next.candidates[current.id]!; await store.save(next);
+    }
+    if (current.generation.status === 'failed' && (current.generationAttempts ?? 0) >= generationAttemptLimit) {
+      next = replaceStage(next, current.id, 'generation', { status: 'blocked', completedAt: timestamp(now()), block: 'generation_attempt_limit' }); current = next.candidates[current.id]!; await store.save(next); return { state: next, didWork: true };
+    }
+    if (current.generation.status !== 'pending' && current.generation.status !== 'failed') return { state: next, didWork };
+    if (generationCount(next, day(now())) >= dailyGenerationLimit) {
+      next = replaceStage(next, current.id, 'generation', { status: 'blocked', completedAt: timestamp(now()), block: 'generation_daily_limit' }); await store.save(next); return { state: next, didWork: true };
+    }
+    next = spendGeneration(next, current.id, day(now())); current = next.candidates[current.id]!; await store.save(next);
+    didWork = true; ({ state: next, candidate: current } = await runExternalStage(next, current.id, 'generation', store, now, async () => ({ generatedArtifact: validateWorkerGeneratedArtifact(await runners.generate!(current.id)) })));
   }
-  if (current.generation.status !== 'pending' && current.generation.status !== 'failed') return { state: next, didWork };
-  if (generationCount(next, day(now())) >= dailyGenerationLimit) {
-    next = replaceStage(next, current.id, 'generation', { status: 'blocked', completedAt: timestamp(now()), block: 'generation_daily_limit' }); await store.save(next); return { state: next, didWork: true };
-  }
-  next = spendGeneration(next, current.id, day(now())); current = next.candidates[current.id]!; await store.save(next);
-  didWork = true; ({ state: next, candidate: current } = await runExternalStage(next, current.id, 'generation', store, now, async () => ({ generatedArtifact: validateWorkerGeneratedArtifact(await runners.generate!(current.id)) })));
-  if (mode !== 'live' || current.generation.status !== 'succeeded' || runners.publish === undefined) return { state: next, didWork };
-  for (const platform of platforms) {
+  if (mode !== 'live' || current.generation.status !== 'succeeded' || current.publicationTargets === undefined || runners.publish === undefined || runners.caption === undefined) return { state: next, didWork };
+  let caption: string | undefined;
+  for (const platform of current.publicationTargets) {
     if (current.publication[platform]?.status === 'succeeded') continue;
-    if (current.publication[platform]?.status !== undefined && current.publication[platform]?.status !== 'pending') continue;
-    didWork = true; ({ state: next, candidate: current } = await runExternalStage(next, current.id, 'publication', store, now, () => runners.publish!(current.id, platform).then(() => ({})), platform));
+    if (current.publication[platform]?.status === 'uncertain' || current.publication[platform]?.status === 'blocked') continue;
+    if ((current.publicationAttempts?.[platform] ?? 0) >= publicationAttemptLimit) {
+      next = replaceStage(next, current.id, 'publication', { status: 'blocked', completedAt: timestamp(now()), block: 'publication_attempt_limit' }, platform); current = next.candidates[current.id]!; await store.save(next); didWork = true; continue;
+    }
+    next = spendPublication(next, current.id, platform); current = next.candidates[current.id]!; await store.save(next); didWork = true;
+    caption ??= await runners.caption(current.id);
+    ({ state: next, candidate: current } = await runExternalStage(next, current.id, 'publication', store, now, () => runners.publish!(current.id, platform, current.generatedArtifact!, caption!).then(() => ({})), platform));
   }
   return { state: next, didWork };
 }
@@ -206,8 +232,26 @@ function spendGeneration(state: WorkerState, candidateId: string, date: string):
   const candidate = state.candidates[candidateId]; if (candidate === undefined) throw new VidGenError('artifact', 'Worker candidate state is missing.');
   return { ...state, generationCounts: { [date]: generationCount(state, date) + 1 }, candidates: { ...state.candidates, [candidateId]: { ...candidate, generationAttempts: (candidate.generationAttempts ?? 0) + 1 } } };
 }
+function spendPublication(state: WorkerState, candidateId: string, platform: typeof WORKER_POSTER_VIDEO_PLATFORMS[number]): WorkerState {
+  const candidate = state.candidates[candidateId]; if (candidate === undefined) throw new VidGenError('artifact', 'Worker candidate state is missing.');
+  return { ...state, candidates: { ...state.candidates, [candidateId]: { ...candidate, publicationAttempts: { ...candidate.publicationAttempts, [platform]: (candidate.publicationAttempts?.[platform] ?? 0) + 1 } } } };
+}
 function day(value: Date): string { return timestamp(value).slice(0, 10); }
 function timestamp(now: Date): string { if (Number.isNaN(now.valueOf())) throw new VidGenError('invalid_argument', 'Worker clock produced an invalid timestamp.'); return now.toISOString(); }
+
+async function governedCaption(store: WorkerStateStore, candidateId: string): Promise<string> {
+  const fixture = await loadNgestVidGenManifestFile(store.candidateFixturePath(candidateId));
+  const story = buildStoryInput(buildCanonicalInput(fixture), candidateId);
+  return `"${story.article.headline}" by ${story.article.source.displayName}`;
+}
+
+/** Keeps Poster argv construction at the Worker boundary without accepting child output. */
+export function createPosterRunners(runPoster: PosterCommandRunner = runPosterCommand): Pick<WorkerStageRunners, 'doctor' | 'publish'> {
+  return {
+    doctor: (platform) => runPoster(['doctor', platform]),
+    publish: (_candidateId, platform, artifact, caption) => runPoster(['post', platform, '--video', artifact.finalPath, '--text', caption]),
+  };
+}
 
 function defaultMomentumEvaluator(store: WorkerStateStore, environment: NgestVidGenEnvironment, parallelFetch?: typeof fetch): (candidateId: string) => Promise<WorkerEvaluation> {
   return async (candidateId) => {
