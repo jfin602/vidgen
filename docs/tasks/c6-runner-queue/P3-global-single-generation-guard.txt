@@ -1,0 +1,32 @@
+TASK: Correction 6 / P3 — Global single-generation guard
+
+- Recommended configuration: `Terra Ultra`.
+- Required unchanged project version: `0.6.5`.
+
+Objective
+
+Enforce the owner invariant that Worker-managed VidGen headline generation can never have more than one active generation subprocess on the machine, including accidental duplicate Worker processes.
+
+Required behavior
+
+- Inspect the current Worker generation handoff, P1 queue scheduler, P2 production-reuse boundary, persistence/recovery behavior, and tests before editing.
+- Add a machine-wide generation exclusion mechanism whose identity is independent of --state-root. Acquisition must use an atomic filesystem primitive or an equivalently strong local-process mechanism; an in-memory flag is insufficient.
+- Acquire exclusion before consuming generation daily/attempt budget and before spawning VidGen. Lock contention must leave the candidate queued and must not consume a generation attempt or convert the candidate to failure.
+- After acquiring exclusion, recheck P2's verified prior-production lookup before spending or spawning so two processes that queued the same article cannot sequentially generate duplicates.
+- Hold exclusion for the entire headline child-process lifetime and release it only after the child has conclusively exited and the Worker has handled its result.
+- Fail closed on uncertain ownership. A crash or ambiguous stale guard must never be automatically interpreted as permission to start a potentially overlapping generation. Prefer temporary queue stoppage/manual reconciliation over a false concurrent start.
+- Preserve current uncertain external-work semantics: interrupted generation must not be blindly retried as though no provider work occurred.
+- Normal definite generation failures may release exclusion after the child is known to have exited and remain subject to the existing bounded retry policy.
+- Avoid busy loops when generation exclusion is unavailable.
+- Do not expose lock metadata, process details, paths, or errors in a way that can leak secrets or untrusted child output.
+- Keep package.json at 0.6.5 and do not create package-lock.json.
+
+Focused proof
+
+Add deterministic cross-process or equivalent process-level tests demonstrating that two competing Worker generation attempts cannot overlap, contention consumes no generation budget, release after a definite child exit permits the next queued generation, and uncertain/stale ownership fails closed. Include a race test showing the second contender adopts a verified production created by the first instead of regenerating it.
+
+Run focused concurrency/Worker tests and the broader Worker regression suite.
+
+Non-goals
+
+Do not add distributed locking, databases, queues, or multi-host coordination. This correction guarantees single-generation exclusion for Worker-managed generation on one machine; do not move publishing logic into VidGen or generation logic into VidGen Poster.
