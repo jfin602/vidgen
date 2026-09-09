@@ -142,6 +142,41 @@ test('ngest --process-existing makes the first snapshot eligible while candidate
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test('ngest discovery keeps durable pending work when IDs leave and reappear', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-'));
+  try {
+    const store = new WorkerStateStore(root); const evaluated: string[] = [];
+    const first = validManifest();
+    const changed = validManifest();
+    changed.articles = [changed.articles[0]!, {
+      ...changed.articles[0]!, articleId: 'article-3', headline: 'Third governed headline', originalUrl: 'https://publisher.example.test/story-3',
+    }];
+    await runNgestWorkerCycle({
+      store, mode: 'observe', processExisting: true, maxCandidates: 1, now: at, fetchManifest: async () => first,
+      runners: { evaluate: async (id) => { evaluated.push(id); return evaluation('admitted'); } },
+    });
+    await runNgestWorkerCycle({
+      store, mode: 'observe', maxCandidates: 1, now: at, fetchManifest: async () => changed,
+      runners: { evaluate: async (id) => {
+        evaluated.push(id);
+        assert.ok(await readFile(store.candidateFixturePath('article-3'), 'utf8'));
+        return evaluation('admitted');
+      } },
+    });
+    const restarted = await runNgestWorkerCycle({
+      store: new WorkerStateStore(root), mode: 'observe', maxCandidates: 1, now: at, fetchManifest: async () => first,
+      runners: { evaluate: async (id) => { evaluated.push(id); return evaluation('admitted'); } },
+    });
+    await runNgestWorkerCycle({
+      store, mode: 'observe', maxCandidates: 1, now: at, fetchManifest: async () => changed,
+      runners: { evaluate: async (id) => { evaluated.push(id); return evaluation('admitted'); } },
+    });
+    assert.deepEqual(evaluated, ['article-1', 'article-2', 'article-3']);
+    assert.equal(restarted.candidates['article-2']!.evaluation.status, 'succeeded');
+    assert.equal(restarted.candidates['article-3']!.evaluation.status, 'succeeded');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test('ngest poll errors, malformed or duplicate candidates, and fixture persistence failures do not advance discovery state', async () => {
   const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-'));
   try {
