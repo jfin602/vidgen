@@ -20,13 +20,22 @@ export interface WorkerStage {
 export interface WorkerEvaluation {
   readonly metric: string;
   readonly version: string;
+  readonly policyId?: string;
   readonly score: number;
   readonly threshold: number;
   readonly decision: 'admitted' | 'skipped';
   readonly evaluatedAt: string;
-  readonly queryId: string;
-  readonly evidenceId: string;
+  /** Compatibility fields for pre-Web-Momentum injected test runners. */
+  readonly queryId?: string;
+  readonly evidenceId?: string;
+  readonly searchId?: string;
+  readonly sessionId?: string;
+  readonly signature?: readonly string[];
+  readonly results?: readonly WorkerEvidence[];
+  readonly components?: { readonly breadth: number; readonly saturation: number; readonly freshness: number; readonly reaction: number; };
+  readonly budgetBlocked?: true;
 }
+export interface WorkerEvidence { readonly url: string; readonly title: string; readonly domain: string; readonly publishedAt?: string; readonly excerptHash: string; readonly matchedTerms: readonly string[]; readonly reactionSignal: boolean; }
 
 export interface WorkerCandidateState {
   readonly id: string;
@@ -38,6 +47,7 @@ export interface WorkerCandidateState {
   readonly generation: WorkerStage;
   readonly publication: Readonly<Record<string, WorkerStage>>;
   readonly evaluationResult?: WorkerEvaluation;
+  readonly ownerLabel?: 'generate' | 'skip';
 }
 
 export interface WorkerState {
@@ -145,16 +155,22 @@ export function validateWorkerState(value: unknown): WorkerState {
 
 export function validateWorkerEvaluation(value: unknown): WorkerEvaluation {
   const evaluation = record(value, 'Worker evaluation result is malformed.');
-  if (Object.keys(evaluation).some((key) => !['metric', 'version', 'score', 'threshold', 'decision', 'evaluatedAt', 'queryId', 'evidenceId'].includes(key))
+  if (Object.keys(evaluation).some((key) => !['metric', 'version', 'policyId', 'score', 'threshold', 'decision', 'evaluatedAt', 'queryId', 'evidenceId', 'searchId', 'sessionId', 'signature', 'results', 'components', 'budgetBlocked'].includes(key))
     || !safeLabel(evaluation.metric) || !safeLabel(evaluation.version) || !safeNumber(evaluation.score) || !safeNumber(evaluation.threshold)
     || (evaluation.decision !== 'admitted' && evaluation.decision !== 'skipped') || !safeTimestamp(evaluation.evaluatedAt)
-    || !safeLabel(evaluation.queryId) || !safeLabel(evaluation.evidenceId)) throw malformed();
+    || (evaluation.policyId !== undefined && !safeLabel(evaluation.policyId)) || (evaluation.queryId !== undefined && !safeLabel(evaluation.queryId)) || (evaluation.evidenceId !== undefined && !safeLabel(evaluation.evidenceId)) || (evaluation.searchId !== undefined && !safeLabel(evaluation.searchId)) || (evaluation.sessionId !== undefined && !safeLabel(evaluation.sessionId))
+    || (evaluation.budgetBlocked !== undefined && evaluation.budgetBlocked !== true)) throw malformed();
+  if (evaluation.components !== undefined && (!isPlainRecord(evaluation.components) || !['breadth', 'saturation', 'freshness', 'reaction'].every((key) => safeNumber(evaluation.components[key])) || Object.keys(evaluation.components).length !== 4)) throw malformed();
+  if (evaluation.signature !== undefined && (!Array.isArray(evaluation.signature) || evaluation.signature.length > 12 || evaluation.signature.some((term) => !safeTerm(term)))) throw malformed();
+  if (evaluation.results !== undefined && (!Array.isArray(evaluation.results) || evaluation.results.length > 10 || evaluation.results.some((result) => !safeEvidence(result)))) throw malformed();
+  if (evaluation.policyId !== undefined && evaluation.budgetBlocked !== true && (evaluation.searchId === undefined || evaluation.sessionId === undefined || evaluation.signature === undefined || evaluation.results === undefined || evaluation.components === undefined)) throw malformed();
+  if (evaluation.policyId !== undefined && (!wholeRange(evaluation.score, 0, 100) || !wholeRange(evaluation.threshold, 0, 100) || (evaluation.components !== undefined && (!wholeRange(evaluation.components.breadth, 0, 40) || !wholeRange(evaluation.components.saturation, 0, 25) || !wholeRange(evaluation.components.freshness, 0, 20) || !wholeRange(evaluation.components.reaction, 0, 15))))) throw malformed();
   return evaluation as unknown as WorkerEvaluation;
 }
 
 function validateCandidate(value: unknown, id: string): void {
   if (!safeCandidateId(id)) throw malformed(); const candidate = record(value, 'Worker state is malformed.');
-  if (Object.keys(candidate).some((key) => !['id', 'baseline', 'discovery', 'evaluation', 'admission', 'generation', 'publication', 'evaluationResult'].includes(key)) || candidate.id !== id || !isPlainRecord(candidate.publication) || (candidate.baseline !== undefined && candidate.baseline !== true)) throw malformed();
+  if (Object.keys(candidate).some((key) => !['id', 'baseline', 'discovery', 'evaluation', 'admission', 'generation', 'publication', 'evaluationResult', 'ownerLabel'].includes(key)) || candidate.id !== id || !isPlainRecord(candidate.publication) || (candidate.baseline !== undefined && candidate.baseline !== true) || (candidate.ownerLabel !== undefined && candidate.ownerLabel !== 'generate' && candidate.ownerLabel !== 'skip')) throw malformed();
   validateStage(candidate.discovery); validateStage(candidate.evaluation); validateStage(candidate.admission); validateStage(candidate.generation);
   for (const [platform, stage] of Object.entries(candidate.publication)) { if (!safeLabel(platform)) throw malformed(); validateStage(stage); }
   if (candidate.evaluationResult !== undefined) validateWorkerEvaluation(candidate.evaluationResult);
@@ -179,6 +195,15 @@ function validateTimestamp(value: string): void { if (!safeTimestamp(value)) thr
 function safeTimestamp(value: unknown): value is string { return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(value) && !Number.isNaN(Date.parse(value)); }
 function safeLabel(value: unknown): value is string { return typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,127}$/u.test(value) && !/(?:token|secret|api[_-]?key|bearer|authorization)/iu.test(value); }
 function safeNumber(value: unknown): value is number { return typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= 1_000_000_000; }
+function wholeRange(value: unknown, min: number, max: number): value is number { return typeof value === 'number' && Number.isSafeInteger(value) && value >= min && value <= max; }
+function safeTerm(value: unknown): value is string { return typeof value === 'string' && /^[\p{L}\p{N}]{2,64}$/u.test(value); }
+function safeEvidence(value: unknown): boolean {
+  if (!isPlainRecord(value) || Object.keys(value).some((key) => !['url', 'title', 'domain', 'publishedAt', 'excerptHash', 'matchedTerms', 'reactionSignal'].includes(key))) return false;
+  if (typeof value.url !== 'string' || !safeEvidenceUrl(value.url) || typeof value.title !== 'string' || value.title.length > 300 || /[\u0000-\u001f\u007f]/u.test(value.title) || typeof value.domain !== 'string' || !/^[a-z0-9.-]{1,253}$/u.test(value.domain) || typeof value.excerptHash !== 'string' || !/^[a-f0-9]{64}$/u.test(value.excerptHash) || !Array.isArray(value.matchedTerms) || value.matchedTerms.length > 12 || value.matchedTerms.some((term) => !safeTerm(term)) || typeof value.reactionSignal !== 'boolean') return false;
+  return value.publishedAt === undefined || (typeof value.publishedAt === 'string' && safeDate(value.publishedAt));
+}
+function safeEvidenceUrl(value: string): boolean { try { const url = new URL(value); return value.length <= 2_000 && (url.protocol === 'http:' || url.protocol === 'https:') && !url.username && !url.password && !url.search && !url.hash && !!url.hostname; } catch { return false; } }
+function safeDate(value: string): boolean { return /^\d{4}-\d{2}-\d{2}$/u.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00.000Z`)); }
 function record(value: unknown, message: string): Record<string, unknown> { if (!isPlainRecord(value)) throw new VidGenError('artifact', message); return value; }
 function isPlainRecord(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === 'object' && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype; }
 function malformed(): VidGenError { return new VidGenError('artifact', 'Worker state is malformed.'); }

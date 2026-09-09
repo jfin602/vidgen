@@ -1,8 +1,11 @@
 import { VidGenError } from '../core/error.ts';
 import { buildCanonicalInput } from '../core/canonical-input.ts';
 import { buildOneArticleFixture } from '../app/sample-story-fixture.ts';
+import { buildStoryInput } from '../core/story-input.ts';
+import { loadNgestVidGenManifestFile } from '../integrations/ngest/local-manifest-file.ts';
 import { fetchNgestVidGenManifestPage, type NgestVidGenEnvironment, type NgestVidGenManifestPage } from '../integrations/ngest/vidgen-manifest.ts';
 import { createDiscoveredCandidate, type WorkerCandidateState, type WorkerEvaluation, type WorkerStage, type WorkerState, WorkerStateStore, validateWorkerEvaluation } from './state.ts';
+import { createMomentumConfig, evaluateWebMomentum, WEB_MOMENTUM_METRIC, WEB_MOMENTUM_POLICY_ID, WEB_MOMENTUM_VERSION } from './web-momentum.ts';
 
 export type WorkerMode = 'observe' | 'generate' | 'live';
 const MAX_WORKER_DISCOVERED_CANDIDATES = 10_000;
@@ -36,6 +39,8 @@ export interface WorkerRunOptions extends Omit<WorkerCycleOptions, 'discoveredCa
 export interface NgestWorkerCycleOptions extends Omit<WorkerCycleOptions, 'discoveredCandidateIds' | 'persistCandidateFixture'> {
   readonly environment?: NgestVidGenEnvironment;
   readonly fetchManifest?: (environment: NgestVidGenEnvironment) => Promise<NgestVidGenManifestPage>;
+  /** Test-only transport seam; production uses built-in fetch. */
+  readonly parallelFetch?: typeof fetch;
 }
 
 export interface NgestWorkerRunOptions extends Omit<NgestWorkerCycleOptions, 'now'> {
@@ -85,8 +90,10 @@ export async function runWorker(options: WorkerRunOptions): Promise<WorkerState>
 export async function runNgestWorkerCycle(options: NgestWorkerCycleOptions): Promise<WorkerState> {
   const manifest = await (options.fetchManifest ?? fetchNgestVidGenManifestPage)(options.environment ?? process.env);
   const fixtures = fixturesFromSnapshot(manifest);
+  const runners = options.runners?.evaluate === undefined ? { ...options.runners, evaluate: defaultMomentumEvaluator(options.store, options.environment ?? process.env, options.parallelFetch) } : options.runners;
   return runWorkerCycle({
     ...options,
+    runners,
     discoveredCandidateIds: [...fixtures.keys()],
     persistCandidateFixture: async (id) => options.store.saveCandidateFixture(id, fixtures.get(id)!),
   });
@@ -162,3 +169,14 @@ function mergeCandidate(state: WorkerState, id: string, patch: Partial<WorkerCan
   return { ...state, candidates: { ...state.candidates, [id]: { ...staged, ...patch, publication: patch.publication ?? staged.publication } } };
 }
 function timestamp(now: Date): string { if (Number.isNaN(now.valueOf())) throw new VidGenError('invalid_argument', 'Worker clock produced an invalid timestamp.'); return now.toISOString(); }
+
+function defaultMomentumEvaluator(store: WorkerStateStore, environment: NgestVidGenEnvironment, parallelFetch?: typeof fetch): (candidateId: string) => Promise<WorkerEvaluation> {
+  return async (candidateId) => {
+    const config = createMomentumConfig(environment); const now = new Date(); const today = now.toISOString().slice(0, 10);
+    const state = await store.load();
+    const used = Object.values(state.candidates).filter((candidate) => candidate.evaluationResult?.metric === WEB_MOMENTUM_METRIC && candidate.evaluationResult.version === WEB_MOMENTUM_VERSION && candidate.evaluationResult.policyId === WEB_MOMENTUM_POLICY_ID && candidate.evaluationResult.evaluatedAt.slice(0, 10) === today && candidate.evaluationResult.budgetBlocked !== true).length;
+    if (used >= config.dailyEvaluationLimit) return { metric: WEB_MOMENTUM_METRIC, version: WEB_MOMENTUM_VERSION, policyId: WEB_MOMENTUM_POLICY_ID, score: 0, threshold: config.threshold, decision: 'skipped', evaluatedAt: now.toISOString(), budgetBlocked: true };
+    const fixture = await loadNgestVidGenManifestFile(store.candidateFixturePath(candidateId));
+    return evaluateWebMomentum(buildStoryInput(buildCanonicalInput(fixture), candidateId).article, now, config, { environment, fetch: parallelFetch });
+  };
+}

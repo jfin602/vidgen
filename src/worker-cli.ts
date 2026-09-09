@@ -5,11 +5,14 @@ import { VidGenError, isVidGenError } from './core/error.ts';
 import { createWorkerRuntimeConfig, DEFAULT_WORKER_STATE_ROOT } from './worker/config.ts';
 import { runNgestWorker, type WorkerMode } from './worker/runtime.ts';
 import { WorkerStateStore } from './worker/state.ts';
+import { labelWorkerEvaluation, reportWorkerCalibration } from './worker/calibration.ts';
 
 export const workerHelpText = `VidGen Worker
 
 Usage:
   vidgen-worker <observe|generate|live> [--once] [--process-existing] [--max-candidates <n>] [--state-root <directory>] [--poll-interval-ms <milliseconds>]
+  vidgen-worker label <article-id> <generate|skip> [--state-root <directory>]
+  vidgen-worker report [--state-root <directory>]
 
 Modes:
   observe   Discover and persist evaluation/admission only.
@@ -25,10 +28,14 @@ Options:
 `;
 
 export interface WorkerCommand { readonly mode: WorkerMode; readonly once: boolean; readonly processExisting: boolean; readonly maxCandidates: number; readonly stateRoot?: string; readonly pollIntervalMs?: number; }
+export interface WorkerLabelCommand { readonly kind: 'label'; readonly candidateId: string; readonly label: 'generate' | 'skip'; readonly stateRoot?: string; }
+export interface WorkerReportCommand { readonly kind: 'report'; readonly stateRoot?: string; }
 export interface WorkerCliOutput { writeStdout(text: string): void; writeStderr(text: string): void; }
 
-export function parseWorkerCliArgs(args: readonly string[]): WorkerCommand | { readonly kind: 'help' } {
+export function parseWorkerCliArgs(args: readonly string[]): WorkerCommand | WorkerLabelCommand | WorkerReportCommand | { readonly kind: 'help' } {
   if (args.length === 0 || args[0] === '--help' || args[0] === '-h' || args[0] === 'help') { if (args.length > 1) throw invalid('Worker help does not accept arguments.'); return { kind: 'help' }; }
+  if (args[0] === 'label') return labelCommand(args.slice(1));
+  if (args[0] === 'report') return reportCommand(args.slice(1));
   const [mode, ...rest] = args;
   if (mode !== 'observe' && mode !== 'generate' && mode !== 'live') throw invalid('Worker requires mode observe, generate, or live.');
   let once = false; let processExisting = false; let maxCandidates = 1; const values: Partial<Record<'stateRoot' | 'pollIntervalMs', string>> = {};
@@ -49,7 +56,9 @@ export function parseWorkerCliArgs(args: readonly string[]): WorkerCommand | { r
 export async function runWorkerCli(args: readonly string[], output: WorkerCliOutput): Promise<number> {
   try {
     const command = parseWorkerCliArgs(args);
-    if ('kind' in command) { output.writeStdout(workerHelpText); return 0; }
+    if ('kind' in command && command.kind === 'help') { output.writeStdout(workerHelpText); return 0; }
+    if ('kind' in command && command.kind === 'label') { await labelWorkerEvaluation(new WorkerStateStore(resolve(command.stateRoot ?? DEFAULT_WORKER_STATE_ROOT)), command.candidateId, command.label); output.writeStdout(`Labeled ${command.candidateId}.\n`); return 0; }
+    if ('kind' in command && command.kind === 'report') { const report = reportWorkerCalibration(await new WorkerStateStore(resolve(command.stateRoot ?? DEFAULT_WORKER_STATE_ROOT)).load()); output.writeStdout(`${JSON.stringify(report)}\n`); return 0; }
     const config = createWorkerRuntimeConfig(command);
     await runNgestWorker({ store: new WorkerStateStore(config.stateRoot), mode: command.mode, once: command.once, processExisting: command.processExisting, maxCandidates: command.maxCandidates, pollIntervalMs: config.pollIntervalMs });
     output.writeStdout(`Worker ${command.mode} is running.\nstateRoot: ${config.stateRoot}\npollIntervalMs: ${config.pollIntervalMs}\n`);
@@ -61,6 +70,15 @@ export async function runWorkerCli(args: readonly string[], output: WorkerCliOut
 }
 
 function positive(value: string, option: string, maximum: number): number { const number = Number(value); if (!Number.isSafeInteger(number) || number < 1 || number > maximum) throw invalid(`${option} must be a positive whole number no greater than ${maximum}.`); return number; }
+function labelCommand(args: readonly string[]): WorkerLabelCommand {
+  const [candidateId, label, ...rest] = args; if (candidateId === undefined || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/u.test(candidateId) || (label !== 'generate' && label !== 'skip')) throw invalid('Worker label requires a safe article ID and generate or skip.');
+  return { kind: 'label', candidateId, label, ...stateRootOption(rest) };
+}
+function reportCommand(args: readonly string[]): WorkerReportCommand { return { kind: 'report', ...stateRootOption(args) }; }
+function stateRootOption(args: readonly string[]): { readonly stateRoot?: string } {
+  if (args.length === 0) return {}; if (args.length !== 2 || args[0] !== '--state-root' || args[1] === undefined || args[1].trim() === '') throw invalid('Worker label/report accepts only --state-root <directory>.');
+  createWorkerRuntimeConfig({ stateRoot: args[1] }); return { stateRoot: args[1] };
+}
 function invalid(message: string): VidGenError { return new VidGenError('invalid_argument', message); }
 function isEntrypoint(): boolean { const entrypoint = process.argv[1]; return entrypoint !== undefined && import.meta.url === pathToFileURL(resolve(entrypoint)).href; }
 if (isEntrypoint()) process.exitCode = await runWorkerCli(process.argv.slice(2), { writeStdout: (text) => process.stdout.write(text), writeStderr: (text) => process.stderr.write(text) });
