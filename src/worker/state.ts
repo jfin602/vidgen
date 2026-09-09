@@ -17,7 +17,7 @@ export interface WorkerStage {
   readonly startedAt?: string;
   readonly completedAt?: string;
   readonly failure?: { readonly code: 'stage_failed'; readonly message: 'Worker stage failed.' };
-  readonly block?: 'generation_daily_limit' | 'generation_attempt_limit' | 'publication_attempt_limit';
+  readonly block?: 'generation_daily_limit' | 'generation_attempt_limit' | 'queue_expired' | 'publication_attempt_limit';
 }
 
 export interface WorkerEvaluation {
@@ -235,7 +235,7 @@ function validateStage(value: unknown): void {
   if (stage.status !== 'failed' && stage.failure !== undefined) throw malformed();
   if (stage.status === 'blocked' && stage.block === undefined) throw malformed();
   if (stage.status !== 'blocked' && stage.block !== undefined) throw malformed();
-  if (stage.block !== undefined && stage.block !== 'generation_daily_limit' && stage.block !== 'generation_attempt_limit' && stage.block !== 'publication_attempt_limit') throw malformed();
+  if (stage.block !== undefined && stage.block !== 'generation_daily_limit' && stage.block !== 'generation_attempt_limit' && stage.block !== 'queue_expired' && stage.block !== 'publication_attempt_limit') throw malformed();
 }
 
 function isWorkerPosterPlatform(value: unknown): value is WorkerPosterPlatform { return value === 'x' || value === 'bluesky' || value === 'reels'; }

@@ -10,6 +10,8 @@ export const DEFAULT_WORKER_MAX_SECONDS = 8;
 export const DEFAULT_DAILY_GENERATION_LIMIT = 1;
 export const DEFAULT_GENERATION_ATTEMPT_LIMIT = 2;
 export const DEFAULT_PUBLICATION_ATTEMPT_LIMIT = 2;
+export const DEFAULT_WORKER_QUEUE_EXPIRATION_DAYS = 3;
+export const MAX_WORKER_QUEUE_EXPIRATION_DAYS = 365;
 
 export interface WorkerRuntimeConfig {
   readonly stateRoot: string;
@@ -18,6 +20,7 @@ export interface WorkerRuntimeConfig {
   readonly dailyGenerationLimit: number;
   readonly generationAttemptLimit: number;
   readonly publicationAttemptLimit: number;
+  readonly queueExpirationDays: number;
 }
 
 /** Validates the intentionally small set of Worker runtime controls. */
@@ -28,6 +31,8 @@ export function createWorkerRuntimeConfig(options: {
   readonly dailyGenerationLimit?: number;
   readonly generationAttemptLimit?: number;
   readonly publicationAttemptLimit?: number;
+  readonly queueExpirationDays?: number;
+  readonly environment?: Pick<NodeJS.ProcessEnv, 'VIDGEN_WORKER_QUEUE_EXPIRATION_DAYS'>;
 } = {}): WorkerRuntimeConfig {
   const stateRoot = options.stateRoot ?? DEFAULT_WORKER_STATE_ROOT;
   if (typeof stateRoot !== 'string' || stateRoot.trim().length === 0 || stateRoot.includes('\0')) {
@@ -41,9 +46,18 @@ export function createWorkerRuntimeConfig(options: {
   const dailyGenerationLimit = options.dailyGenerationLimit ?? DEFAULT_DAILY_GENERATION_LIMIT;
   const generationAttemptLimit = options.generationAttemptLimit ?? DEFAULT_GENERATION_ATTEMPT_LIMIT;
   const publicationAttemptLimit = options.publicationAttemptLimit ?? DEFAULT_PUBLICATION_ATTEMPT_LIMIT;
+  const queueExpirationDays = options.queueExpirationDays ?? queueExpirationFromEnvironment(options.environment ?? process.env);
   if (!Number.isSafeInteger(maxSeconds) || maxSeconds < 4 || maxSeconds > 20) throw new VidGenError('configuration', 'Worker max seconds must be a whole number from 4 through 20.');
   if (!Number.isSafeInteger(dailyGenerationLimit) || dailyGenerationLimit < 1 || dailyGenerationLimit > 100) throw new VidGenError('configuration', 'Worker daily generation limit must be a whole number from 1 through 100.');
   if (!Number.isSafeInteger(generationAttemptLimit) || generationAttemptLimit < 1 || generationAttemptLimit > 10) throw new VidGenError('configuration', 'Worker generation attempt limit must be a whole number from 1 through 10.');
   if (!Number.isSafeInteger(publicationAttemptLimit) || publicationAttemptLimit < 1 || publicationAttemptLimit > 10) throw new VidGenError('configuration', 'Worker publication attempt limit must be a whole number from 1 through 10.');
-  return { stateRoot: resolve(stateRoot), pollIntervalMs, maxSeconds, dailyGenerationLimit, generationAttemptLimit, publicationAttemptLimit };
+  if (!Number.isSafeInteger(queueExpirationDays) || queueExpirationDays < 1 || queueExpirationDays > MAX_WORKER_QUEUE_EXPIRATION_DAYS) throw new VidGenError('configuration', `Worker queue expiration must be a whole number from 1 through ${MAX_WORKER_QUEUE_EXPIRATION_DAYS} days.`);
+  return { stateRoot: resolve(stateRoot), pollIntervalMs, maxSeconds, dailyGenerationLimit, generationAttemptLimit, publicationAttemptLimit, queueExpirationDays };
+}
+
+function queueExpirationFromEnvironment(environment: Pick<NodeJS.ProcessEnv, 'VIDGEN_WORKER_QUEUE_EXPIRATION_DAYS'>): number {
+  const value = environment.VIDGEN_WORKER_QUEUE_EXPIRATION_DAYS;
+  if (value === undefined) return DEFAULT_WORKER_QUEUE_EXPIRATION_DAYS;
+  if (!/^\d+$/u.test(value)) throw new VidGenError('configuration', 'Worker queue expiration must be a positive whole number of days.');
+  return Number(value);
 }

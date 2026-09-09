@@ -41,8 +41,10 @@ test('Worker CLI accepts its isolated modes and bounded controls', () => {
 test('Worker runtime configuration defaults under artifacts and rejects unbounded intervals', () => {
   const config = createWorkerRuntimeConfig();
   assert.match(config.stateRoot.replaceAll('\\', '/'), /artifacts\/worker$/); assert.equal(config.pollIntervalMs, DEFAULT_WORKER_POLL_INTERVAL_MS); assert.equal(config.maxSeconds, DEFAULT_WORKER_MAX_SECONDS);
+  assert.equal(config.queueExpirationDays, 3); assert.equal(createWorkerRuntimeConfig({ environment: { VIDGEN_WORKER_QUEUE_EXPIRATION_DAYS: '7' } }).queueExpirationDays, 7);
   assert.equal(createWorkerRuntimeConfig({ maxSeconds: 12 }).maxSeconds, 12);
   assert.throws(() => createWorkerRuntimeConfig({ pollIntervalMs: 999 }), /1000 through/);
+  assert.throws(() => createWorkerRuntimeConfig({ environment: { VIDGEN_WORKER_QUEUE_EXPIRATION_DAYS: '0' } }), /queue expiration/);
   assert.throws(() => createWorkerRuntimeConfig({ stateRoot: '' }), /state root/);
 });
 
@@ -173,8 +175,18 @@ test('successful evaluation and generation survive later failures, and modes kee
   const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-'));
   try {
     const store = new WorkerStateStore(root); let generated = 0; let published = 0;
-    const state = await runWorkerCycle({
+    let state = await runWorkerCycle({
       store, discoveredCandidateIds: ['article_1', 'article_2'], mode: 'live', processExisting: true, maxCandidates: 2, now: at, dailyGenerationLimit: 2,
+      runners: {
+        evaluate: async () => evaluation('admitted'),
+        generate: async (id) => { generated += 1; if (id === 'article_2') throw new Error('Bearer secret-token'); return artifact(id); },
+        doctor: async () => undefined,
+        caption: async () => 'safe caption',
+        publish: async (_id, platform) => { published += 1; if (platform === 'bluesky') throw new Error('Bearer secret-token'); },
+      },
+    });
+    state = await runWorkerCycle({
+      store, discoveredCandidateIds: ['article_1', 'article_2'], mode: 'live', maxCandidates: 2, now: at, dailyGenerationLimit: 2,
       runners: {
         evaluate: async () => evaluation('admitted'),
         generate: async (id) => { generated += 1; if (id === 'article_2') throw new Error('Bearer secret-token'); return artifact(id); },
@@ -187,7 +199,7 @@ test('successful evaluation and generation survive later failures, and modes kee
     assert.equal(candidate.evaluation.status, 'succeeded'); assert.equal(candidate.admission.status, 'succeeded'); assert.equal(candidate.generation.status, 'succeeded');
     assert.equal(candidate.publication.x!.status, 'succeeded'); assert.equal(candidate.publication.bluesky!.status, 'failed');
     assert.equal(state.candidates.article_2!.evaluation.status, 'succeeded'); assert.equal(state.candidates.article_2!.generation.status, 'failed');
-    assert.equal(generated, 2); assert.equal(published, 3);
+    assert.equal(generated, 2); assert.equal(published, 4);
     assert.equal(JSON.stringify(state).includes('secret-token'), false);
     const observed = await runWorkerCycle({ store, discoveredCandidateIds: ['article_1', 'article_2'], mode: 'observe', maxCandidates: 2, now: at, runners: { evaluate: async () => { throw new Error('must not repeat'); } } });
     assert.equal(observed.candidates.article_1!.generation.status, 'succeeded');
@@ -300,7 +312,7 @@ test('the selected evaluation pass completes before score-priority generation st
         generate: async (id) => { events.push(`generate:${id}`); return artifact(id); },
       },
     });
-    assert.deepEqual(events, ['evaluate:earlier-low', 'evaluate:later-high', 'generate:later-high', 'generate:earlier-low']);
+    assert.deepEqual(events, ['evaluate:earlier-low', 'evaluate:later-high', 'generate:later-high']);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
@@ -313,7 +325,7 @@ test('a newly admitted higher score reprioritizes the durable generation backlog
       store, discoveredCandidateIds: ['new_high'], mode: 'generate', maxCandidates: 1, now: at, dailyGenerationLimit: 2,
       runners: { evaluate: async () => scoredEvaluation(90), generate: async (id) => { generated.push(id); return artifact(id); } },
     });
-    assert.deepEqual(generated, ['new_high', 'existing_low']);
+    assert.deepEqual(generated, ['new_high']);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
@@ -326,7 +338,8 @@ test('score-priority ties use admission time then Article ID deterministically',
       later: admittedCandidate('later', 50, '2026-09-08T12:01:00.000Z'),
       tie_a: admittedCandidate('tie_a', 50, '2026-09-08T12:00:00.000Z'),
     } });
-    await runWorkerCycle({ store, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at, dailyGenerationLimit: 3, runners: { generate: async (id) => { generated.push(id); return artifact(id); } } });
+    const runners = { generate: async (id: string) => { generated.push(id); return artifact(id); } };
+    for (let index = 0; index < 3; index += 1) await runWorkerCycle({ store, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at, dailyGenerationLimit: 3, runners });
     assert.deepEqual(generated, ['tie_a', 'tie_z', 'later']);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
@@ -347,7 +360,7 @@ test('UTC-day rollover resumes a queued candidate without re-evaluation', async 
     const store = new WorkerStateStore(root); const generated: string[] = []; let evaluations = 0;
     const runners = { evaluate: async (id: string) => { evaluations += 1; return scoredEvaluation(id === 'today' ? 90 : 10); }, generate: async (id: string) => { generated.push(id); return artifact(id); } };
     const first = await runWorkerCycle({ store, discoveredCandidateIds: ['today', 'tomorrow'], mode: 'generate', processExisting: true, maxCandidates: 2, now: at, dailyGenerationLimit: 1, runners });
-    assert.equal(first.candidates.tomorrow!.generation.block, 'generation_daily_limit'); assert.deepEqual(generated, ['today']);
+    assert.equal(first.candidates.tomorrow!.generation.status, 'pending'); assert.deepEqual(generated, ['today']);
     const tomorrow = () => new Date('2026-09-09T12:00:00.000Z');
     const resumed = await runWorkerCycle({ store, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: tomorrow, dailyGenerationLimit: 1, runners: { evaluate: async () => { throw new Error('evaluation must be reused'); }, generate: runners.generate } });
     assert.equal(evaluations, 2); assert.equal(resumed.candidates.tomorrow!.generation.status, 'succeeded'); assert.deepEqual(generated, ['today', 'tomorrow']);
@@ -398,7 +411,7 @@ test('generation budgets bound spending while successful verified media is reuse
       const result = await runHeadlineHandoff({ candidateId: id, fixturePath: 'fixture.json', artifactsRoot: root, anchorReferencePaths: ['anchor.png'], fontPath: 'font.ttf', maxSeconds: 8 }, { spawn: () => child(`Headline clip is final_ready.\nfinal: ${finalPath}\nmetadata: ${metadataPath}\nsha256: ${sha256}\ndurationSeconds: 8\n`) }); artifacts.set(id, result); return result;
     }, publish: async () => { throw new Error('Poster must not run.'); } };
     const first = await runWorkerCycle({ store, discoveredCandidateIds: ['article_1', 'article_2'], mode: 'generate', processExisting: true, maxCandidates: 2, now: at, dailyGenerationLimit: 1, generationAttemptLimit: 2, runners });
-    assert.equal(calls, 1); assert.equal(first.candidates.article_1!.generation.status, 'succeeded'); assert.deepEqual(first.candidates.article_1!.generatedArtifact, artifacts.get('article_1')); assert.equal(first.candidates.article_2!.generation.status, 'blocked'); assert.equal(first.candidates.article_2!.generation.block, 'generation_daily_limit');
+    assert.equal(calls, 1); assert.equal(first.candidates.article_1!.generation.status, 'succeeded'); assert.deepEqual(first.candidates.article_1!.generatedArtifact, artifacts.get('article_1')); assert.equal(first.candidates.article_2!.generation.status, 'pending');
     const reused = await runWorkerCycle({ store, discoveredCandidateIds: ['article_1', 'article_2'], mode: 'generate', maxCandidates: 2, now: at, dailyGenerationLimit: 1, generationAttemptLimit: 2, runners });
     assert.equal(calls, 1); assert.equal(reused.candidates.article_1!.generationAttempts, 1);
 
@@ -418,7 +431,9 @@ test('verified prior headline production adopts only its governed Article ID and
   const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-prior-'));
   try {
     const store = new WorkerStateStore(join(root, 'worker')); const prior = await writeHeadlineProduction(store.headlineArtifactsRoot(), 'article-1', 'Same governed headline'); const generated: string[] = [];
-    const first = await runWorkerCycle({ store, discoveredCandidateIds: ['article-1', 'article-2'], mode: 'generate', processExisting: true, maxCandidates: 2, now: at, dailyGenerationLimit: 2, runners: { evaluate: async () => scoredEvaluation(50), generate: async (id) => { generated.push(id); return artifact(id); } } });
+    const runners = { evaluate: async () => scoredEvaluation(50), generate: async (id: string) => { generated.push(id); return artifact(id); } };
+    const first = await runWorkerCycle({ store, discoveredCandidateIds: ['article-1', 'article-2'], mode: 'generate', processExisting: true, maxCandidates: 2, now: at, dailyGenerationLimit: 2, runners });
+    await runWorkerCycle({ store, discoveredCandidateIds: ['article-1', 'article-2'], mode: 'generate', maxCandidates: 2, now: at, dailyGenerationLimit: 2, runners });
     assert.equal(first.candidates['article-1']!.generation.status, 'succeeded'); assert.deepEqual(first.candidates['article-1']!.generatedArtifact, prior); assert.deepEqual(generated, ['article-2']);
     const restarted = await runWorkerCycle({ store: new WorkerStateStore(join(root, 'worker')), discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at, runners: { generate: async () => { throw new Error('verified artifact must survive restart'); } } });
     assert.deepEqual(restarted.candidates['article-1']!.generatedArtifact, prior);
@@ -511,6 +526,59 @@ test('an existing generation guard fails closed without spending or starting a c
       runners: { generate: async () => { generated += 1; return artifact('stale'); } },
     });
     assert.equal(state.candidates.stale!.generation.status, 'pending'); assert.equal(state.candidates.lower!.generation.status, 'pending'); assert.equal(state.candidates.stale!.generationAttempts, undefined); assert.deepEqual(state.generationCounts, {}); assert.equal(generated, 0); assert.equal(acquisitions, 1); assert.equal(await readFile(lockPath, 'utf8'), '');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('--once performs one evaluation pass and at most one generation start', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-'));
+  try {
+    const generated: string[] = [];
+    await runNgestWorker({ store: new WorkerStateStore(root), mode: 'generate', once: true, processExisting: true, maxCandidates: 2, pollIntervalMs: 1_000, dailyGenerationLimit: 2, now: at, fetchManifest: async () => validManifest(), runners: {
+      evaluate: async (id) => scoredEvaluation(id === 'article-1' ? 10 : 90), generate: async (id) => { generated.push(id); return artifact(id); },
+    } });
+    assert.deepEqual(generated, ['article-2']);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('durable pending evaluation survives ngest removal and restart', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-queue-'));
+  try {
+    const store = new WorkerStateStore(root); const evaluated: string[] = [];
+    await runWorkerCycle({ store, discoveredCandidateIds: ['first', 'removed'], mode: 'observe', processExisting: true, maxCandidates: 1, now: at, runners: { evaluate: async (id) => { evaluated.push(id); return scoredEvaluation(50); } } });
+    const resumed = await runWorkerCycle({ store: new WorkerStateStore(root), discoveredCandidateIds: [], mode: 'observe', maxCandidates: 1, now: at, runners: { evaluate: async (id) => { evaluated.push(id); return scoredEvaluation(50); } } });
+    assert.deepEqual(evaluated, ['first', 'removed']); assert.equal(resumed.candidates.removed!.evaluation.status, 'succeeded');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('queue expiration is binary, defaults to three days, and leaves fresh lower scores eligible', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-queue-'));
+  try {
+    const store = new WorkerStateStore(root); const generated: string[] = [];
+    await store.save({ ...emptyWorkerState(), initialized: true, candidates: {
+      expired_high: admittedCandidate('expired_high', 99, '2026-09-05T12:00:00.000Z'),
+      fresh_low: admittedCandidate('fresh_low', 10, '2026-09-06T12:00:00.001Z'),
+    } });
+    const state = await runWorkerCycle({ store, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at, dailyGenerationLimit: 2, runners: { generate: async (id) => { generated.push(id); return artifact(id); } } });
+    assert.equal(state.candidates.expired_high!.generation.block, 'queue_expired'); assert.equal(state.candidates.expired_high!.generationAttempts, undefined);
+    assert.deepEqual(generated, ['fresh_low']); assert.equal(state.generationCounts['2026-09-08'], 1);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('configured queue expiration and UTC rollover select the highest fresh queued score', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vidgen-worker-queue-'));
+  try {
+    const store = new WorkerStateStore(root); const generated: string[] = [];
+    await store.save({ ...emptyWorkerState(), initialized: true, candidates: {
+      today: admittedCandidate('today', 95, at().toISOString()),
+      stale: admittedCandidate('stale', 99, '2026-09-06T12:00:00.000Z'),
+      backlog: admittedCandidate('backlog', 50, at().toISOString()),
+    } });
+    const runners = { evaluate: async (id: string) => scoredEvaluation(id === 'late_high' ? 90 : 0), generate: async (id: string) => { generated.push(id); return artifact(id); } };
+    await runWorkerCycle({ store, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: at, dailyGenerationLimit: 1, queueExpirationDays: 1, runners });
+    const paused = await runWorkerCycle({ store, discoveredCandidateIds: ['late_high'], mode: 'generate', maxCandidates: 1, now: at, dailyGenerationLimit: 1, queueExpirationDays: 1, runners });
+    assert.equal(paused.candidates.stale!.generation.block, 'queue_expired'); assert.equal(paused.candidates.late_high!.generation.block, 'generation_daily_limit'); assert.deepEqual(generated, ['today']);
+    await runWorkerCycle({ store, discoveredCandidateIds: [], mode: 'generate', maxCandidates: 1, now: () => new Date('2026-09-09T12:00:00.000Z'), dailyGenerationLimit: 1, queueExpirationDays: 3, runners });
+    assert.deepEqual(generated, ['today', 'late_high']);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 

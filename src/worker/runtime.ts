@@ -11,6 +11,7 @@ import { runHeadlineHandoff } from './headline-handoff.ts';
 import { acquireWorkerGenerationExclusion, type WorkerGenerationExclusion } from './generation-exclusion.ts';
 import { findVerifiedPriorProduction } from './prior-production.ts';
 import { runPosterCommand, type PosterCommandRunner } from '../app/poster-handoff.ts';
+import { DEFAULT_WORKER_QUEUE_EXPIRATION_DAYS, MAX_WORKER_QUEUE_EXPIRATION_DAYS } from './config.ts';
 
 export type WorkerMode = 'observe' | 'generate' | 'live';
 export const WORKER_POSTER_VIDEO_PLATFORMS = ['x', 'bluesky', 'reels'] as const;
@@ -33,6 +34,7 @@ export interface WorkerCycleOptions {
   readonly dailyGenerationLimit?: number;
   readonly generationAttemptLimit?: number;
   readonly publicationAttemptLimit?: number;
+  readonly queueExpirationDays?: number;
   readonly runners?: WorkerStageRunners;
   /** Test-only seam; runtime uses the machine-wide generation exclusion. */
   readonly acquireGenerationExclusion?: () => Promise<WorkerGenerationExclusion | undefined>;
@@ -71,6 +73,7 @@ export async function runWorkerCycle(options: WorkerCycleOptions): Promise<Worke
   if (options.dailyGenerationLimit !== undefined && (!Number.isSafeInteger(options.dailyGenerationLimit) || options.dailyGenerationLimit < 1 || options.dailyGenerationLimit > 100)) throw new VidGenError('invalid_argument', 'Worker daily generation limit must be a whole number from 1 through 100.');
   if (options.generationAttemptLimit !== undefined && (!Number.isSafeInteger(options.generationAttemptLimit) || options.generationAttemptLimit < 1 || options.generationAttemptLimit > 10)) throw new VidGenError('invalid_argument', 'Worker generation attempt limit must be a whole number from 1 through 10.');
   if (options.publicationAttemptLimit !== undefined && (!Number.isSafeInteger(options.publicationAttemptLimit) || options.publicationAttemptLimit < 1 || options.publicationAttemptLimit > 10)) throw new VidGenError('invalid_argument', 'Worker publication attempt limit must be a whole number from 1 through 10.');
+  if (options.queueExpirationDays !== undefined && (!Number.isSafeInteger(options.queueExpirationDays) || options.queueExpirationDays < 1 || options.queueExpirationDays > MAX_WORKER_QUEUE_EXPIRATION_DAYS)) throw new VidGenError('invalid_argument', `Worker queue expiration must be a whole number from 1 through ${MAX_WORKER_QUEUE_EXPIRATION_DAYS} days.`);
   const now = options.now ?? (() => new Date());
   const acquireGenerationExclusion = options.acquireGenerationExclusion ?? acquireWorkerGenerationExclusion;
   let state = await options.store.load({ recoverInProgress: false });
@@ -97,29 +100,24 @@ export async function runWorkerCycle(options: WorkerCycleOptions): Promise<Worke
   if (options.processExisting) state = clearBaseline(state, new Set(candidateIds));
   if (!initial && (newIds.length > 0 || options.processExisting)) await options.store.save(state);
   let processed = 0;
-  for (const id of candidateIds) {
+  for (const candidate of evaluationBacklog(state)) {
     if (processed >= options.maxCandidates) break;
-    const candidate = state.candidates[id];
-    if (candidate === undefined || candidate.baseline === true) continue;
     const next = await evaluateCandidate(state, candidate, options.runners ?? {}, options.store, now);
     state = next.state;
     if (next.didWork) processed += 1;
   }
+  state = await exhaustGenerationAttempts(state, options.store, now, options.generationAttemptLimit ?? 2);
+  state = await expireGenerationQueue(state, options.store, now, options.queueExpirationDays ?? DEFAULT_WORKER_QUEUE_EXPIRATION_DAYS);
   if (options.mode !== 'observe') {
     const dailyGenerationLimit = options.dailyGenerationLimit ?? 1;
-    const attempted = new Set<string>();
     const generationDay = day(now());
-    for (;;) {
-      const candidate = generationQueue(state).find((item) => !attempted.has(item.id));
-      if (candidate === undefined) break;
-      if (generationCount(state, generationDay) >= dailyGenerationLimit) {
-        if (candidate.generation.status !== 'blocked' || candidate.generation.block !== 'generation_daily_limit') {
-          state = replaceStage(state, candidate.id, 'generation', { status: 'blocked', completedAt: timestamp(now()), block: 'generation_daily_limit' });
-          await options.store.save(state);
-        }
-        break;
+    const candidate = generationQueue(state)[0];
+    if (candidate !== undefined && generationCount(state, generationDay) >= dailyGenerationLimit) {
+      if (candidate.generation.status !== 'blocked' || candidate.generation.block !== 'generation_daily_limit') {
+        state = replaceStage(state, candidate.id, 'generation', { status: 'blocked', completedAt: timestamp(now()), block: 'generation_daily_limit' });
+        await options.store.save(state);
       }
-      attempted.add(candidate.id);
+    } else if (candidate !== undefined) {
       const next = await processGeneration(state, candidate, options.mode, options.runners ?? {}, options.store, now, generationDay, dailyGenerationLimit, options.generationAttemptLimit ?? 2, acquireGenerationExclusion);
       state = next.state;
       if (next.generationUnavailable) return options.store.load({ recoverInProgress: false });
@@ -185,6 +183,13 @@ async function evaluateCandidate(state: WorkerState, candidate: WorkerCandidateS
   return { state: next, didWork };
 }
 
+/** Discovery order is not queue order; unfinished durable evaluations survive feed changes. */
+function evaluationBacklog(state: WorkerState): WorkerCandidateState[] {
+  return Object.values(state.candidates)
+    .filter((candidate) => candidate.baseline !== true && candidate.evaluation.status === 'pending')
+    .sort((left, right) => discoveryTime(left).localeCompare(discoveryTime(right)) || left.id.localeCompare(right.id));
+}
+
 /** The backlog is derived from durable candidate state, never a second queue. */
 function generationQueue(state: WorkerState): WorkerCandidateState[] {
   return Object.values(state.candidates)
@@ -194,8 +199,30 @@ function generationQueue(state: WorkerState): WorkerCandidateState[] {
       || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
 }
 
+async function expireGenerationQueue(state: WorkerState, store: WorkerStateStore, now: () => Date, days: number): Promise<WorkerState> {
+  const cutoff = now().valueOf() - days * 86_400_000;
+  let next = state;
+  for (const candidate of generationQueue(state)) {
+    if (Date.parse(admissionTime(candidate)) > cutoff) continue;
+    next = replaceStage(next, candidate.id, 'generation', { status: 'blocked', completedAt: timestamp(now()), block: 'queue_expired' });
+  }
+  if (next !== state) await store.save(next);
+  return next;
+}
+
+async function exhaustGenerationAttempts(state: WorkerState, store: WorkerStateStore, now: () => Date, limit: number): Promise<WorkerState> {
+  let next = state;
+  for (const candidate of Object.values(state.candidates)) {
+    if (candidate.generation.status !== 'failed' || (candidate.generationAttempts ?? 0) < limit) continue;
+    next = replaceStage(next, candidate.id, 'generation', { status: 'blocked', completedAt: timestamp(now()), block: 'generation_attempt_limit' });
+  }
+  if (next !== state) await store.save(next);
+  return next;
+}
+
 function hasAmbiguousGeneration(state: WorkerState): boolean { return Object.values(state.candidates).some((candidate) => candidate.generation.status === 'running' || candidate.generation.status === 'uncertain'); }
 function admissionTime(candidate: WorkerCandidateState): string { return candidate.admission.completedAt ?? candidate.evaluationResult!.evaluatedAt; }
+function discoveryTime(candidate: WorkerCandidateState): string { return candidate.discovery.completedAt ?? ''; }
 
 async function processGeneration(state: WorkerState, candidate: WorkerCandidateState, mode: Exclude<WorkerMode, 'observe'>, runners: WorkerStageRunners, store: WorkerStateStore, now: () => Date, generationDay: string, dailyGenerationLimit: number, generationAttemptLimit: number, acquireGenerationExclusion: () => Promise<WorkerGenerationExclusion | undefined>): Promise<{ state: WorkerState; didWork: boolean; generationUnavailable?: true }> {
   let next = state; let current = candidate; let didWork = false;
